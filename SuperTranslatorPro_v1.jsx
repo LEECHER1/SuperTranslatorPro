@@ -1,7 +1,7 @@
-#targetengine "SuperTranslatorPRO275"
+#targetengine "SuperTranslatorPRO280"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 27.5 (TM FIX)
+// SUPER ÜBERSETZER PRO - VERSION 28.0 (FINAL & MAC UI FIX)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -53,7 +53,6 @@ function saveTM(tmObj) {
                 var keys = [];
                 for (var k in tmObj[l]) {
                     if (tmObj[l].hasOwnProperty(k) && tmObj[l][k]) {
-                        // Sicherstellen, dass alles ein String ist und Sonderzeichen maskieren
                         var ek = String(k).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
                         var ev = String(tmObj[l][k]).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
                         keys.push('"' + ek + '":"' + ev + '"');
@@ -68,13 +67,9 @@ function saveTM(tmObj) {
         if (f.open('w')) {
             var success = f.write(str);
             f.close();
-            if (!success) alert("Memory-Warnung: Datei wurde geöffnet, konnte aber nicht geschrieben werden. Speicherplatz prüfen!");
-        } else {
-            alert("Memory-Warnung: InDesign hat keine Schreibrechte für diesen Ordner:\n" + f.fsName);
+            if (!success) alert("Memory-Warnung: Datei konnte nicht geschrieben werden.");
         }
-    } catch(e) {
-        alert("Memory-Warnung: Interner Fehler beim Speichern der TM-Daten:\n" + e.message);
-    }
+    } catch(e) {}
 }
 
 function loadCSVGlossary(path) {
@@ -128,58 +123,130 @@ function getInDesignLanguageName(deepLCode) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var myWindow = new Window("palette", "Super Übersetzer PRO 27.5");
+var myWindow = new Window("palette", "Super Übersetzer PRO 28.0");
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 
+// --- KOPFBEREICH (MAC LAYOUT FIX) ---
 var headerGroup = myWindow.add("group");
 headerGroup.orientation = "row";
-headerGroup.alignChildren = ["fill", "center"];
-var titleText = headerGroup.add("statictext", undefined, "Einstellungen & API-Key:");
-var spacer = headerGroup.add("statictext", undefined, "");
-spacer.preferredSize.width = 100;
-var btnSettings = headerGroup.add("button", undefined, "⚙️");
-btnSettings.preferredSize = [35, 25];
-btnSettings.helpTip = "API-Key & Netzwerk-Pfade";
+headerGroup.alignChildren = ["left", "center"];
 
-var panelScope = myWindow.add("panel", undefined, "Was soll übersetzt werden?");
-panelScope.orientation = "column"; panelScope.alignChildren = "left";
+var mainTitle = headerGroup.add("statictext", undefined, "Was soll übersetzt werden?");
+mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 16);
+mainTitle.preferredSize.width = 300; // Drückt den Button fest nach rechts
 
-var radioSelection = panelScope.add("radiobutton", undefined, "Aktuelle Auswahl (Rahmen/Texte/Tabellen)");
-var radioPages = panelScope.add("radiobutton", undefined, "Bestimmte Seiten übersetzen:");
-var editPages = panelScope.add("edittext", undefined, "");
-editPages.characters = 12; editPages.helpTip = "Z.B. 1, 3, 5-8";
-var radioBDA = panelScope.add("radiobutton", undefined, "🤖 BDA-AUTOMATIK (Musterseiten & Seiten kopieren)");
+// Button ist jetzt quadratisch und kann auf dem Mac nicht mehr zur Pille gezogen werden!
+var btnSettings = headerGroup.add("button", undefined, "\u2699"); 
+btnSettings.preferredSize = [40, 40]; 
+try { btnSettings.graphics.font = ScriptUI.newFont("Arial", "REGULAR", 24); } catch(e){} 
+btnSettings.helpTip = "Einstellungen, Wörterbuch & API-Key";
 
-radioSelection.value = true;
+// --- PANEL 1: MANUELLER MODUS ---
+var panelManual = myWindow.add("panel", undefined, ""); 
+panelManual.orientation = "column"; 
+panelManual.alignChildren = "left";
+panelManual.margins = 15;
 
-var panelBDA = myWindow.add("panel", undefined, "BDA-Einstellungen (Nur aktiv bei Automatik)");
-panelBDA.orientation = "column"; panelBDA.alignChildren = "left";
-var grpBDASource = panelBDA.add("group");
-grpBDASource.add("statictext", undefined, "Deutsches Original (Seiten):");
-var bdaSourceInput = grpBDASource.add("edittext", undefined, "AUTO");
-bdaSourceInput.characters = 8;
-bdaSourceInput.helpTip = "AUTO sucht selbst nach -de- Musterseiten";
-var checkTOC = panelBDA.add("checkbox", undefined, "Titelseite (Seite 1): Start-Seitenzahlen aktualisieren");
-checkTOC.value = true;
+var lblManual = panelManual.add("statictext", undefined, "Manueller Modus");
+lblManual.graphics.font = ScriptUI.newFont(lblManual.graphics.font.family, "BOLD", lblManual.graphics.font.size);
 
-var panelLang = myWindow.add("panel", undefined, "Zielsprache (Für Manuelle Auswahl / Einzelne Seiten)");
+var radioSelection = panelManual.add("radiobutton", undefined, "Aktuelle Auswahl (Rahmen/Texte/Tabellen)");
+var radioPages = panelManual.add("radiobutton", undefined, "Bestimmte Seiten übersetzen:");
+
+var editPages = panelManual.add("edittext", undefined, "");
+editPages.characters = 12; 
+editPages.helpTip = "Z.B. 1, 3, 5-8";
+editPages.indent = 20;
+
+panelManual.add("statictext", undefined, ""); 
+
+var lblLang = panelManual.add("statictext", undefined, "Zielsprache (Für Manuelle Auswahl / Einzelne Seiten)");
 var langList = [
     "--- FAVORITEN ---", "EN (Englisch)", "FR (Französisch)", "IT (Italienisch)", "ES (Spanisch)", "CS (Tschechisch)", "HU (Ungarisch)", "DE (Deutsch)",
     "--- SONSTIGE EU SPRACHEN ---", "BG (Bulgarisch)", "DA (Dänisch)", "EL (Griechisch)", "ET (Estnisch)", "FI (Finnisch)", "LT (Litauisch)", "LV (Lettisch)", "NL (Niederländisch)", "PL (Polnisch)", "PT (Portugiesisch)", "RO (Rumänisch)", "RU (Russisch)", "SK (Slowakisch)", "SL (Slowenisch)", "SV (Schwedisch)"
 ];
-var dropdownLang = panelLang.add("dropdownlist", undefined, langList);
+var dropdownLang = panelManual.add("dropdownlist", undefined, langList);
 dropdownLang.selection = 1; 
 
-var groupButtons = myWindow.add("group"); groupButtons.alignment = "center";
+// --- PANEL 2: AUTOMATIK MODUS ---
+var panelBDA = myWindow.add("panel", undefined, ""); 
+panelBDA.orientation = "column"; 
+panelBDA.alignChildren = "left";
+panelBDA.margins = 15;
+
+var radioBDA = panelBDA.add("radiobutton", undefined, "Voll Automatik Modus");
+radioBDA.graphics.font = ScriptUI.newFont(radioBDA.graphics.font.family, "BOLD", radioBDA.graphics.font.size);
+
+panelBDA.add("statictext", undefined, ""); 
+
+var lblBDA = panelBDA.add("statictext", undefined, "Einstellungen (Automatik Modus)");
+lblBDA.graphics.font = ScriptUI.newFont(lblBDA.graphics.font.family, "BOLD", lblBDA.graphics.font.size);
+
+var grpBDASource = panelBDA.add("group");
+grpBDASource.indent = 20;
+grpBDASource.add("statictext", undefined, "Originalseiten:");
+var bdaSourceInput = grpBDASource.add("edittext", undefined, "AUTO");
+bdaSourceInput.characters = 8;
+bdaSourceInput.helpTip = "AUTO sucht selbst nach -de- Musterseiten";
+
+var checkTOC = panelBDA.add("checkbox", undefined, "Titelseite (Seite 1): Start-Seitenzahlen aktualisieren");
+checkTOC.indent = 20;
+checkTOC.value = true;
+
+// START-ZUSTAND FESTLEGEN
+radioSelection.value = true;
+bdaSourceInput.enabled = false;
+checkTOC.enabled = false;
+
+// --- UI INTERAKTIONEN (RADIO BUTTON BUGFIX) ---
+radioSelection.onClick = function() {
+    radioPages.value = false;
+    radioBDA.value = false;
+    dropdownLang.enabled = true;
+    bdaSourceInput.enabled = false;
+    checkTOC.enabled = false;
+}
+
+radioPages.onClick = function() {
+    radioSelection.value = false;
+    radioBDA.value = false;
+    dropdownLang.enabled = true;
+    bdaSourceInput.enabled = false;
+    checkTOC.enabled = false;
+}
+
+radioBDA.onClick = function() {
+    radioSelection.value = false;
+    radioPages.value = false;
+    dropdownLang.enabled = false;
+    bdaSourceInput.enabled = true;
+    checkTOC.enabled = true;
+}
+
+editPages.onActivate = function() {
+    radioPages.value = true;
+    radioSelection.value = false;
+    radioBDA.value = false;
+    dropdownLang.enabled = true;
+    bdaSourceInput.enabled = false;
+    checkTOC.enabled = false;
+}
+
+bdaSourceInput.onActivate = function() {
+    radioBDA.value = true;
+    radioSelection.value = false;
+    radioPages.value = false;
+    dropdownLang.enabled = false;
+    bdaSourceInput.enabled = true;
+    checkTOC.enabled = true;
+}
+
+// --- BUTTONS UNTEN ---
+var groupButtons = myWindow.add("group"); 
+groupButtons.alignment = "center";
 var btnTranslate = groupButtons.add("button", undefined, "Übersetzung starten");
 var btnCancel = groupButtons.add("button", undefined, "Schließen");
-
-radioBDA.onClick = function() { dropdownLang.enabled = false; panelBDA.enabled = true; }
-radioSelection.onClick = function() { dropdownLang.enabled = true; panelBDA.enabled = false; }
-radioPages.onClick = function() { dropdownLang.enabled = true; panelBDA.enabled = false; }
-editPages.onActivate = function() { radioPages.value = true; dropdownLang.enabled = true; panelBDA.enabled = false;}
-bdaSourceInput.onActivate = function() { radioBDA.value = true; dropdownLang.enabled = false; panelBDA.enabled = true;}
 
 // --- EINSTELLUNGEN FENSTER ---
 btnSettings.onClick = function() {
@@ -787,7 +854,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             var tmUpdated = false;
             for(var q=0; q < deepLQueue.length; q++) {
                 var trXML = translatedBatch[q];
-                if (trXML) { // Nur speichern, wenn DeepL Text zurückgab
+                if (trXML) { 
                     finalTranslations[deepLQueue[q].index] = trXML;
                     tm[selectedLang][deepLQueue[q].xml] = trXML;
                     tmUpdated = true;
