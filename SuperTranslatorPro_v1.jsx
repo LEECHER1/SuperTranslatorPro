@@ -314,18 +314,20 @@ btnSettings.onClick = function() {
     
     var g = setWin.add("group");
     g.alignment = "fill";
+    g.alignChildren = ["fill", "center"];
     g.margins.top = 15;
     
     var leftGrp = g.add("group");
     leftGrp.alignment = "left";
     var btnClearTM = leftGrp.add("button", undefined, "Memory leeren");
-    btnClearTM.preferredSize = [110, 25]; // Button kleiner und kompakter machen
+    btnClearTM.preferredSize = [110, 25];
     
     var spacer = g.add("statictext", undefined, "");
-    spacer.alignment = "fill"; // Drückt die rechten Buttons ganz nach außen
+    spacer.alignment = "fill";
     
     var rightGrp = g.add("group");
-    rightGrp.alignment = "fill";
+    rightGrp.alignment = ["fill", "center"];
+    rightGrp.alignChildren = ["right", "center"];
     var btnSave = rightGrp.add("button", undefined, "Speichern");
     var btnSpacer = rightGrp.add("statictext", undefined, "");
     btnSpacer.alignment = "fill";
