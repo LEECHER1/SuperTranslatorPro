@@ -138,7 +138,7 @@ mainTitle.preferredSize.width = 300;
 
 var btnSettings = headerGroup.add("button", undefined, "\u2699"); 
 btnSettings.preferredSize = [40, 40]; 
-try { btnSettings.graphics.font = ScriptUI.newFont("Arial", "REGULAR", 24); } catch(e){} 
+try { btnSettings.graphics.font = ScriptUI.newFont(btnSettings.graphics.font.family, "REGULAR", 34); } catch(e){} 
 btnSettings.helpTip = "Einstellungen, Wörterbuch & API-Key";
 
 // --- PANEL 1: MANUELLER MODUS ---
