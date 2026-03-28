@@ -420,6 +420,11 @@ btnTranslate.onClick = function() {
         lang: dropdownLang.selection.text.substring(0, 2)
     };
 
+    if (config.mode !== "BDA" && config.lang.indexOf("-") !== -1) {
+        alert("Bitte wähle eine gültige Zielsprache aus, keine Trennlinie.");
+        return;
+    }
+
     if (config.mode === "SELECTION" && app.selection.length === 0) { alert("Bitte markiere zuerst etwas im Dokument."); return; }
     if (config.mode === "PAGES" && config.sourcePages.replace(/\s/g, "") === "") { alert("Bitte Seitenzahlen eintragen."); return; }
     if (config.mode === "BDA" && config.bdaSourcePages.replace(/\s/g, "") === "") { alert("Bitte gib die Seiten an oder nutze AUTO."); return; }
@@ -1056,7 +1061,8 @@ function getPagesFromString(doc, pageStr) {
             var startPage = doc.pages.itemByName(range[0]); var endPage = doc.pages.itemByName(range[1]);
             if(startPage.isValid && endPage.isValid) {
                 var startIndex = startPage.documentOffset; var endIndex = endPage.documentOffset;
-                for(var j=startIndex; j<=endIndex; j++) pages.push(doc.pages[j]);
+                var step = (startIndex <= endIndex) ? 1 : -1;
+                for(var j=startIndex; (step === 1 ? j<=endIndex : j>=endIndex); j+=step) { pages.push(doc.pages[j]); }
             }
         } else { var p = doc.pages.itemByName(part); if(p.isValid) pages.push(p); }
     }
