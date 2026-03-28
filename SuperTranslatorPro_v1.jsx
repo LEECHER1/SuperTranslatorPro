@@ -123,7 +123,7 @@ function getInDesignLanguageName(deepLCode) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var myWindow = new Window("palette", "Super Translator Pro v1.1");
+var myWindow = new Window("palette", "Super Translator Pro v1.2");
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 
