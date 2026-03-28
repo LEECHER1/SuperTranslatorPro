@@ -133,12 +133,12 @@ headerGroup.orientation = "row";
 headerGroup.alignChildren = ["left", "center"];
 
 var mainTitle = headerGroup.add("statictext", undefined, "Was soll übersetzt werden?");
-mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 16);
+mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 20);
 mainTitle.preferredSize.width = 300; 
 
 var btnSettings = headerGroup.add("button", undefined, "\u2699"); 
 btnSettings.preferredSize = [40, 40]; 
-try { btnSettings.graphics.font = ScriptUI.newFont(btnSettings.graphics.font.family, "REGULAR", 34); } catch(e){} 
+try { btnSettings.graphics.font = ScriptUI.newFont("Arial", "REGULAR", 24); } catch(e){} 
 btnSettings.helpTip = "Einstellungen, Wörterbuch & API-Key";
 
 // --- PANEL 1: MANUELLER MODUS ---
