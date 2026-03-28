@@ -123,7 +123,7 @@ function getInDesignLanguageName(deepLCode) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var myWindow = new Window("palette", "Super Übersetzer PRO 28.1");
+var myWindow = new Window("palette", "Super Translator Pro v1.0");
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 
@@ -133,7 +133,7 @@ headerGroup.orientation = "row";
 headerGroup.alignChildren = ["left", "center"];
 
 var mainTitle = headerGroup.add("statictext", undefined, "Was soll übersetzt werden?");
-mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 20);
+mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 16);
 mainTitle.preferredSize.width = 300; 
 
 var btnSettings = headerGroup.add("button", undefined, "\u2699"); 
