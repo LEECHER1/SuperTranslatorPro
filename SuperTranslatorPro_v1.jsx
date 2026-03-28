@@ -82,6 +82,7 @@ function loadCSVGlossary(path) {
         f.open('r');
         var content = f.read();
         f.close();
+        content = content.replace(/^\uFEFF/, '');
         var lines = content.split(/[\r\n]+/);
         if (lines.length < 2) return null;
         
@@ -698,7 +699,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             for(var t=0; t<terms.length; t++) {
                 terms[t] = terms[t].replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'); 
             }
-            glossaryRegex = new RegExp("\\b(" + terms.join("|") + ")\\b", "gi");
+            glossaryRegex = new RegExp("(^|[^\\wäöüÄÖÜßéèêáàâíìîóòôúùûñ])(" + terms.join("|") + ")(?=[^\\wäöüÄÖÜßéèêáàâíìîóòôúùûñ]|$)", "gi");
         }
     }
 
@@ -803,14 +804,15 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             
             if (glossaryRegex) {
-                chunk = chunk.replace(glossaryRegex, function(match, p1, offset, string) {
+                chunk = chunk.replace(glossaryRegex, function(match, prefix, term, offset, string) {
                     if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
                     
-                    var lowerMatch = match.toLowerCase();
+                    var lowerMatch = term.toLowerCase();
                     var mappedVal = glossaryMap[lowerMatch];
-                    if (mappedVal === "###DNT###") return '<nt>' + match + '</nt>'; 
-                    else if (mappedVal && mappedVal !== "") return '<nt>' + mappedVal + '</nt>'; 
-                    return match;
+                    var replacement = term;
+                    if (mappedVal === "###DNT###") replacement = '<nt>' + term + '</nt>'; 
+                    else if (mappedVal && mappedVal !== "") replacement = '<nt>' + mappedVal + '</nt>'; 
+                    return prefix + replacement;
                 });
             }
             
