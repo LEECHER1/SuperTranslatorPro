@@ -1,26 +1,23 @@
-#targetengine "SuperTranslatorPRO274"
+#targetengine "SuperTranslatorPRO275"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 27.4 (NETZWERK TM & CSV)
+// SUPER ÜBERSETZER PRO - VERSION 27.5 (TM FIX)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
 var DEEPL_KEY_LABEL = "SuperTranslatorPRO_DeepL_API_Key";
 var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
-var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; // NEU: Pfad für das Memory
+var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
-    apiKey = "72a2f538-aa99-4254-9d96-0b82f691a732"; // Dein Fallback Key
+    apiKey = "72a2f538-aa99-4254-9d96-0b82f691a732"; 
 }
 
 var csvPath = app.extractLabel(CSV_PATH_LABEL) || "";
-var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); // Fallback ist lokal
+var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
 
-// Globale Statistik-Variablen für das Abschlussprotokoll
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
-
-// Globale Variablen für den Ladebalken
 var progressWin, progressBar, progressText;
 var overallBar, overallText, etaText, btnStopProgress;
 var cancelFlag = false;
@@ -35,7 +32,14 @@ function getTMFile() {
 function loadTM() {
     var f = getTMFile();
     if (f.exists) {
-        try { f.open('r'); var content = f.read(); f.close(); return eval("(" + content + ")"); } catch(e) {}
+        try { 
+            f.encoding = "UTF-8";
+            f.open('r'); 
+            var content = f.read(); 
+            f.close(); 
+            if (content === "") return {};
+            return eval("(" + content + ")"); 
+        } catch(e) { return {}; }
     }
     return {};
 }
@@ -48,9 +52,10 @@ function saveTM(tmObj) {
             if (tmObj.hasOwnProperty(l)) {
                 var keys = [];
                 for (var k in tmObj[l]) {
-                    if (tmObj[l].hasOwnProperty(k)) {
-                        var ek = k.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
-                        var ev = tmObj[l][k].replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
+                    if (tmObj[l].hasOwnProperty(k) && tmObj[l][k]) {
+                        // Sicherstellen, dass alles ein String ist und Sonderzeichen maskieren
+                        var ek = String(k).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
+                        var ev = String(tmObj[l][k]).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
                         keys.push('"' + ek + '":"' + ev + '"');
                     }
                 }
@@ -58,8 +63,18 @@ function saveTM(tmObj) {
             }
         }
         str += langs.join(",\n") + "\n}";
-        f.open('w'); f.write(str); f.close();
-    } catch(e) {}
+        
+        f.encoding = "UTF-8";
+        if (f.open('w')) {
+            var success = f.write(str);
+            f.close();
+            if (!success) alert("Memory-Warnung: Datei wurde geöffnet, konnte aber nicht geschrieben werden. Speicherplatz prüfen!");
+        } else {
+            alert("Memory-Warnung: InDesign hat keine Schreibrechte für diesen Ordner:\n" + f.fsName);
+        }
+    } catch(e) {
+        alert("Memory-Warnung: Interner Fehler beim Speichern der TM-Daten:\n" + e.message);
+    }
 }
 
 function loadCSVGlossary(path) {
@@ -113,7 +128,7 @@ function getInDesignLanguageName(deepLCode) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var myWindow = new Window("palette", "Super Übersetzer PRO 27.4");
+var myWindow = new Window("palette", "Super Übersetzer PRO 27.5");
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 
@@ -160,7 +175,6 @@ var groupButtons = myWindow.add("group"); groupButtons.alignment = "center";
 var btnTranslate = groupButtons.add("button", undefined, "Übersetzung starten");
 var btnCancel = groupButtons.add("button", undefined, "Schließen");
 
-// UI Interaktionen
 radioBDA.onClick = function() { dropdownLang.enabled = false; panelBDA.enabled = true; }
 radioSelection.onClick = function() { dropdownLang.enabled = true; panelBDA.enabled = false; }
 radioPages.onClick = function() { dropdownLang.enabled = true; panelBDA.enabled = false; }
@@ -192,7 +206,6 @@ btnSettings.onClick = function() {
 
     setWin.add("panel", undefined, ""); 
 
-    // NEU: PFAD FÜR DAS TRANSLATION MEMORY
     setWin.add("statictext", undefined, "Netzwerk-Memory (JSON Pfad):");
     var grpTM = setWin.add("group");
     var tmInput = grpTM.add("edittext", undefined, tmPath);
@@ -204,7 +217,6 @@ btnSettings.onClick = function() {
         if (f) {
             tmInput.text = f.fsName;
         } else {
-            // Falls die Datei noch nicht existiert, Dialog zum Speichern anbieten
             var saveF = File.saveDialog("Speicherort für neues Memory wählen", "*.json");
             if (saveF) tmInput.text = saveF.fsName;
         }
@@ -223,7 +235,7 @@ btnSettings.onClick = function() {
         tmPath = tmInput.text;
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(CSV_PATH_LABEL, csvPath); 
-        app.insertLabel(TM_PATH_LABEL, tmPath); // Sichert den TM-Pfad in InDesign
+        app.insertLabel(TM_PATH_LABEL, tmPath); 
         alert("Einstellungen erfolgreich gespeichert!");
         setWin.close();
     };
@@ -444,7 +456,6 @@ function runBDAMode(doc, config) {
 
     var createdBackups = [];
 
-    // 3. Schleife durch die Sprachen
     for (var i = 0; i < langTasks.length; i++) {
         if (cancelFlag) throw new Error("CANCELLED");
         
@@ -776,10 +787,12 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             var tmUpdated = false;
             for(var q=0; q < deepLQueue.length; q++) {
                 var trXML = translatedBatch[q];
-                finalTranslations[deepLQueue[q].index] = trXML;
-                tm[selectedLang][deepLQueue[q].xml] = trXML;
-                tmUpdated = true;
-                globalStats.apiChars += deepLQueue[q].len;
+                if (trXML) { // Nur speichern, wenn DeepL Text zurückgab
+                    finalTranslations[deepLQueue[q].index] = trXML;
+                    tm[selectedLang][deepLQueue[q].xml] = trXML;
+                    tmUpdated = true;
+                    globalStats.apiChars += deepLQueue[q].len;
+                }
             }
             if (tmUpdated) saveTM(tm); 
         }
