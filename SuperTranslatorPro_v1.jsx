@@ -23,6 +23,23 @@ var overallBar, overallText, etaText, btnStopProgress;
 var cancelFlag = false;
 var startTime = 0;
 
+var logPath = Folder.temp + "/SuperTranslatorPRO_Log.txt";
+
+// --- 0A. PROTOKOLL (LOGGING) ---
+function writeLog(message, type) {
+    try {
+        var f = new File(logPath);
+        var d = new Date();
+        var timeStr = d.getFullYear() + "-" + ("0"+(d.getMonth()+1)).slice(-2) + "-" + ("0"+d.getDate()).slice(-2) + " " + ("0"+d.getHours()).slice(-2) + ":" + ("0"+d.getMinutes()).slice(-2) + ":" + ("0"+d.getSeconds()).slice(-2);
+        var prefix = type ? "[" + type + "]" : "[INFO]";
+        f.encoding = "UTF-8";
+        f.open(f.exists ? 'e' : 'w');
+        if (f.exists) f.seek(0, 2); // Ans Ende der Datei springen
+        f.writeln(timeStr + " " + prefix + " " + message);
+        f.close();
+    } catch(e) {}
+}
+
 // --- 0B. TRANSLATION MEMORY & CSV LOGIK ---
 function getTMFile() { 
     if (tmPath && tmPath !== "") return new File(tmPath);
@@ -255,6 +272,8 @@ btnSettings.onClick = function() {
     var topGrp = setWin.add("group");
     topGrp.alignment = "fill";
     topGrp.alignChildren = ["right", "center"];
+    var btnLog = topGrp.add("button", undefined, "📄 Logdatei");
+    btnLog.preferredSize = [90, 25];
     var btnInfo = topGrp.add("button", undefined, "ℹ️ Info");
     btnInfo.preferredSize = [80, 25];
     
@@ -327,6 +346,10 @@ btnSettings.onClick = function() {
             alert("Translation Memory wurde geleert.");
         }
     }
+    btnLog.onClick = function() {
+        var f = new File(logPath);
+        if (f.exists) { f.execute(); } else { alert("Es wurde noch keine Logdatei erstellt."); }
+    };
     btnInfo.onClick = function() {
         var infoText = "Super Translator Pro v1.2\n";
         infoText += "© " + new Date().getFullYear() + " Andreas Schwarz\n\n";
@@ -468,16 +491,22 @@ btnTranslate.onClick = function() {
 
     createProgressWindow();
 
+    writeLog("=== NEUER VORGANG GESTARTET ===");
+    writeLog("Dokument: " + doc.name + " | Modus: " + config.mode + " | Zielsprache: " + config.lang);
+
     app.doScript(
         function() { 
             try {
                 var resultMsg = runMainProcess(doc, config); 
+                writeLog("Erfolgreich beendet. (API genutzt: " + globalStats.apiChars + " Z., API gespart: " + globalStats.savedChars + " Z., Auto-Fit: " + globalStats.fittedFrames + " Rahmen)");
                 showSuccessScreen(resultMsg ? resultMsg : "Alle Übersetzungen fehlerfrei beendet.");
             } catch(e) {
                 closeProgressWindow();
                 if (e.message === "CANCELLED") {
+                    writeLog("Vorgang durch Benutzer abgebrochen.", "WARNUNG");
                     alert("⚠️ Vorgang abgebrochen!\n\nTipp: Drücke jetzt Cmd+Z (Rückgängig), um alle bisherigen Änderungen in einem Rutsch zu verwerfen.");
                 } else {
+                    writeLog("FEHLER: " + e.message, "ERROR");
                     alert("Ein Fehler ist aufgetreten:\n" + e.message);
                 }
             }
