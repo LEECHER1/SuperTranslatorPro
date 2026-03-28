@@ -250,7 +250,13 @@ var btnCancel = groupButtons.add("button", undefined, "Schließen");
 btnSettings.onClick = function() {
     var setWin = new Window("dialog", "⚙️ Einstellungen");
     setWin.orientation = "column";
-    setWin.alignChildren = "left";
+    setWin.alignChildren = ["fill", "top"];
+    
+    var topGrp = setWin.add("group");
+    topGrp.alignment = "fill";
+    topGrp.alignChildren = ["right", "center"];
+    var btnInfo = topGrp.add("button", undefined, "ℹ️ Info");
+    btnInfo.preferredSize = [80, 25];
     
     setWin.add("statictext", undefined, "DeepL Pro API-Key:");
     var keyInput = setWin.add("edittext", undefined, apiKey);
@@ -288,12 +294,21 @@ btnSettings.onClick = function() {
     };
     
     var g = setWin.add("group");
-    g.alignment = "center";
+    g.alignment = "fill";
     g.margins.top = 15;
-    var btnSave = g.add("button", undefined, "Speichern");
-    var btnCancelSet = g.add("button", undefined, "Abbrechen");
-    var btnClearTM = g.add("button", undefined, "Memory leeren");
-    var btnInfo = g.add("button", undefined, "ℹ️ Info");
+    
+    var leftGrp = g.add("group");
+    leftGrp.alignment = "left";
+    var btnClearTM = leftGrp.add("button", undefined, "Memory leeren");
+    btnClearTM.preferredSize = [110, 25]; // Button kleiner und kompakter machen
+    
+    var spacer = g.add("statictext", undefined, "");
+    spacer.alignment = "fill"; // Drückt die rechten Buttons ganz nach außen
+    
+    var rightGrp = g.add("group");
+    rightGrp.alignment = "right";
+    var btnSave = rightGrp.add("button", undefined, "Speichern");
+    var btnCancelSet = rightGrp.add("button", undefined, "Abbrechen");
     
     btnSave.onClick = function() {
         apiKey = keyInput.text;
