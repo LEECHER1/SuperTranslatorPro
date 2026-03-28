@@ -1,7 +1,7 @@
-#targetengine "SuperTranslatorPRO280"
+#targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.0 (FINAL & MAC UI FIX)
+// SUPER ÜBERSETZER PRO - VERSION 28.1 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -11,7 +11,7 @@ var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path";
 
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
-    apiKey = "72a2f538-aa99-4254-9d96-0b82f691a732"; 
+    apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
 }
 
 var csvPath = app.extractLabel(CSV_PATH_LABEL) || "";
@@ -123,7 +123,7 @@ function getInDesignLanguageName(deepLCode) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var myWindow = new Window("palette", "Super Übersetzer PRO 28.0");
+var myWindow = new Window("palette", "Super Übersetzer PRO 28.1");
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 
@@ -134,9 +134,8 @@ headerGroup.alignChildren = ["left", "center"];
 
 var mainTitle = headerGroup.add("statictext", undefined, "Was soll übersetzt werden?");
 mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 16);
-mainTitle.preferredSize.width = 300; // Drückt den Button fest nach rechts
+mainTitle.preferredSize.width = 300; 
 
-// Button ist jetzt quadratisch und kann auf dem Mac nicht mehr zur Pille gezogen werden!
 var btnSettings = headerGroup.add("button", undefined, "\u2699"); 
 btnSettings.preferredSize = [40, 40]; 
 try { btnSettings.graphics.font = ScriptUI.newFont("Arial", "REGULAR", 24); } catch(e){} 
@@ -199,7 +198,7 @@ radioSelection.value = true;
 bdaSourceInput.enabled = false;
 checkTOC.enabled = false;
 
-// --- UI INTERAKTIONEN (RADIO BUTTON BUGFIX) ---
+// --- UI INTERAKTIONEN ---
 radioSelection.onClick = function() {
     radioPages.value = false;
     radioBDA.value = false;
@@ -426,6 +425,12 @@ btnTranslate.onClick = function() {
     if (config.mode === "SELECTION" && app.selection.length === 0) { alert("Bitte markiere zuerst etwas im Dokument."); return; }
     if (config.mode === "PAGES" && config.sourcePages.replace(/\s/g, "") === "") { alert("Bitte Seitenzahlen eintragen."); return; }
     if (config.mode === "BDA" && config.bdaSourcePages.replace(/\s/g, "") === "") { alert("Bitte gib die Seiten an oder nutze AUTO."); return; }
+    
+    // Prüfen, ob API-Key hinterlegt ist
+    if (!apiKey || apiKey === "") {
+        alert("Bitte trage zuerst deinen DeepL API-Key in den Einstellungen (⚙️) ein.");
+        return;
+    }
 
     if (config.lang === "EN") config.lang = "EN-US"; 
     if (config.lang === "PT") config.lang = "PT-PT";
