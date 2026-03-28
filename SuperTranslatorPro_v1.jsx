@@ -325,8 +325,10 @@ btnSettings.onClick = function() {
     spacer.alignment = "fill"; // Drückt die rechten Buttons ganz nach außen
     
     var rightGrp = g.add("group");
-    rightGrp.alignment = "right";
+    rightGrp.alignment = "fill";
     var btnSave = rightGrp.add("button", undefined, "Speichern");
+    var btnSpacer = rightGrp.add("statictext", undefined, "");
+    btnSpacer.alignment = "fill";
     var btnCancelSet = rightGrp.add("button", undefined, "Abbrechen");
     
     btnSave.onClick = function() {
