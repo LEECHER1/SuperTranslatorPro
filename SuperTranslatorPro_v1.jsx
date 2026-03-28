@@ -17,6 +17,11 @@ if (!apiKey || apiKey === "") {
 var csvPath = app.extractLabel(CSV_PATH_LABEL) || "";
 var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
 
+var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
+var DNT_LABEL = "SuperTranslatorPRO_DNT_Styles";
+var formalitySetting = app.extractLabel(FORMALITY_LABEL) || "default";
+var dntStyles = app.extractLabel(DNT_LABEL) || "";
+
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
 var progressWin, progressBar, progressText;
 var overallBar, overallText, etaText, btnStopProgress;
@@ -294,6 +299,15 @@ btnSettings.onClick = function() {
         if (f) csvInput.text = f.fsName;
     };
 
+    setWin.add("panel", undefined, "");
+    setWin.add("statictext", undefined, "Anrede-Form (für unterstützte Sprachen):");
+    var formDrop = setWin.add("dropdownlist", undefined, ["Standard (DeepL entscheidet)", "Formell (Sie)", "Informell (Du)"]);
+    if (formalitySetting === "more") formDrop.selection = 1; else if (formalitySetting === "less") formDrop.selection = 2; else formDrop.selection = 0;
+    
+    setWin.add("statictext", undefined, "Ignorierte Absatz-/Zeichenformate (DNT, kommagetrennt):");
+    var dntInput = setWin.add("edittext", undefined, dntStyles);
+    dntInput.characters = 40;
+
     setWin.add("panel", undefined, ""); 
 
     setWin.add("statictext", undefined, "Netzwerk-Memory (JSON Pfad):");
@@ -340,6 +354,12 @@ btnSettings.onClick = function() {
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(CSV_PATH_LABEL, csvPath); 
         app.insertLabel(TM_PATH_LABEL, tmPath); 
+        
+        var selForm = "default";
+        if (formDrop.selection.index === 1) selForm = "more"; else if (formDrop.selection.index === 2) selForm = "less";
+        app.insertLabel(FORMALITY_LABEL, selForm); formalitySetting = selForm;
+        app.insertLabel(DNT_LABEL, dntInput.text); dntStyles = dntInput.text;
+        
         alert("Einstellungen erfolgreich gespeichert!");
         setWin.close();
     };
@@ -362,6 +382,8 @@ btnSettings.onClick = function() {
         infoText += "• Nahtloser Erhalt von Textformatierungen, Tabellen und verankerten Bildern\n";
         infoText += "• Integriertes Translation Memory (JSON) zur API-Kostenersparnis\n";
         infoText += "• Netzwerk-Glossar (CSV) für den Schutz von Fachbegriffen\n";
+        infoText += "• Formelle/Informelle Anrede & DNT-Format Ignorierung\n";
+        infoText += "• Cross-Platform (macOS & Windows) API-Anbindung\n";
         infoText += "• Intelligente Auto-Fit Korrektur gegen Textrahmen-Übersatz";
         alert(infoText, "Über Super Translator Pro");
     };
@@ -863,29 +885,40 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
             chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             
-            if (glossaryRegex) {
-                chunk = chunk.replace(glossaryRegex, function(match, prefix, term, offset, string) {
-                    if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
-                    
-                    var lowerMatch = term.toLowerCase();
-                    var mappedVal = glossaryMap[lowerMatch];
-                    var replacement = term;
-                    if (mappedVal === "###DNT###") replacement = '<nt>' + term + '</nt>'; 
-                    else if (mappedVal && mappedVal !== "") replacement = '<nt>' + mappedVal + '</nt>'; 
-                    return prefix + replacement;
-                });
+            var dntArr = dntStyles.split(",");
+            var isDNT = false;
+            for (var d=0; d<dntArr.length; d++) {
+                var trimDNT = dntArr[d].replace(/^\s+|\s+$/g, '');
+                if (trimDNT !== "" && (trimDNT === pStyleName || trimDNT === cStyle)) { isDNT = true; break; }
             }
             
-            var regexArt = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*|[0-9]{4,})\b/g;
-            chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
-                var before = string.substring(0, offset);
-                var openTags = (before.match(/<nt>/g) || []).length;
-                var closeTags = (before.match(/<\/nt>/g) || []).length;
-                if (openTags > closeTags) return match; 
+            if (isDNT) {
+                chunk = '<nt>' + chunk + '</nt>';
+            } else {
+                if (glossaryRegex) {
+                    chunk = chunk.replace(glossaryRegex, function(match, prefix, term, offset, string) {
+                        if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
+                        
+                        var lowerMatch = term.toLowerCase();
+                        var mappedVal = glossaryMap[lowerMatch];
+                        var replacement = term;
+                        if (mappedVal === "###DNT###") replacement = '<nt>' + term + '</nt>'; 
+                        else if (mappedVal && mappedVal !== "") replacement = '<nt>' + mappedVal + '</nt>'; 
+                        return prefix + replacement;
+                    });
+                }
+                
+                var regexArt = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*|[0-9]{4,})\b/g;
+                chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
+                    var before = string.substring(0, offset);
+                    var openTags = (before.match(/<nt>/g) || []).length;
+                    var closeTags = (before.match(/<\/nt>/g) || []).length;
+                    if (openTags > closeTags) return match; 
 
-                if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
-                return '<nt>' + match + '</nt>';
-            });
+                    if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
+                    return '<nt>' + match + '</nt>';
+                });
+            }
 
             chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
             chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
@@ -1025,18 +1058,41 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
         var endBatch = Math.min(b + batchSize, textsArray.length);
         updateProgress(currentTaskPct, "DeepL Anfrage: Sende Blöcke " + (b+1) + " bis " + endBatch + " von " + textsArray.length + "...", currentOverPct, null);
         
-        var curlCommand = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d 'target_lang=" + targetLangCode + "' -d 'tag_handling=xml' -d 'ignore_tags=tab,nt' -d 'splitting_tags=pbr,lbr' ";
+        var payloadStr = "target_lang=" + targetLangCode + "&tag_handling=xml&ignore_tags=tab,nt&splitting_tags=pbr,lbr";
+        if (formalitySetting === "more" || formalitySetting === "less") {
+            payloadStr += "&formality=" + formalitySetting;
+        }
         for (var j = b; j < endBatch; j++) {
             var safeText = textsArray[j].replace(/'/g, "'\\''").replace(/\r/g, ' ').replace(/\n/g, ' ');
-            curlCommand += "-d 'text=" + safeText + "' ";
+            payloadStr += "&text=" + encodeURIComponent(safeText);
         }
-        var appleScriptCode = 'do shell script "' + curlCommand.replace(/"/g, '\\"') + '"';
+        
+        var payloadFile = new File(Folder.temp + "/dl_pay_" + new Date().getTime() + ".txt");
+        payloadFile.encoding = "UTF-8";
+        payloadFile.open("w");
+        payloadFile.write(payloadStr);
+        payloadFile.close();
+
         try {
-            var resultJSON = app.doScript(appleScriptCode, ScriptLanguage.APPLESCRIPT_LANGUAGE);
+            var resultJSON = "";
+            if (File.fs === "Macintosh") {
+                var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
+                resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+            } else {
+                var outFile = new File(Folder.temp + "/dl_out_" + new Date().getTime() + ".json");
+                var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
+                          'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Authorization: DeepL-Auth-Key ' + apiKey + '"" -d @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
+                app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
+                if (outFile.exists) {
+                    outFile.encoding = "UTF-8"; outFile.open("r"); resultJSON = outFile.read(); outFile.close(); try { outFile.remove(); } catch(e){}
+                }
+            }
+            
             var parsedObj = eval("(" + resultJSON + ")");
             if (parsedObj && parsedObj.translations) { for (var k = 0; k < parsedObj.translations.length; k++) translated.push(parsedObj.translations[k].text); } 
             else { alert("Fehler bei DeepL Batch:\n" + resultJSON); return null; }
         } catch (e) { alert("Verbindungsfehler im Batch!\n" + e.message); return null; }
+        finally { try { payloadFile.remove(); } catch(e){} }
     }
     return translated;
 }
