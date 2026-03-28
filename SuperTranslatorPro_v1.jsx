@@ -293,6 +293,7 @@ btnSettings.onClick = function() {
     var btnSave = g.add("button", undefined, "Speichern");
     var btnCancelSet = g.add("button", undefined, "Abbrechen");
     var btnClearTM = g.add("button", undefined, "Memory leeren");
+    var btnInfo = g.add("button", undefined, "ℹ️ Info");
     
     btnSave.onClick = function() {
         apiKey = keyInput.text;
@@ -311,6 +312,17 @@ btnSettings.onClick = function() {
             alert("Translation Memory wurde geleert.");
         }
     }
+    btnInfo.onClick = function() {
+        var infoText = "Super Translator Pro v1.2\n";
+        infoText += "© " + new Date().getFullYear() + " Andreas Schwarz\n\n";
+        infoText += "Ein professionelles Übersetzungstool für InDesign in Verbindung mit der DeepL API.\n\n";
+        infoText += "Kernfunktionen:\n";
+        infoText += "• Nahtloser Erhalt von Textformatierungen, Tabellen und verankerten Bildern\n";
+        infoText += "• Integriertes Translation Memory (JSON) zur API-Kostenersparnis\n";
+        infoText += "• Netzwerk-Glossar (CSV) für den Schutz von Fachbegriffen\n";
+        infoText += "• Intelligente Auto-Fit Korrektur gegen Textrahmen-Übersatz";
+        alert(infoText, "Über Super Translator Pro");
+    };
     btnCancelSet.onClick = function() { setWin.close(); };
     setWin.show();
 };
