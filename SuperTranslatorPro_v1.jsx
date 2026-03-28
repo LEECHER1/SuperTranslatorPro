@@ -136,9 +136,7 @@ var mainTitle = headerGroup.add("statictext", undefined, "Was soll übersetzt we
 mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 16);
 mainTitle.preferredSize.width = 300; 
 
-var btnSettings = headerGroup.add("button", undefined, "\u2699"); 
-btnSettings.preferredSize = [40, 40]; 
-try { btnSettings.graphics.font = ScriptUI.newFont("Arial", "REGULAR", 24); } catch(e){} 
+var btnSettings = headerGroup.add("button", undefined, "⚙️ Einstellungen"); 
 btnSettings.helpTip = "Einstellungen, Wörterbuch & API-Key";
 
 // --- PANEL 1: MANUELLER MODUS ---
