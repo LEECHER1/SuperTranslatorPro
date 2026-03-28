@@ -1,17 +1,23 @@
-#targetengine "SuperTranslatorPRO272"
+#targetengine "SuperTranslatorPRO274"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 27.2 (SCHRITT 3: TM & AUTO-FIT)
+// SUPER ÜBERSETZER PRO - VERSION 27.4 (NETZWERK TM & CSV)
 // ==============================================
 
-// --- 0. API-KEY & GLOBALE STATISTIKEN ---
+// --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
 var DEEPL_KEY_LABEL = "SuperTranslatorPRO_DeepL_API_Key";
+var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
+var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; // NEU: Pfad für das Memory
+
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = "72a2f538-aa99-4254-9d96-0b82f691a732"; // Dein Fallback Key
 }
 
-// Neue globale Statistik-Variablen für das Abschlussprotokoll
+var csvPath = app.extractLabel(CSV_PATH_LABEL) || "";
+var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); // Fallback ist lokal
+
+// Globale Statistik-Variablen für das Abschlussprotokoll
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
 
 // Globale Variablen für den Ladebalken
@@ -20,8 +26,11 @@ var overallBar, overallText, etaText, btnStopProgress;
 var cancelFlag = false;
 var startTime = 0;
 
-// --- 0B. TRANSLATION MEMORY (TM) LOGIK ---
-function getTMFile() { return new File(Folder.userData + "/SuperTranslatorPRO_Memory.json"); }
+// --- 0B. TRANSLATION MEMORY & CSV LOGIK ---
+function getTMFile() { 
+    if (tmPath && tmPath !== "") return new File(tmPath);
+    return new File(Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
+}
 
 function loadTM() {
     var f = getTMFile();
@@ -34,7 +43,6 @@ function loadTM() {
 function saveTM(tmObj) {
     var f = getTMFile();
     try {
-        // Manueller Serializer, da ältere InDesign-Versionen kein natives JSON.stringify haben
         var str = "{\n"; var langs = [];
         for (var l in tmObj) {
             if (tmObj.hasOwnProperty(l)) {
@@ -54,7 +62,42 @@ function saveTM(tmObj) {
     } catch(e) {}
 }
 
-// Hilfsfunktion: DeepL Code in InDesign-Sprache umwandeln
+function loadCSVGlossary(path) {
+    if (!path || path === "") return null;
+    var f = new File(path);
+    if (!f.exists) return null;
+    var glossary = {};
+    try {
+        f.encoding = "UTF-8";
+        f.open('r');
+        var content = f.read();
+        f.close();
+        var lines = content.split(/[\r\n]+/);
+        if (lines.length < 2) return null;
+        
+        var sep = lines[0].indexOf(';') !== -1 ? ';' : ','; 
+        var headers = lines[0].split(sep);
+        for (var h=0; h<headers.length; h++) headers[h] = headers[h].replace(/(^"|"$|\s)/g, '').toUpperCase();
+
+        for (var i=1; i<lines.length; i++) {
+            if (lines[i].replace(/\s/g, '') === "") continue;
+            var cols = lines[i].split(sep);
+            var original = cols[0].replace(/(^"|"$)/g, '');
+            if (original === "") continue;
+            
+            var translations = {};
+            for (var j=1; j<cols.length; j++) {
+                if (j < headers.length) {
+                    var val = cols[j].replace(/(^"|"$)/g, '');
+                    if (val !== "") translations[headers[j]] = val;
+                }
+            }
+            glossary[original] = translations;
+        }
+        return glossary;
+    } catch(e) { return null; }
+}
+
 function getInDesignLanguageName(deepLCode) {
     var map = {
         "EN-US": "Englisch: USA", "EN-GB": "Englisch: Großbritannien", "EN": "Englisch: USA",
@@ -70,7 +113,7 @@ function getInDesignLanguageName(deepLCode) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var myWindow = new Window("palette", "Super Übersetzer PRO 27.2");
+var myWindow = new Window("palette", "Super Übersetzer PRO 27.4");
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 
@@ -82,7 +125,7 @@ var spacer = headerGroup.add("statictext", undefined, "");
 spacer.preferredSize.width = 100;
 var btnSettings = headerGroup.add("button", undefined, "⚙️");
 btnSettings.preferredSize = [35, 25];
-btnSettings.helpTip = "API-Key & Einstellungen";
+btnSettings.helpTip = "API-Key & Netzwerk-Pfade";
 
 var panelScope = myWindow.add("panel", undefined, "Was soll übersetzt werden?");
 panelScope.orientation = "column"; panelScope.alignChildren = "left";
@@ -124,7 +167,7 @@ radioPages.onClick = function() { dropdownLang.enabled = true; panelBDA.enabled 
 editPages.onActivate = function() { radioPages.value = true; dropdownLang.enabled = true; panelBDA.enabled = false;}
 bdaSourceInput.onActivate = function() { radioBDA.value = true; dropdownLang.enabled = false; panelBDA.enabled = true;}
 
-// Einstellungen-Fenster
+// --- EINSTELLUNGEN FENSTER ---
 btnSettings.onClick = function() {
     var setWin = new Window("dialog", "⚙️ Einstellungen");
     setWin.orientation = "column";
@@ -134,20 +177,58 @@ btnSettings.onClick = function() {
     var keyInput = setWin.add("edittext", undefined, apiKey);
     keyInput.characters = 40;
     
+    setWin.add("panel", undefined, ""); 
+    
+    setWin.add("statictext", undefined, "Netzwerk-Wörterbuch (CSV Pfad):");
+    var grpCSV = setWin.add("group");
+    var csvInput = grpCSV.add("edittext", undefined, csvPath);
+    csvInput.characters = 30;
+    var btnBrowse = grpCSV.add("button", undefined, "Durchsuchen...");
+    
+    btnBrowse.onClick = function() {
+        var f = File.openDialog("Bitte wähle die Wörterbuch CSV-Datei aus", "*.csv");
+        if (f) csvInput.text = f.fsName;
+    };
+
+    setWin.add("panel", undefined, ""); 
+
+    // NEU: PFAD FÜR DAS TRANSLATION MEMORY
+    setWin.add("statictext", undefined, "Netzwerk-Memory (JSON Pfad):");
+    var grpTM = setWin.add("group");
+    var tmInput = grpTM.add("edittext", undefined, tmPath);
+    tmInput.characters = 30;
+    var btnBrowseTM = grpTM.add("button", undefined, "Durchsuchen...");
+    
+    btnBrowseTM.onClick = function() {
+        var f = File.openDialog("Bitte wähle die Memory JSON-Datei aus", "*.json");
+        if (f) {
+            tmInput.text = f.fsName;
+        } else {
+            // Falls die Datei noch nicht existiert, Dialog zum Speichern anbieten
+            var saveF = File.saveDialog("Speicherort für neues Memory wählen", "*.json");
+            if (saveF) tmInput.text = saveF.fsName;
+        }
+    };
+    
     var g = setWin.add("group");
     g.alignment = "center";
+    g.margins.top = 15;
     var btnSave = g.add("button", undefined, "Speichern");
     var btnCancelSet = g.add("button", undefined, "Abbrechen");
-    var btnClearTM = g.add("button", undefined, "Memory löschen");
+    var btnClearTM = g.add("button", undefined, "Memory leeren");
     
     btnSave.onClick = function() {
         apiKey = keyInput.text;
+        csvPath = csvInput.text;
+        tmPath = tmInput.text;
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
-        alert("API-Key erfolgreich gespeichert!");
+        app.insertLabel(CSV_PATH_LABEL, csvPath); 
+        app.insertLabel(TM_PATH_LABEL, tmPath); // Sichert den TM-Pfad in InDesign
+        alert("Einstellungen erfolgreich gespeichert!");
         setWin.close();
     };
     btnClearTM.onClick = function() {
-        if(confirm("Bist du sicher? Alle bisher gespeicherten Übersetzungen werden gelöscht und kosten beim nächsten Mal wieder DeepL-Zeichen.")) {
+        if(confirm("Bist du sicher? Das aktuell ausgewählte Memory wird geleert.")) {
             var f = getTMFile();
             if (f.exists) f.remove();
             alert("Translation Memory wurde geleert.");
@@ -164,7 +245,7 @@ btnCancel.onClick = function() { myWindow.close(); }
 function createProgressWindow() {
     cancelFlag = false;
     startTime = new Date().getTime();
-    globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 }; // Reset Stats
+    globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 }; 
     
     progressWin = new Window("palette", "Übersetzung läuft...");
     progressWin.orientation = "column";
@@ -393,14 +474,12 @@ function runBDAMode(doc, config) {
             }
         }
         
-        // Sprache an DeepL übergeben & Silbentrennung zuweisen
         executeTranslation(doc, targetTextObjArray, false, "", task.deepLCode, overallStartPct, overallEndPct);
         
         if (config.updateTOC) {
             updateTOCForLanguage(doc, task.code, startPageStr);
         }
 
-        // BACKUP ERSTELLEN
         try {
             if (doc.saved) {
                 updateProgress(95, "Speichere temporäres Backup...", overallEndPct, "Sichere Fortschritt...");
@@ -413,7 +492,6 @@ function runBDAMode(doc, config) {
         } catch(e) {} 
     }
 
-    // 4. BACK PAGE verschieben
     updateProgress(98, "Verschiebe Original-Rückseite ans Ende...", 98, "Räume Seiten auf...");
     var backPageMoved = false;
     for (var p = doc.pages.length - 1; p >= 0; p--) {
@@ -424,7 +502,6 @@ function runBDAMode(doc, config) {
         }
     }
     
-    // TEMPORÄRE BACKUPS LÖSCHEN
     updateProgress(99, "Räume temporäre Backups auf...", 99, "Fast fertig...");
     for (var b = 0; b < createdBackups.length; b++) {
         if (createdBackups[b].exists) {
@@ -501,16 +578,43 @@ function updateTOCForLanguage(doc, langCode, newStartPage) {
     } catch(e) {}
 }
 
-// --- 6. KERN-ÜBERSETZUNGS-LOGIK MIT TM & AUTO-FIT ---
+// --- 6. KERN-ÜBERSETZUNGS-LOGIK MIT TM, WÖRTERBUCH & AUTO-FIT ---
 function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selectedLang, overStartPct, overEndPct) {
     var storageEnv = setupTempImageStorage(doc);
     var textTargets = [];
     var storyIds = {};
     var inDesignLangName = getInDesignLanguageName(selectedLang); 
 
-    // TM laden
     var tm = loadTM();
     if (!tm[selectedLang]) tm[selectedLang] = {};
+    
+    var glossaryMap = {};
+    var glossaryRegex = null;
+    var parsedGlossary = loadCSVGlossary(csvPath);
+
+    if (parsedGlossary) {
+        var terms = [];
+        var targetUpper = selectedLang.toUpperCase();
+        var shortTarget = targetUpper.substring(0,2); 
+
+        for (var key in parsedGlossary) {
+            terms.push(key);
+            if (parsedGlossary[key][targetUpper]) {
+                glossaryMap[key.toLowerCase()] = parsedGlossary[key][targetUpper];
+            } else if (parsedGlossary[key][shortTarget]) {
+                glossaryMap[key.toLowerCase()] = parsedGlossary[key][shortTarget];
+            } else {
+                glossaryMap[key.toLowerCase()] = "###DNT###"; 
+            }
+        }
+        if (terms.length > 0) {
+            terms.sort(function(a,b){return b.length - a.length}); 
+            for(var t=0; t<terms.length; t++) {
+                terms[t] = terms[t].replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'); 
+            }
+            glossaryRegex = new RegExp("\\b(" + terms.join("|") + ")\\b", "gi");
+        }
+    }
 
     var addTarget = function(st) {
         try { if (!st || !st.isValid) return; } catch(e) { return; }
@@ -593,30 +697,75 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         } catch (e) {}
     }
     
-    // --- TM UND BATCH LOGIK ---
+    var buildXMLWithGlossary = function(textObj) {
+        var xmlString = "<root>"; var ranges = textObj.textStyleRanges;
+        for (var r = 0; r < ranges.length; r++) {
+            var chunk = ranges[r].contents;
+            var fFamily = "Arial"; try { fFamily = ranges[r].appliedFont.fontFamily; } catch(e) {}
+            var fStyle = "Regular"; try { fStyle = ranges[r].fontStyle; } catch(e) {}
+            var pSize = 12; try { pSize = ranges[r].pointSize; } catch(e) {}
+            var pStyleName = ""; try { pStyleName = ranges[r].appliedParagraphStyle.name; } catch(e) {}
+            var ldingStr = "AUTO"; try { if (ranges[r].leading !== Leading.AUTO) ldingStr = ranges[r].leading.toString(); } catch(e) {}
+            var fColor = ""; try { fColor = ranges[r].fillColor.name.replace(/"/g, ''); } catch(e) {}
+            var cStyle = ""; try { cStyle = ranges[r].appliedCharacterStyle.name.replace(/"/g, ''); } catch(e) {}
+            var pAlign = ""; try { pAlign = ranges[r].justification.toString(); } catch(e) {}
+            var lInd = "0"; try { lInd = ranges[r].leftIndent.toString(); } catch(e) {}
+            var fInd = "0"; try { fInd = ranges[r].firstLineIndent.toString(); } catch(e) {}
+            var bList = ""; try { bList = ranges[r].bulletsAndNumberingListType.toString(); } catch(e) {}
+            
+            chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+            chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            if (glossaryRegex) {
+                chunk = chunk.replace(glossaryRegex, function(match, p1, offset, string) {
+                    if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
+                    
+                    var lowerMatch = match.toLowerCase();
+                    var mappedVal = glossaryMap[lowerMatch];
+                    if (mappedVal === "###DNT###") return '<nt>' + match + '</nt>'; 
+                    else if (mappedVal && mappedVal !== "") return '<nt>' + mappedVal + '</nt>'; 
+                    return match;
+                });
+            }
+            
+            var regexArt = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*|[0-9]{4,})\b/g;
+            chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
+                var before = string.substring(0, offset);
+                var openTags = (before.match(/<nt>/g) || []).length;
+                var closeTags = (before.match(/<\/nt>/g) || []).length;
+                if (openTags > closeTags) return match; 
+
+                if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
+                return '<nt>' + match + '</nt>';
+            });
+
+            chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
+            chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
+            if (chunk !== "") xmlString += '<t f="' + fFamily + '" s="' + fStyle + '" z="' + pSize + '" p="' + pStyleName + '" l="' + ldingStr + '" c="' + fColor + '" k="' + cStyle + '" a="' + pAlign + '" li="' + lInd + '" fi="' + fInd + '" b="' + bList + '">' + chunk + '</t>';
+        }
+        return xmlString + "</root>";
+    };
+
     var deepLQueue = [];
     var finalTranslations = new Array(textTargets.length);
 
     for (var i = 0; i < textTargets.length; i++) {
         if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; continue; }
         
-        var xml = buildXMLfromText(textTargets[i]);
+        var xml = buildXMLWithGlossary(textTargets[i]);
         var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
         
         if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
             finalTranslations[i] = ""; 
         } else if (tm[selectedLang][xml]) {
-            // AUS DEM MEMORY LADEN (Geld & Zeit gespart!)
             finalTranslations[i] = tm[selectedLang][xml];
             globalStats.savedChars += textOnlyLength;
         } else {
-            // IN DIE DEEPL WARTESCHLANGE
             deepLQueue.push({ index: i, xml: xml, len: textOnlyLength });
             finalTranslations[i] = null;
         }
     }
     
-    // DEEPL BATCH STARTEN
     if (deepLQueue.length > 0) {
         var justXMLs = [];
         for(var q=0; q < deepLQueue.length; q++) justXMLs.push(deepLQueue[q].xml);
@@ -628,26 +777,21 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             for(var q=0; q < deepLQueue.length; q++) {
                 var trXML = translatedBatch[q];
                 finalTranslations[deepLQueue[q].index] = trXML;
-                // INS MEMORY SPEICHERN
                 tm[selectedLang][deepLQueue[q].xml] = trXML;
                 tmUpdated = true;
                 globalStats.apiChars += deepLQueue[q].len;
             }
-            if (tmUpdated) saveTM(tm); // Gedächtnis auf Festplatte sichern
+            if (tmUpdated) saveTM(tm); 
         }
     }
     
-    // FORMATIERUNGEN ANWENDEN
     var formatPct = overStartPct + ((overEndPct - overStartPct) * 0.9);
     updateProgress(90, "Wende Formatierungen an...", formatPct, null);
     for (var i = 0; i < textTargets.length; i++) {
         if (cancelFlag) throw new Error("CANCELLED");
-        if (finalTranslations[i]) {
-            applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangName);
-        }
+        if (finalTranslations[i]) applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangName);
     }
     
-    // TABELLEN UND BILDER WIEDERHERSTELLEN
     updateProgress(95, "Stelle Tabellen und Bilder wieder her...", overEndPct, null);
     app.findGrepPreferences = NothingEnum.nothing; app.changeGrepPreferences = NothingEnum.nothing;
     for (var i = globalParkedTables.length - 1; i >= 0; i--) {
@@ -684,7 +828,6 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
     try { if (storageEnv.frame.isValid) storageEnv.frame.remove(); } catch(e) {}
     try { doc.layers.itemByName("TEMP_TRANS_IMAGES").visible = false; } catch(e) {}
 
-    // --- AUTO-FIT FÜR ÜBERSATZ ---
     updateProgress(98, "Prüfe auf Textübersatz (Auto-Fit)...", overEndPct, null);
     var checkedFrameIds = {};
     for (var i = 0; i < textTargets.length; i++) {
@@ -704,8 +847,8 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                     if (tf.overflows) {
                         var bounds = tf.geometricBounds;
                         var attempts = 0;
-                        while (tf.overflows && attempts < 20) { // Max 20 Erweiterungen, damit es nicht endlos läuft
-                            bounds[2] += 5; // Erweitere Rahmen unten um ca. 5mm pro Versuch
+                        while (tf.overflows && attempts < 20) { 
+                            bounds[2] += 5; 
                             tf.geometricBounds = bounds;
                             attempts++;
                         }
@@ -717,62 +860,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
     }
 }
 
-// === HILFSFUNKTIONEN ===
-function setupTempImageStorage(doc) {
-    var tempLayer = doc.layers.itemByName("TEMP_TRANS_IMAGES");
-    if (!tempLayer.isValid) tempLayer = doc.layers.add({name: "TEMP_TRANS_IMAGES", visible: true, locked: false});
-    else { tempLayer.locked = false; tempLayer.visible = true; }
-    var currentPage = doc.pages[0]; try { if (app.activeWindow.activePage) currentPage = app.activeWindow.activePage; } catch(e) {}
-    var storageFrame = currentPage.textFrames.add({itemLayer: tempLayer, geometricBounds: [0,-2000, 2000, -50], contents: ""});
-    return { layer: tempLayer, page: currentPage, frame: storageFrame };
-}
-
-function getPagesFromString(doc, pageStr) {
-    var pages = []; var parts = pageStr.split(",");
-    for(var i=0; i<parts.length; i++) {
-        var part = parts[i].replace(/\s/g, "");
-        if(part.indexOf("-") !== -1) {
-            var range = part.split("-");
-            var startPage = doc.pages.itemByName(range[0]); var endPage = doc.pages.itemByName(range[1]);
-            if(startPage.isValid && endPage.isValid) {
-                var startIndex = startPage.documentOffset; var endIndex = endPage.documentOffset;
-                for(var j=startIndex; j<=endIndex; j++) pages.push(doc.pages[j]);
-            }
-        } else { var p = doc.pages.itemByName(part); if(p.isValid) pages.push(p); }
-    }
-    return pages;
-}
-
-function buildXMLfromText(textObj) {
-    var xmlString = "<root>"; var ranges = textObj.textStyleRanges;
-    for (var i = 0; i < ranges.length; i++) {
-        var chunk = ranges[i].contents;
-        var fFamily = "Arial"; try { fFamily = ranges[i].appliedFont.fontFamily; } catch(e) {}
-        var fStyle = "Regular"; try { fStyle = ranges[i].fontStyle; } catch(e) {}
-        var pSize = 12; try { pSize = ranges[i].pointSize; } catch(e) {}
-        var pStyleName = ""; try { pStyleName = ranges[i].appliedParagraphStyle.name; } catch(e) {}
-        var ldingStr = "AUTO"; try { if (ranges[i].leading !== Leading.AUTO) ldingStr = ranges[i].leading.toString(); } catch(e) {}
-        var fColor = ""; try { fColor = ranges[i].fillColor.name.replace(/"/g, ''); } catch(e) {}
-        var cStyle = ""; try { cStyle = ranges[i].appliedCharacterStyle.name.replace(/"/g, ''); } catch(e) {}
-        var pAlign = ""; try { pAlign = ranges[i].justification.toString(); } catch(e) {}
-        var lInd = "0"; try { lInd = ranges[i].leftIndent.toString(); } catch(e) {}
-        var fInd = "0"; try { fInd = ranges[i].firstLineIndent.toString(); } catch(e) {}
-        var bList = ""; try { bList = ranges[i].bulletsAndNumberingListType.toString(); } catch(e) {}
-        
-        chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-        chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        var regexArt = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*|[0-9]{4,})\b/g;
-        chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
-            if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
-            return '<nt>' + match + '</nt>';
-        });
-        chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
-        chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
-        if (chunk !== "") xmlString += '<t f="' + fFamily + '" s="' + fStyle + '" z="' + pSize + '" p="' + pStyleName + '" l="' + ldingStr + '" c="' + fColor + '" k="' + cStyle + '" a="' + pAlign + '" li="' + lInd + '" fi="' + fInd + '" b="' + bList + '">' + chunk + '</t>';
-    }
-    return xmlString + "</root>";
-}
-
+// === HILFSFUNKTIONEN FÜR DEEPL & CO ===
 function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPct) {
     var endpoint = (apiKey.indexOf(":fx") !== -1) ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
     var translated = []; var batchSize = 25; 
@@ -865,6 +953,31 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
             }
         }
     }
+}
+
+function setupTempImageStorage(doc) {
+    var tempLayer = doc.layers.itemByName("TEMP_TRANS_IMAGES");
+    if (!tempLayer.isValid) tempLayer = doc.layers.add({name: "TEMP_TRANS_IMAGES", visible: true, locked: false});
+    else { tempLayer.locked = false; tempLayer.visible = true; }
+    var currentPage = doc.pages[0]; try { if (app.activeWindow.activePage) currentPage = app.activeWindow.activePage; } catch(e) {}
+    var storageFrame = currentPage.textFrames.add({itemLayer: tempLayer, geometricBounds: [0,-2000, 2000, -50], contents: ""});
+    return { layer: tempLayer, page: currentPage, frame: storageFrame };
+}
+
+function getPagesFromString(doc, pageStr) {
+    var pages = []; var parts = pageStr.split(",");
+    for(var i=0; i<parts.length; i++) {
+        var part = parts[i].replace(/\s/g, "");
+        if(part.indexOf("-") !== -1) {
+            var range = part.split("-");
+            var startPage = doc.pages.itemByName(range[0]); var endPage = doc.pages.itemByName(range[1]);
+            if(startPage.isValid && endPage.isValid) {
+                var startIndex = startPage.documentOffset; var endIndex = endPage.documentOffset;
+                for(var j=startIndex; j<=endIndex; j++) pages.push(doc.pages[j]);
+            }
+        } else { var p = doc.pages.itemByName(part); if(p.isValid) pages.push(p); }
+    }
+    return pages;
 }
 
 // === START ===
