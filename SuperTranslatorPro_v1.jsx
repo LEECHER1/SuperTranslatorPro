@@ -1,7 +1,7 @@
 #targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.5 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.6 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.5";
+var SCRIPT_VERSION = "28.6";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -707,10 +707,10 @@ function getTextFramesFromContainer(container) {
     return frames;
 }
 
-function findMasterLanguageBadge(masterSpread, preferredCode) {
-    if (!masterSpread || !masterSpread.isValid) return null;
+function collectMasterLanguageBadges(masterSpread, preferredCode) {
+    var matches = [];
+    if (!masterSpread || !masterSpread.isValid) return matches;
     var preferred = preferredCode ? String(preferredCode).toLowerCase() : "";
-    var best = null;
     for (var p = 0; p < masterSpread.pages.length; p++) {
         var page = masterSpread.pages[p];
         var frames = getTextFramesFromContainer(page);
@@ -742,11 +742,17 @@ function findMasterLanguageBadge(masterSpread, preferredCode) {
                 if ((bounds[2] - bounds[0]) <= 60) score += 10;
             } catch (e4) {}
             if (code === "de") score += 5;
-
-            if (!best || score > best.score) {
-                best = { code: code, textObj: textObj, frame: tf, page: page, score: score };
-            }
+            matches.push({ code: code, textObj: textObj, frame: tf, page: page, score: score });
         }
+    }
+    return matches;
+}
+
+function findMasterLanguageBadge(masterSpread, preferredCode) {
+    var matches = collectMasterLanguageBadges(masterSpread, preferredCode);
+    var best = null;
+    for (var i = 0; i < matches.length; i++) {
+        if (!best || matches[i].score > best.score) best = matches[i];
     }
     return best;
 }
@@ -949,14 +955,34 @@ function promptLegacyTargetLanguageSelection(preselectedCodeMap) {
 }
 
 function replaceMasterLanguageBadgeText(masterSpread, langCode) {
-    var badge = findMasterLanguageBadge(masterSpread, "de");
-    if (!badge) badge = findMasterLanguageBadge(masterSpread, null);
-    if (!badge || !badge.textObj || !badge.textObj.isValid) return false;
-    try {
-        badge.textObj.contents = String(langCode).toLowerCase();
-        return true;
-    } catch (e) {
-        return false;
+    var badges = collectMasterLanguageBadges(masterSpread, "de");
+    if (badges.length === 0) badges = collectMasterLanguageBadges(masterSpread, null);
+    if (badges.length === 0) return false;
+
+    var changed = 0;
+    var handledStories = {};
+    for (var i = 0; i < badges.length; i++) {
+        var badge = badges[i];
+        if (!badge || !badge.textObj || !badge.textObj.isValid) continue;
+        var storyId = null;
+        try { storyId = badge.textObj.id; } catch (eId) { storyId = null; }
+        if (storyId !== null && handledStories[storyId]) continue;
+        try {
+            badge.textObj.contents = String(langCode).toLowerCase();
+            changed++;
+            if (storyId !== null) handledStories[storyId] = true;
+        } catch (e) {}
+    }
+    return changed > 0;
+}
+
+function syncMasterLanguageBadgesToNames(doc) {
+    if (!doc || !doc.isValid) return;
+    for (var i = 0; i < doc.masterSpreads.length; i++) {
+        var master = doc.masterSpreads[i];
+        var code = getMasterLang(master.name);
+        if (!code) continue;
+        replaceMasterLanguageBadgeText(master, code);
     }
 }
 
@@ -1005,6 +1031,7 @@ function prepareLegacyMasterSpreads(doc, allowCreation) {
     }
     renameMasterSpreadToLanguage(doc, germanMaster, "de", getMasterSpreadBaseName(germanMaster));
     cleanupAccidentalGermanMasterNames(doc, germanMaster);
+    syncMasterLanguageBadgesToNames(doc);
 
     var langTasks = collectBDALanguageTasks(doc);
     var savedCodes = loadBDATargetLangCodes(doc);
