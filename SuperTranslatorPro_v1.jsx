@@ -1099,7 +1099,9 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
 
 function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
     if (!translatedXML || translatedXML === "") return;
-    translatedXML = translatedXML.replace(/[\r\n]+/g, '').replace(/(###(?:IMG|TBL)_\d+###)\s+(?=###(?:IMG|TBL)_\d+###)/g, '$1');
+    translatedXML = translatedXML.replace(/[\r\n]+/g, '')
+                                 .replace(/(<(?:t|nt)[^>]*>)\s+/g, '$1')
+                                 .replace(/(###(?:IMG|TBL)_\d+###)\s+(?=###(?:IMG|TBL)_\d+###)/g, '$1');
     var isPartial = false; var textFlow = null; var currentIdx = 0;
     try {
         if (targetTextObj.constructor.name === "Story") { isPartial = false; textFlow = targetTextObj; } 
