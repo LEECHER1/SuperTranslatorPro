@@ -98,6 +98,79 @@ function saveTM(tmObj) {
     } catch(e) {}
 }
 
+function guessCSVSeparator(content) {
+    var firstRow = "";
+    var inQuotes = false;
+    for (var i = 0; i < content.length; i++) {
+        var ch = content.charAt(i);
+        if (ch === '"') {
+            if (inQuotes && i + 1 < content.length && content.charAt(i + 1) === '"') {
+                firstRow += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+        if (!inQuotes && (ch === "\r" || ch === "\n")) break;
+        firstRow += ch;
+    }
+
+    var commaCount = 0;
+    var semicolonCount = 0;
+    inQuotes = false;
+    for (var j = 0; j < firstRow.length; j++) {
+        var rowChar = firstRow.charAt(j);
+        if (rowChar === '"') {
+            if (inQuotes && j + 1 < firstRow.length && firstRow.charAt(j + 1) === '"') {
+                j++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (!inQuotes) {
+            if (rowChar === ';') semicolonCount++;
+            else if (rowChar === ',') commaCount++;
+        }
+    }
+    return semicolonCount > commaCount ? ';' : ',';
+}
+
+function parseCSVRows(content, separator) {
+    var rows = [];
+    var row = [];
+    var field = "";
+    var inQuotes = false;
+
+    for (var i = 0; i < content.length; i++) {
+        var ch = content.charAt(i);
+        if (ch === '"') {
+            if (inQuotes && i + 1 < content.length && content.charAt(i + 1) === '"') {
+                field += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (!inQuotes && ch === separator) {
+            row.push(field);
+            field = "";
+        } else if (!inQuotes && (ch === "\r" || ch === "\n")) {
+            row.push(field);
+            if (row.length > 1 || row[0] !== "") rows.push(row);
+            row = [];
+            field = "";
+            if (ch === "\r" && i + 1 < content.length && content.charAt(i + 1) === "\n") i++;
+        } else {
+            field += ch;
+        }
+    }
+
+    if (field !== "" || row.length > 0) {
+        row.push(field);
+        if (row.length > 1 || row[0] !== "") rows.push(row);
+    }
+    return rows;
+}
+
 function loadCSVGlossary(path) {
     if (!path || path === "") return null;
     var f = new File(path);
@@ -109,23 +182,25 @@ function loadCSVGlossary(path) {
         var content = f.read();
         f.close();
         content = content.replace(/^\uFEFF/, '');
-        var lines = content.split(/[\r\n]+/);
-        if (lines.length < 2) return null;
-        
-        var sep = lines[0].indexOf(';') !== -1 ? ';' : ','; 
-        var headers = lines[0].split(sep);
-        for (var h=0; h<headers.length; h++) headers[h] = headers[h].replace(/(^"|"$|\s)/g, '').toUpperCase();
+        var sep = guessCSVSeparator(content);
+        var rows = parseCSVRows(content, sep);
+        if (rows.length < 2) return null;
 
-        for (var i=1; i<lines.length; i++) {
-            if (lines[i].replace(/\s/g, '') === "") continue;
-            var cols = lines[i].split(sep);
-            var original = cols[0].replace(/(^"|"$)/g, '');
+        var headers = rows[0];
+        for (var h = 0; h < headers.length; h++) {
+            headers[h] = String(headers[h]).replace(/^\s+|\s+$/g, '').toUpperCase();
+        }
+
+        for (var i = 1; i < rows.length; i++) {
+            var cols = rows[i];
+            if (!cols || cols.length === 0) continue;
+            var original = String(cols[0]).replace(/^\s+|\s+$/g, '');
             if (original === "") continue;
-            
+
             var translations = {};
-            for (var j=1; j<cols.length; j++) {
+            for (var j = 1; j < cols.length; j++) {
                 if (j < headers.length) {
-                    var val = cols[j].replace(/(^"|"$)/g, '');
+                    var val = String(cols[j]).replace(/^\s+|\s+$/g, '');
                     if (val !== "") translations[headers[j]] = val;
                 }
             }
@@ -1495,7 +1570,7 @@ function runBDAMode(doc, config) {
     var originalPages = [];
     if (config.bdaSourcePages.toUpperCase() === "AUTO") {
         for (var p = 0; p < doc.pages.length; p++) {
-            if (doc.pages[p].appliedMaster && doc.pages[p].appliedMaster.name.match(/-de[-_]/i)) {
+            if (doc.pages[p].appliedMaster && isGermanMasterName(doc.pages[p].appliedMaster.name)) {
                 originalPages.push(doc.pages[p]);
             }
         }
@@ -1542,8 +1617,15 @@ function runBDAMode(doc, config) {
                 }
             }
         }
-        
-        executeTranslation(doc, targetTextObjArray, false, "", task.deepLCode, overallStartPct, overallEndPct);
+
+        try {
+            executeTranslation(doc, targetTextObjArray, false, "", task.deepLCode, overallStartPct, overallEndPct);
+        } catch (langError) {
+            for (var rp = newPagesForThisLang.length - 1; rp >= 0; rp--) {
+                try { if (newPagesForThisLang[rp] && newPagesForThisLang[rp].isValid) newPagesForThisLang[rp].remove(); } catch (cleanupErr) {}
+            }
+            throw langError;
+        }
         
         if (config.updateTOC) {
             updateTOCForLanguage(doc, task.code, startPageStr);
@@ -2080,6 +2162,8 @@ function syncBDATextChanges(doc, config) {
         targetPages.sort(function(a,b){ return a.documentOffset - b.documentOffset; });
         var deepLLang = getDeepLLangCode(langCode);
         var targetTextObjArray = [];
+        var pendingReplacements = [];
+        var reservedTargetItemIds = {};
 
         for (var bi = 0; bi < changeBlocks.length; bi++) {
             if (cancelFlag) throw new Error("CANCELLED");
@@ -2088,20 +2172,46 @@ function syncBDATextChanges(doc, config) {
             var targetPage = targetPages[block.pageIndex];
             if (!sourcePage || !targetPage) continue;
 
-                var sourceItems = sourcePage.pageItems.everyItem().getElements();
+            var sourceItems = sourcePage.pageItems.everyItem().getElements();
             var targetItems = targetPage.pageItems.everyItem().getElements();
             if (block.itemIndex >= sourceItems.length) continue;
 
             var sourceItem = sourceItems[block.itemIndex];
             if (!sourceItem) continue;
 
-            var oldTargetItem = findBestMatchingTargetItem(sourceItem, targetItems, block.itemIndex);
+            var candidateItems = [];
+            for (var ti = 0; ti < targetItems.length; ti++) {
+                var candidate = targetItems[ti];
+                var candidateId = null;
+                try { candidateId = candidate.id; } catch (eId) { candidateId = null; }
+                if (candidateId !== null && reservedTargetItemIds[candidateId]) continue;
+                candidateItems.push(candidate);
+            }
+
+            var oldTargetItem = findBestMatchingTargetItem(sourceItem, candidateItems, null);
             if (!oldTargetItem) continue;
 
             try {
                 var duplicated = sourceItem.duplicate(targetPage);
                 if (duplicated && duplicated.isValid) {
                     anyUpdated = true;
+                    var oldTargetId = null;
+                    var duplicatedId = null;
+                    try { oldTargetId = oldTargetItem.id; } catch (eId2) { oldTargetId = null; }
+                    try { duplicatedId = duplicated.id; } catch (eId3) { duplicatedId = null; }
+                    if (oldTargetId !== null) reservedTargetItemIds[oldTargetId] = true;
+                    if (duplicatedId !== null) reservedTargetItemIds[duplicatedId] = true;
+
+                    try {
+                        if (oldTargetItem.itemLayer && oldTargetItem.itemLayer.isValid) duplicated.itemLayer = oldTargetItem.itemLayer;
+                    } catch (eLayer) {}
+                    try {
+                        if (duplicated.hasOwnProperty("geometricBounds") && oldTargetItem.hasOwnProperty("geometricBounds")) {
+                            duplicated.geometricBounds = oldTargetItem.geometricBounds;
+                        }
+                    } catch (eBounds) {}
+
+                    pendingReplacements.push({ oldItem: oldTargetItem, newItem: duplicated });
                     var newFrames = [];
                     if (duplicated.constructor.name === "TextFrame") {
                         newFrames.push(duplicated);
@@ -2117,16 +2227,35 @@ function syncBDATextChanges(doc, config) {
                         var st = getTextFrameStory(newFrames[nf]);
                         if (st) targetTextObjArray.push(st);
                     }
-                    try { if (oldTargetItem.isValid) oldTargetItem.remove(); } catch (e) {}
                 }
             } catch (e) {}
         }
 
-        if (targetTextObjArray.length > 0) {
+        if (pendingReplacements.length > 0) {
             var overallStartPct = 10 + (li / langCodes.length) * 85;
             var overallEndPct = 10 + ((li + 1) / langCodes.length) * 85;
-            updateProgress(10, "Übersetze geänderte Inhalte in " + langCode.toUpperCase() + "...", overallStartPct, "Sprache " + (li+1) + " von " + langCodes.length + ": " + langCode.toUpperCase());
-            executeTranslation(doc, targetTextObjArray, false, "", deepLLang, overallStartPct, overallEndPct);
+            try {
+                if (targetTextObjArray.length > 0) {
+                    updateProgress(10, "Übersetze geänderte Inhalte in " + langCode.toUpperCase() + "...", overallStartPct, "Sprache " + (li+1) + " von " + langCodes.length + ": " + langCode.toUpperCase());
+                    executeTranslation(doc, targetTextObjArray, false, "", deepLLang, overallStartPct, overallEndPct);
+                }
+
+                for (var pr = 0; pr < pendingReplacements.length; pr++) {
+                    var replacement = pendingReplacements[pr];
+                    try {
+                        if (replacement.newItem && replacement.newItem.isValid && replacement.oldItem && replacement.oldItem.isValid) {
+                            replacement.newItem.move(LocationOptions.BEFORE, replacement.oldItem);
+                        }
+                    } catch (moveErr) {}
+                    try { if (replacement.oldItem && replacement.oldItem.isValid) replacement.oldItem.remove(); } catch (removeErr) {}
+                }
+            } catch (syncError) {
+                for (var cleanupIndex = pendingReplacements.length - 1; cleanupIndex >= 0; cleanupIndex--) {
+                    var pending = pendingReplacements[cleanupIndex];
+                    try { if (pending.newItem && pending.newItem.isValid) pending.newItem.remove(); } catch (cleanupErr) {}
+                }
+                throw syncError;
+            }
         }
     }
 
@@ -2371,6 +2500,68 @@ function updateTOCForLanguage(doc, langCode, newStartPage) {
     } catch(e) {}
 }
 
+function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
+    try {
+        app.findGrepPreferences = NothingEnum.nothing;
+        app.changeGrepPreferences = NothingEnum.nothing;
+    } catch (prefErr) {}
+
+    try {
+        for (var i = globalParkedTables.length - 1; i >= 0; i--) {
+            var parked = globalParkedTables[i];
+            app.findGrepPreferences.findWhat = "[ \t]*###TBL_\\s*" + parked.id + "\\s*###[ \t]*";
+            var results = doc.findGrep();
+            if (results.length > 0) {
+                try {
+                    parked.frame.characters.item(0).move(LocationOptions.AFTER, results[0].insertionPoints.item(0));
+                    results[0].remove();
+                } catch (e1) {}
+            } else if (textTargets && textTargets.length > 0) {
+                try { parked.frame.characters.item(0).move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1)); } catch (e2) {}
+            }
+            try { if (parked.frame && parked.frame.isValid) parked.frame.remove(); } catch (e3) {}
+        }
+
+        try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.itemLayer.visible = true; } catch (e4) {}
+
+        app.findGrepPreferences.findWhat = "###IMG_\\s*\\d+\\s*###";
+        var allFoundImages = doc.findGrep();
+        for (var f = allFoundImages.length - 1; f >= 0; f--) {
+            var placeholderRange = allFoundImages[f];
+            var match = placeholderRange.contents.match(/IMG_\s*(\d+)/);
+            if (!match) continue;
+            var imgID = match[1];
+            var targetImageInStorage = null;
+            var storageItems = storageEnv.frame.allPageItems;
+            for (var j = 0; j < storageItems.length; j++) {
+                if (storageItems[j].label === "TMP_IMG_" + imgID) {
+                    targetImageInStorage = storageItems[j];
+                    break;
+                }
+            }
+            if (targetImageInStorage !== null) {
+                try {
+                    var targetChar = targetImageInStorage.parent;
+                    while (targetChar && targetChar.constructor.name !== "Character" && targetChar.constructor.name !== "Story" && targetChar.constructor.name !== "Application") targetChar = targetChar.parent;
+                    if (targetChar && targetChar.constructor.name === "Character") {
+                        targetChar.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
+                        placeholderRange.remove();
+                    } else {
+                        targetImageInStorage.parent.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
+                        placeholderRange.remove();
+                    }
+                } catch (e5) {}
+            }
+        }
+    } catch (restoreErr) {
+    } finally {
+        try { app.findGrepPreferences = NothingEnum.nothing; } catch (e6) {}
+        try { app.changeGrepPreferences = NothingEnum.nothing; } catch (e7) {}
+        try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.remove(); } catch (e8) {}
+        try { doc.layers.itemByName("TEMP_TRANS_IMAGES").visible = false; } catch (e9) {}
+    }
+}
+
 // --- 6. KERN-ÜBERSETZUNGS-LOGIK MIT TM, WÖRTERBUCH & AUTO-FIT ---
 function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selectedLang, overStartPct, overEndPct) {
     var storageEnv = setupTempImageStorage(doc);
@@ -2434,77 +2625,78 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
     var globalParkedTables = []; var tableCounter = 0; var imageCounter = 0;
 
-    for (var i = 0; i < textTargets.length; i++) {
-        if (cancelFlag) throw new Error("CANCELLED");
-        var currentText = textTargets[i];
-        if (!currentText.isValid || currentText.characters.length === 0) continue;
-        
-        if (currentText.tables && currentText.tables.length > 0) {
-            var tables = currentText.tables.everyItem().getElements();
-            for (var t = tables.length - 1; t >= 0; t--) {
-                var tbl = tables[t]; var tblId = ++tableCounter; 
-                var marker = "###TBL_" + tblId + "###";
-                var tmpFrame = storageEnv.page.textFrames.add({itemLayer: storageEnv.layer, geometricBounds: [0,-100, 50, -50]});
-                
-                var p = tbl.storyOffset.parent; var idx = tbl.storyOffset.index;
-                p.characters.item(idx).move(LocationOptions.AFTER, tmpFrame.insertionPoints.item(0));
-                globalParkedTables.push({ id: tblId, frame: tmpFrame });
-                p.insertionPoints.item(idx).contents = marker;
-                
-                var pastedTbl = tmpFrame.tables[0];
-                if (pastedTbl) {
-                    var cells = pastedTbl.cells.everyItem().getElements();
-                    for (var c = 0; c < cells.length; c++) textTargets.push(cells[c].texts[0]);
+    try {
+        for (var i = 0; i < textTargets.length; i++) {
+            if (cancelFlag) throw new Error("CANCELLED");
+            var currentText = textTargets[i];
+            if (!currentText.isValid || currentText.characters.length === 0) continue;
+            
+            if (currentText.tables && currentText.tables.length > 0) {
+                var tables = currentText.tables.everyItem().getElements();
+                for (var t = tables.length - 1; t >= 0; t--) {
+                    var tbl = tables[t]; var tblId = ++tableCounter; 
+                    var marker = "###TBL_" + tblId + "###";
+                    var tmpFrame = storageEnv.page.textFrames.add({itemLayer: storageEnv.layer, geometricBounds: [0,-100, 50, -50]});
+                    
+                    var p = tbl.storyOffset.parent; var idx = tbl.storyOffset.index;
+                    p.characters.item(idx).move(LocationOptions.AFTER, tmpFrame.insertionPoints.item(0));
+                    globalParkedTables.push({ id: tblId, frame: tmpFrame });
+                    p.insertionPoints.item(idx).contents = marker;
+                    
+                    var pastedTbl = tmpFrame.tables[0];
+                    if (pastedTbl) {
+                        var cells = pastedTbl.cells.everyItem().getElements();
+                        for (var c = 0; c < cells.length; c++) textTargets.push(cells[c].texts[0]);
+                    }
                 }
             }
-        }
 
-        try {
-            app.findTextPreferences = NothingEnum.nothing; app.changeTextPreferences = NothingEnum.nothing;
-            app.findTextPreferences.findWhat = "^a"; 
-            var foundAnchors = currentText.findText();
-            for (var a = foundAnchors.length - 1; a >= 0; a--) {
-                var anchorChar = foundAnchors[a].characters[0]; var imgID = ++imageCounter; 
-                var marker = "###IMG_" + imgID + "###";
-                
-                if (anchorChar.pageItems.length > 0) anchorChar.pageItems[0].label = "TMP_IMG_" + imgID;
-                else if (anchorChar.allPageItems.length > 0) anchorChar.allPageItems[0].label = "TMP_IMG_" + imgID;
-                
-                var p = anchorChar.parent; var idx = anchorChar.index;
-                anchorChar.move(LocationOptions.AFTER, storageEnv.frame.insertionPoints.item(-1));
-                p.insertionPoints.item(idx).contents = marker;
+            try {
+                app.findTextPreferences = NothingEnum.nothing; app.changeTextPreferences = NothingEnum.nothing;
+                app.findTextPreferences.findWhat = "^a"; 
+                var foundAnchors = currentText.findText();
+                for (var a = foundAnchors.length - 1; a >= 0; a--) {
+                    var anchorChar = foundAnchors[a].characters[0]; var imgID = ++imageCounter; 
+                    var marker = "###IMG_" + imgID + "###";
+                    
+                    if (anchorChar.pageItems.length > 0) anchorChar.pageItems[0].label = "TMP_IMG_" + imgID;
+                    else if (anchorChar.allPageItems.length > 0) anchorChar.allPageItems[0].label = "TMP_IMG_" + imgID;
+                    
+                    var p = anchorChar.parent; var idx = anchorChar.index;
+                    anchorChar.move(LocationOptions.AFTER, storageEnv.frame.insertionPoints.item(-1));
+                    p.insertionPoints.item(idx).contents = marker;
 
-                try {
-                    var sItems = storageEnv.frame.allPageItems; var movedItem = null;
-                    for(var j = sItems.length - 1; j >= 0; j--){ if(sItems[j].label === "TMP_IMG_" + imgID) { movedItem = sItems[j]; break; } }
-                    if (movedItem) {
-                        var safeAddNestedTarget = function(tfItem) { var nStory; try { nStory = tfItem.parentStory; } catch(e) { nStory = tfItem.texts[0]; } addTarget(nStory); };
-                        if (movedItem.constructor.name === "TextFrame") safeAddNestedTarget(movedItem);
-                        if (movedItem.hasOwnProperty("allPageItems")) {
-                            var nestedItems = movedItem.allPageItems;
-                            for (var ni = 0; ni < nestedItems.length; ni++) { if (nestedItems[ni].constructor.name === "TextFrame") safeAddNestedTarget(nestedItems[ni]); }
+                    try {
+                        var sItems = storageEnv.frame.allPageItems; var movedItem = null;
+                        for(var j = sItems.length - 1; j >= 0; j--){ if(sItems[j].label === "TMP_IMG_" + imgID) { movedItem = sItems[j]; break; } }
+                        if (movedItem) {
+                            var safeAddNestedTarget = function(tfItem) { var nStory; try { nStory = tfItem.parentStory; } catch(e) { nStory = tfItem.texts[0]; } addTarget(nStory); };
+                            if (movedItem.constructor.name === "TextFrame") safeAddNestedTarget(movedItem);
+                            if (movedItem.hasOwnProperty("allPageItems")) {
+                                var nestedItems = movedItem.allPageItems;
+                                for (var ni = 0; ni < nestedItems.length; ni++) { if (nestedItems[ni].constructor.name === "TextFrame") safeAddNestedTarget(nestedItems[ni]); }
+                            }
                         }
-                    }
-                } catch(e) {}
-            }
-        } catch (e) {}
-    }
+                    } catch(e) {}
+                }
+            } catch (e) {}
+        }
     
     var buildXMLWithGlossary = function(textObj) {
         var xmlString = "<root>"; var ranges = textObj.textStyleRanges;
         for (var r = 0; r < ranges.length; r++) {
             var chunk = ranges[r].contents;
-            var fFamily = "Arial"; try { fFamily = ranges[r].appliedFont.fontFamily; } catch(e) {}
-            var fStyle = "Regular"; try { fStyle = ranges[r].fontStyle; } catch(e) {}
-            var pSize = 12; try { pSize = ranges[r].pointSize; } catch(e) {}
-            var pStyleName = ""; try { pStyleName = ranges[r].appliedParagraphStyle.name; } catch(e) {}
-            var ldingStr = "AUTO"; try { if (ranges[r].leading !== Leading.AUTO) ldingStr = ranges[r].leading.toString(); } catch(e) {}
-            var fColor = ""; try { fColor = ranges[r].fillColor.name.replace(/"/g, ''); } catch(e) {}
-            var cStyle = ""; try { cStyle = ranges[r].appliedCharacterStyle.name.replace(/"/g, ''); } catch(e) {}
-            var pAlign = ""; try { pAlign = ranges[r].justification.toString(); } catch(e) {}
-            var lInd = "0"; try { lInd = ranges[r].leftIndent.toString(); } catch(e) {}
-            var fInd = "0"; try { fInd = ranges[r].firstLineIndent.toString(); } catch(e) {}
-            var bList = ""; try { bList = ranges[r].bulletsAndNumberingListType.toString(); } catch(e) {}
+            var fFamily = "Arial"; try { fFamily = String(ranges[r].appliedFont.fontFamily); } catch(e) {}
+            var fStyle = "Regular"; try { fStyle = String(ranges[r].fontStyle); } catch(e) {}
+            var pSize = "12"; try { pSize = String(ranges[r].pointSize); } catch(e) {}
+            var pStyleNameRaw = ""; try { pStyleNameRaw = String(ranges[r].appliedParagraphStyle.name); } catch(e) {}
+            var ldingStr = "AUTO"; try { if (ranges[r].leading !== Leading.AUTO) ldingStr = String(ranges[r].leading); } catch(e) {}
+            var fColor = ""; try { fColor = String(ranges[r].fillColor.name); } catch(e) {}
+            var cStyleRaw = ""; try { cStyleRaw = String(ranges[r].appliedCharacterStyle.name); } catch(e) {}
+            var pAlign = ""; try { pAlign = String(ranges[r].justification); } catch(e) {}
+            var lInd = "0"; try { lInd = String(ranges[r].leftIndent); } catch(e) {}
+            var fInd = "0"; try { fInd = String(ranges[r].firstLineIndent); } catch(e) {}
+            var bList = ""; try { bList = String(ranges[r].bulletsAndNumberingListType); } catch(e) {}
             
             chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
             chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -2513,7 +2705,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             var isDNT = false;
             for (var d=0; d<dntArr.length; d++) {
                 var trimDNT = dntArr[d].replace(/^\s+|\s+$/g, '');
-                if (trimDNT !== "" && (trimDNT === pStyleName || trimDNT === cStyle)) { isDNT = true; break; }
+                if (trimDNT !== "" && (trimDNT === pStyleNameRaw || trimDNT === cStyleRaw)) { isDNT = true; break; }
             }
             
             if (isDNT) {
@@ -2527,7 +2719,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                         var mappedVal = glossaryMap[lowerMatch];
                         var replacement = term;
                         if (mappedVal === "###DNT###") replacement = '<nt>' + term + '</nt>'; 
-                        else if (mappedVal && mappedVal !== "") replacement = '<nt>' + mappedVal + '</nt>'; 
+                        else if (mappedVal && mappedVal !== "") replacement = '<nt>' + escapeDeepLXMLText(mappedVal) + '</nt>'; 
                         return prefix + replacement;
                     });
                 }
@@ -2546,38 +2738,42 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
             chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
             chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
-            if (chunk !== "") xmlString += '<t f="' + fFamily + '" s="' + fStyle + '" z="' + pSize + '" p="' + pStyleName + '" l="' + ldingStr + '" c="' + fColor + '" k="' + cStyle + '" a="' + pAlign + '" li="' + lInd + '" fi="' + fInd + '" b="' + bList + '">' + chunk + '</t>';
+            if (chunk !== "") {
+                xmlString += '<t f="' + escapeXMLAttr(fFamily) + '" s="' + escapeXMLAttr(fStyle) + '" z="' + escapeXMLAttr(pSize) + '" p="' + escapeXMLAttr(pStyleNameRaw) + '" l="' + escapeXMLAttr(ldingStr) + '" c="' + escapeXMLAttr(fColor) + '" k="' + escapeXMLAttr(cStyleRaw) + '" a="' + escapeXMLAttr(pAlign) + '" li="' + escapeXMLAttr(lInd) + '" fi="' + escapeXMLAttr(fInd) + '" b="' + escapeXMLAttr(bList) + '">' + chunk + '</t>';
+            }
         }
         return xmlString + "</root>";
     };
 
-    var deepLQueue = [];
-    var finalTranslations = new Array(textTargets.length);
+        var deepLQueue = [];
+        var finalTranslations = new Array(textTargets.length);
 
-    for (var i = 0; i < textTargets.length; i++) {
-        if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; continue; }
-        
-        var xml = buildXMLWithGlossary(textTargets[i]);
-        var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
-        
-        if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
-            finalTranslations[i] = ""; 
-        } else if (tm[selectedLang][xml]) {
-            finalTranslations[i] = normalizeTranslatedXML(tm[selectedLang][xml]);
-            globalStats.savedChars += textOnlyLength;
-        } else {
-            deepLQueue.push({ index: i, xml: xml, len: textOnlyLength });
-            finalTranslations[i] = null;
+        for (var i = 0; i < textTargets.length; i++) {
+            if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; continue; }
+            
+            var xml = buildXMLWithGlossary(textTargets[i]);
+            var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
+            
+            if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
+                finalTranslations[i] = ""; 
+            } else if (tm[selectedLang][xml]) {
+                finalTranslations[i] = normalizeTranslatedXML(tm[selectedLang][xml]);
+                globalStats.savedChars += textOnlyLength;
+            } else {
+                deepLQueue.push({ index: i, xml: xml, len: textOnlyLength });
+                finalTranslations[i] = null;
+            }
         }
-    }
-    
-    if (deepLQueue.length > 0) {
-        var justXMLs = [];
-        for(var q=0; q < deepLQueue.length; q++) justXMLs.push(deepLQueue[q].xml);
         
-        var translatedBatch = translateBatchDeepL(justXMLs, selectedLang, overStartPct, overEndPct);
-        
-        if (translatedBatch !== null) {
+        if (deepLQueue.length > 0) {
+            var justXMLs = [];
+            for(var q=0; q < deepLQueue.length; q++) justXMLs.push(deepLQueue[q].xml);
+            
+            var translatedBatch = translateBatchDeepL(justXMLs, selectedLang, overStartPct, overEndPct);
+            if (!translatedBatch || translatedBatch.length !== deepLQueue.length) {
+                throw new Error("DeepL lieferte unvollständige Ergebnisse zurück.");
+            }
+
             var tmUpdated = false;
             for(var q=0; q < deepLQueue.length; q++) {
                 var trXML = translatedBatch[q];
@@ -2591,50 +2787,18 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             }
             if (tmUpdated) saveTM(tm); 
         }
-    }
-    
-    var formatPct = overStartPct + ((overEndPct - overStartPct) * 0.9);
-    updateProgress(90, "Wende Formatierungen an...", formatPct, null);
-    for (var i = 0; i < textTargets.length; i++) {
-        if (cancelFlag) throw new Error("CANCELLED");
-        if (finalTranslations[i]) applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangName);
-    }
-    
-    updateProgress(95, "Stelle Tabellen und Bilder wieder her...", overEndPct, null);
-    app.findGrepPreferences = NothingEnum.nothing; app.changeGrepPreferences = NothingEnum.nothing;
-    for (var i = globalParkedTables.length - 1; i >= 0; i--) {
-        var parked = globalParkedTables[i];
-        app.findGrepPreferences.findWhat = "[ \t]*###TBL_\\s*" + parked.id + "\\s*###[ \t]*"; 
-        var results = doc.findGrep();
-        if (results.length > 0) {
-            try { parked.frame.characters.item(0).move(LocationOptions.AFTER, results[0].insertionPoints.item(0)); results[0].remove(); } catch(e) {}
-        } else {
-            try { parked.frame.characters.item(0).move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1)); } catch(e) {}
+        
+        var formatPct = overStartPct + ((overEndPct - overStartPct) * 0.9);
+        updateProgress(90, "Wende Formatierungen an...", formatPct, null);
+        for (var i = 0; i < textTargets.length; i++) {
+            if (cancelFlag) throw new Error("CANCELLED");
+            if (finalTranslations[i]) applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangName);
         }
-        try { if (parked.frame.isValid) parked.frame.remove(); } catch(e) {}
+
+        updateProgress(95, "Stelle Tabellen und Bilder wieder her...", overEndPct, null);
+    } finally {
+        restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets);
     }
-    storageEnv.frame.itemLayer.visible = true;
-    
-    app.findGrepPreferences.findWhat = "###IMG_\\s*\\d+\\s*###"; var allFoundImages = doc.findGrep();
-    for (var f = allFoundImages.length - 1; f >= 0; f--) {
-        var placeholderRange = allFoundImages[f]; var match = placeholderRange.contents.match(/IMG_\s*(\d+)/);
-        if (!match) continue;
-        var imgID = match[1]; var targetImageInStorage = null; var storageItems = storageEnv.frame.allPageItems;
-        for (var j=0; j<storageItems.length; j++) { if (storageItems[j].label === "TMP_IMG_" + imgID) { targetImageInStorage = storageItems[j]; break; } }
-        if (targetImageInStorage !== null) {
-            try {
-                var targetChar = targetImageInStorage.parent; 
-                while (targetChar && targetChar.constructor.name !== "Character" && targetChar.constructor.name !== "Story" && targetChar.constructor.name !== "Application") targetChar = targetChar.parent;
-                if (targetChar && targetChar.constructor.name === "Character") {
-                    targetChar.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0)); placeholderRange.remove();
-                } else {
-                    targetImageInStorage.parent.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0)); placeholderRange.remove();
-                }
-            } catch(e) {}
-        }
-    }
-    try { if (storageEnv.frame.isValid) storageEnv.frame.remove(); } catch(e) {}
-    try { doc.layers.itemByName("TEMP_TRANS_IMAGES").visible = false; } catch(e) {}
 
     updateProgress(98, "Prüfe auf Textübersatz (Auto-Fit)...", overEndPct, null);
     var checkedFrameIds = {};
@@ -2669,6 +2833,20 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 }
 
 // === HILFSFUNKTIONEN FÜR DEEPL & CO ===
+function extractDeepLFailureMessage(resultJSON, parsedObj) {
+    var msg = "";
+    try {
+        if (parsedObj && parsedObj.message) msg = parsedObj.message;
+        else if (parsedObj && parsedObj.detail) msg = parsedObj.detail;
+    } catch (e) {}
+    if (msg === "" && resultJSON && resultJSON !== "") {
+        msg = String(resultJSON).replace(/[\r\n]+/g, " ").replace(/^\s+|\s+$/g, "");
+        if (msg.length > 220) msg = msg.substring(0, 220) + "...";
+    }
+    if (msg === "") msg = "Unbekannte Antwort von DeepL.";
+    return msg;
+}
+
 function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPct) {
     var endpoint = (apiKey.indexOf(":fx") !== -1) ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
     var translated = []; var batchSize = 25; 
@@ -2713,10 +2891,25 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
                 }
             }
             
-            var parsedObj = eval("(" + resultJSON + ")");
-            if (parsedObj && parsedObj.translations) { for (var k = 0; k < parsedObj.translations.length; k++) translated.push(normalizeTranslatedXML(parsedObj.translations[k].text)); } 
-            else { alert("Fehler bei DeepL Batch:\n" + resultJSON); return null; }
-        } catch (e) { alert("Verbindungsfehler im Batch!\n" + e.message); return null; }
+            var parsedObj = null;
+            try {
+                parsedObj = eval("(" + resultJSON + ")");
+            } catch (parseError) {
+                throw new Error("DeepL-Antwort konnte nicht gelesen werden.");
+            }
+            if (!parsedObj || !parsedObj.translations) {
+                throw new Error("DeepL-Fehler: " + extractDeepLFailureMessage(resultJSON, parsedObj));
+            }
+            if (parsedObj.translations.length !== (endBatch - b)) {
+                throw new Error("DeepL lieferte unvollständige Ergebnisse zurück.");
+            }
+            for (var k = 0; k < parsedObj.translations.length; k++) {
+                translated.push(normalizeTranslatedXML(parsedObj.translations[k].text));
+            }
+        } catch (e) {
+            if (e.message === "CANCELLED") throw e;
+            throw new Error(e.message && e.message.indexOf("DeepL-") === 0 ? e.message : "DeepL-Verbindungsfehler: " + (e.message || "Anfrage fehlgeschlagen."));
+        }
         finally { try { payloadFile.remove(); } catch(e){} }
     }
     return translated;
@@ -2753,14 +2946,25 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
                 var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
                 resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
             } else {
-                alert("translateBatchDeepLPlain: Windows path not implemented.");
-                return null;
+                throw new Error("DeepL Plain Batch ist unter Windows nicht implementiert.");
             }
-            var parsedObj = eval("(" + resultJSON + ")");
-            if (parsedObj && parsedObj.translations) {
-                for (var k = 0; k < parsedObj.translations.length; k++) translated.push(parsedObj.translations[k].text);
-            } else { alert("Fehler bei DeepL Batch:\n" + resultJSON); return null; }
-        } catch (e) { alert("Verbindungsfehler im Batch!\n" + e.message); return null; }
+            var parsedObj = null;
+            try {
+                parsedObj = eval("(" + resultJSON + ")");
+            } catch (parseError) {
+                throw new Error("DeepL-Antwort konnte nicht gelesen werden.");
+            }
+            if (!parsedObj || !parsedObj.translations) {
+                throw new Error("DeepL-Fehler: " + extractDeepLFailureMessage(resultJSON, parsedObj));
+            }
+            if (parsedObj.translations.length !== (endBatch - b)) {
+                throw new Error("DeepL lieferte unvollständige Ergebnisse zurück.");
+            }
+            for (var k = 0; k < parsedObj.translations.length; k++) translated.push(parsedObj.translations[k].text);
+        } catch (e) {
+            if (e.message === "CANCELLED") throw e;
+            throw new Error(e.message && e.message.indexOf("DeepL-") === 0 ? e.message : "DeepL-Verbindungsfehler: " + (e.message || "Anfrage fehlgeschlagen."));
+        }
         finally { try { payloadFile.remove(); } catch(e){} }
     }
     return translated;
@@ -2768,9 +2972,8 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
 
 function normalizeTranslatedXML(xml) {
     if (!xml || xml === "") return xml;
-    return xml.replace(/<root>\s+/g, '<root>')
-              .replace(/(<(?:t|nt)[^>]*>)\s+/g, '$1')
-              .replace(/(<root>)\s+/g, '$1');
+    return String(xml).replace(/^\s+|\s+$/g, '')
+                      .replace(/>\s+</g, '><');
 }
 
 function escapeDeepLXMLText(text) {
@@ -2798,6 +3001,19 @@ function escapeXMLAttr(value) {
                      .replace(/"/g, '&quot;')
                      .replace(/'/g, '&apos;');
     return escaped;
+}
+
+function decodeXMLValue(value) {
+    if (value === null || value === undefined) return "";
+    return String(value).replace(/&quot;/g, '"')
+                        .replace(/&apos;/g, "'")
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&amp;/g, '&');
+}
+
+function decodeXMLAttr(value) {
+    return decodeXMLValue(value);
 }
 
 function buildTextObjectXML(textObj) {
@@ -2850,8 +3066,7 @@ function buildTextObjectXML(textObj) {
 
 function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
     if (!translatedXML || translatedXML === "") return;
-    translatedXML = translatedXML.replace(/[\r\n]+/g, '')
-                                 .replace(/(<(?:t|nt)[^>]*>)\s+/g, '$1')
+    translatedXML = normalizeTranslatedXML(translatedXML)
                                  .replace(/(###(?:IMG|TBL)_\d+###)\s+(?=###(?:IMG|TBL)_\d+###)/g, '$1');
     var isPartial = false; var textFlow = null; var currentIdx = 0;
     try {
@@ -2868,12 +3083,12 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
     while ((match = regex.exec(translatedXML)) !== null) {
         var attrs = match[1]; var textContent = match[2];
         var getAttr = function(str, name) { var m = new RegExp(name + '="([^"]*)"').exec(str); return m ? m[1] : ""; };
-        var fFam = getAttr(attrs, "f"); var fSty = getAttr(attrs, "s"); var fSiz = parseFloat(getAttr(attrs, "z"));
-        var pSty = getAttr(attrs, "p"); var lead = getAttr(attrs, "l"); var fCol = getAttr(attrs, "c");
-        var cSty = getAttr(attrs, "k"); var pAli = getAttr(attrs, "a"); var lInd = getAttr(attrs, "li");
-        var fInd = getAttr(attrs, "fi"); var bLis = getAttr(attrs, "b");
+        var fFam = decodeXMLAttr(getAttr(attrs, "f")); var fSty = decodeXMLAttr(getAttr(attrs, "s")); var fSiz = parseFloat(decodeXMLAttr(getAttr(attrs, "z")));
+        var pSty = decodeXMLAttr(getAttr(attrs, "p")); var lead = decodeXMLAttr(getAttr(attrs, "l")); var fCol = decodeXMLAttr(getAttr(attrs, "c"));
+        var cSty = decodeXMLAttr(getAttr(attrs, "k")); var pAli = decodeXMLAttr(getAttr(attrs, "a")); var lInd = decodeXMLAttr(getAttr(attrs, "li"));
+        var fInd = decodeXMLAttr(getAttr(attrs, "fi")); var bLis = decodeXMLAttr(getAttr(attrs, "b"));
         
-        textContent = textContent.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/<pbr\/>/g, '\r').replace(/<lbr\/>/g, '\n').replace(/<tab\/>/g, '\t').replace(/<\/?nt[^>]*>/gi, '');
+        textContent = decodeXMLValue(textContent).replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t').replace(/<\/?nt[^>]*>/gi, '');
         if (textContent.length > 0) {
             var appliedRange = null; var doc = app.activeDocument;
             try {
