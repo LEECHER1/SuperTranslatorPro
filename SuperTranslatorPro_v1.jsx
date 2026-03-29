@@ -1,7 +1,7 @@
 #targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.1 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.2 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.1";
+var SCRIPT_VERSION = "28.2";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -326,6 +326,12 @@ function updateLanguageMasterVersionLabels(doc) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
+try {
+    if ($.global.__SuperTranslatorProWindow && $.global.__SuperTranslatorProWindow.close) {
+        $.global.__SuperTranslatorProWindow.close();
+    }
+} catch (e) {}
+
 var myWindow = new Window("palette", SCRIPT_NAME + " v" + SCRIPT_VERSION);
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
@@ -3503,4 +3509,5 @@ function getPagesFromString(doc, pageStr) {
 }
 
 // === START ===
+$.global.__SuperTranslatorProWindow = myWindow;
 myWindow.show();
