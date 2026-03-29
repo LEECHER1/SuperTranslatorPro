@@ -1036,55 +1036,44 @@ function findAndReplaceTextInStory(story, findString, replaceString) {
     }
 }
 
+function normalizeInDesignText(text) {
+    if (text === null || text === undefined) return text;
+    return String(text).replace(/\r\n/g, '\r').replace(/\n/g, '\r');
+}
+
 function replacePageFrameSegmentText(page, frameIndex, oldText, newText) {
     if (!page || !oldText || oldText === "" || newText === undefined || newText === null) return false;
+    var searchText = normalizeInDesignText(oldText);
+    var replaceText = normalizeInDesignText(newText);
     try {
         var frames = page.textFrames.everyItem().getElements();
         if (frameIndex >= frames.length) return false;
         var targetFrame = frames[frameIndex];
         if (!targetFrame.isValid) return false;
-        var story = getTextFrameStory(targetFrame);
-        if (!story) return false;
+        var frameScope = null;
+        try { if (targetFrame.texts && targetFrame.texts.length > 0) frameScope = targetFrame.texts[0]; } catch (e) {}
+        if (!frameScope) frameScope = getTextFrameStory(targetFrame);
+        if (!frameScope) return false;
 
         app.findTextPreferences = NothingEnum.nothing;
         app.changeTextPreferences = NothingEnum.nothing;
-        app.findTextPreferences.findWhat = oldText;
-        var foundRanges = story.findText();
+        app.findTextPreferences.findWhat = searchText;
+        var foundRanges = frameScope.findText();
         if (foundRanges && foundRanges.length > 0) {
-            for (var k = 0; k < foundRanges.length; k++) {
-                try { foundRanges[k].contents = newText; } catch (e) {}
-            }
+            try { foundRanges[0].contents = replaceText; } catch (e) {}
             return true;
         }
 
-        var contents = story.contents;
-        if (contents && oldText && oldText !== "") {
-            var normalizedOld = oldText.replace(/\n/g, '\r');
-            var fallbackPos = contents.indexOf(normalizedOld);
-            if (fallbackPos === -1 && oldText.indexOf('\r') !== -1) {
-                fallbackPos = contents.indexOf(oldText.replace(/\r/g, '\n'));
-            }
-            if (fallbackPos !== -1) {
-                try {
-                    var endPos = fallbackPos + normalizedOld.length - 1;
-                    var replaceRange = story.characters.itemByRange(fallbackPos, endPos);
-                    replaceRange.contents = newText;
-                    return true;
-                } catch (e) {}
-            }
-        }
-
         for (var i = 0; i < frames.length; i++) {
-            var fallbackStory = getTextFrameStory(frames[i]);
-            if (fallbackStory) {
-                app.findTextPreferences.findWhat = oldText;
-                foundRanges = fallbackStory.findText();
-                if (foundRanges && foundRanges.length > 0) {
-                    for (var j = 0; j < foundRanges.length; j++) {
-                        try { foundRanges[j].contents = newText; } catch (e) {}
-                    }
-                    return true;
-                }
+            var fallbackScope = null;
+            try { if (frames[i].texts && frames[i].texts.length > 0) fallbackScope = frames[i].texts[0]; } catch (e) {}
+            if (!fallbackScope) fallbackScope = getTextFrameStory(frames[i]);
+            if (!fallbackScope) continue;
+            app.findTextPreferences.findWhat = searchText;
+            foundRanges = fallbackScope.findText();
+            if (foundRanges && foundRanges.length > 0) {
+                try { foundRanges[0].contents = replaceText; } catch (e) {}
+                return true;
             }
         }
         return false;
@@ -1139,9 +1128,10 @@ function syncBDATextChanges(doc, config) {
         var previousFrames = prevSnapshot ? (prevSnapshot[p] || []) : [];
         for (var f = 0; f < currentFrames.length; f++) {
             var currentText = currentFrames[f] || "";
-            var previousText = prevSnapshot ? (previousFrames[f] || "") : null;
+            var previousText = prevSnapshot ? (previousFrames[f] || "") : "";
             if (prevSnapshot === null || currentText !== previousText) {
-                changeBlocks.push({ pageIndex: p, frameIndex: f });
+                var segmentDiff = getChangedTextSegment(previousText, currentText);
+                changeBlocks.push({ pageIndex: p, frameIndex: f, diff: segmentDiff });
             }
         }
     }
@@ -1157,13 +1147,13 @@ function syncBDATextChanges(doc, config) {
         var deepLLang = getDeepLLangCode(langCode);
         for (var i = 0; i < changeBlocks.length; i++) {
             var block = changeBlocks[i];
+            if (!block.diff) continue;
             var targetPage = pageList[block.pageIndex];
             if (!targetPage) continue;
             var targetFrames = targetPage.textFrames.everyItem().getElements();
             if (block.frameIndex >= targetFrames.length) continue;
             var targetFrame = targetFrames[block.frameIndex];
-            var targetStory = getTextFrameStory(targetFrame);
-            if (!targetStory) continue;
+            if (!targetFrame || !targetFrame.isValid) continue;
 
             var sourcePage = sourcePages[block.pageIndex];
             if (!sourcePage) continue;
@@ -1172,11 +1162,22 @@ function syncBDATextChanges(doc, config) {
             var sourceStory = getTextFrameStory(sourceFrames[block.frameIndex]);
             if (!sourceStory) continue;
 
-            var xml = buildTextObjectXML(sourceStory);
-            var translatedXMLs = translateBatchDeepL([xml], deepLLang, 10, 20);
-            if (translatedXMLs && translatedXMLs[0]) {
-                applyXMLtoInDesign(targetStory, translatedXMLs[0], deepLLang);
-                anyUpdated = true;
+            var oldSegment = block.diff.oldSegment;
+            var newSegment = block.diff.newSegment;
+            if (!oldSegment || !newSegment) continue;
+
+            var translatedPairs = translateBatchDeepLPlain([oldSegment, newSegment], deepLLang, 10, 20);
+            if (translatedPairs && translatedPairs.length > 1) {
+                var translatedOld = translatedPairs[0] || "";
+                var translatedNew = translatedPairs[1] || "";
+                var updated = false;
+                if (translatedOld !== "") {
+                    updated = replacePageFrameSegmentText(targetPage, block.frameIndex, translatedOld, translatedNew);
+                }
+                if (!updated) {
+                    updated = replacePageFrameSegmentText(targetPage, block.frameIndex, oldSegment, translatedNew);
+                }
+                if (updated) anyUpdated = true;
             }
         }
     }
@@ -1737,6 +1738,50 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
             var parsedObj = eval("(" + resultJSON + ")");
             if (parsedObj && parsedObj.translations) { for (var k = 0; k < parsedObj.translations.length; k++) translated.push(normalizeTranslatedXML(parsedObj.translations[k].text)); } 
             else { alert("Fehler bei DeepL Batch:\n" + resultJSON); return null; }
+        } catch (e) { alert("Verbindungsfehler im Batch!\n" + e.message); return null; }
+        finally { try { payloadFile.remove(); } catch(e){} }
+    }
+    return translated;
+}
+
+function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, overEndPct) {
+    var endpoint = (apiKey.indexOf(":fx") !== -1) ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
+    var translated = []; var batchSize = 25;
+    for (var b = 0; b < textsArray.length; b += batchSize) {
+        if (cancelFlag) throw new Error("CANCELLED");
+        var batchPct = (b / textsArray.length);
+        var currentTaskPct = 20 + Math.round(batchPct * 60);
+        var currentOverPct = overStartPct ? (overStartPct + (batchPct * (overEndPct - overStartPct) * 0.8)) : null;
+        var endBatch = Math.min(b + batchSize, textsArray.length);
+        updateProgress(currentTaskPct, "DeepL Anfrage: Sende Textblöcke " + (b+1) + " bis " + endBatch + " von " + textsArray.length + "...", currentOverPct, null);
+        var payloadStr = "target_lang=" + targetLangCode;
+        if (formalitySetting === "more" || formalitySetting === "less") {
+            payloadStr += "&formality=" + formalitySetting;
+        }
+        for (var j = b; j < endBatch; j++) {
+            var safeText = textsArray[j];
+            if (safeText === null || safeText === undefined) safeText = "";
+            safeText = String(safeText).replace(/'/g, "'\\''");
+            payloadStr += "&text=" + encodeURIComponent(safeText);
+        }
+        var payloadFile = new File(Folder.temp + "/dl_pay_" + new Date().getTime() + ".txt");
+        payloadFile.encoding = "UTF-8";
+        payloadFile.open("w");
+        payloadFile.write(payloadStr);
+        payloadFile.close();
+        try {
+            var resultJSON = "";
+            if (File.fs === "Macintosh") {
+                var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
+                resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+            } else {
+                alert("translateBatchDeepLPlain: Windows path not implemented.");
+                return null;
+            }
+            var parsedObj = eval("(" + resultJSON + ")");
+            if (parsedObj && parsedObj.translations) {
+                for (var k = 0; k < parsedObj.translations.length; k++) translated.push(parsedObj.translations[k].text);
+            } else { alert("Fehler bei DeepL Batch:\n" + resultJSON); return null; }
         } catch (e) { alert("Verbindungsfehler im Batch!\n" + e.message); return null; }
         finally { try { payloadFile.remove(); } catch(e){} }
     }
