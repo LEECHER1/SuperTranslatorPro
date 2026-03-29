@@ -345,7 +345,18 @@ bdaSourceInput.onActivate = function() {
 var groupButtons = myWindow.add("group"); 
 groupButtons.alignment = "center";
 var btnTranslate = groupButtons.add("button", undefined, "Übersetzung starten");
+var btnSpellCheck = groupButtons.add("button", undefined, "Rechtschreibprüfung");
 var btnCancel = groupButtons.add("button", undefined, "Schließen");
+
+btnSpellCheck.onClick = function() {
+    var doc = null;
+    try { doc = app.activeDocument; } catch (e) { alert("Kein Dokument offen!"); return; }
+    try {
+        runMasterSpellingCheck(doc);
+    } catch (e) {
+        alert("Fehler bei der Rechtschreibprüfung:\n" + e.message);
+    }
+};
 
 // --- EINSTELLUNGEN FENSTER ---
 btnSettings.onClick = function() {
@@ -477,6 +488,65 @@ btnSettings.onClick = function() {
 
 btnCancel.onClick = function() { myWindow.close(); }
 
+function runMasterSpellingCheck(doc) {
+    var masterSpreads = doc.masterSpreads;
+    var germanMasters = [];
+    for (var m = 0; m < masterSpreads.length; m++) {
+        var name = masterSpreads[m].name;
+        if (name && name.match(/[-_]de(?:[-_]|$)/i)) {
+            germanMasters.push(masterSpreads[m]);
+        }
+    }
+    if (germanMasters.length === 0) {
+        alert("Keine deutschen Masterseiten (-de-) gefunden.");
+        return;
+    }
+
+    var totalErrors = 0;
+    var findings = [];
+    for (var mi = 0; mi < germanMasters.length; mi++) {
+        var master = germanMasters[mi];
+        for (var p = 0; p < master.pages.length; p++) {
+            var page = master.pages[p];
+            var frames = [];
+            try { frames = page.textFrames.everyItem().getElements(); } catch (e) { frames = []; }
+            for (var fi = 0; fi < frames.length; fi++) {
+                var story = getTextFrameStory(frames[fi]);
+                if (!story) continue;
+                try {
+                    var errors = story.spellingErrors;
+                    if (!errors || errors.length === 0) continue;
+                    for (var ei = 0; ei < errors.length; ei++) {
+                        totalErrors++;
+                        if (findings.length < 12) {
+                            var errorText = "";
+                            try { errorText = String(errors[ei].contents); } catch (e) { errorText = "(unbekannter Fehler)"; }
+                            var pageName = "";
+                            try { pageName = page.name; } catch (e) { pageName = "Unbekannt"; }
+                            findings.push(master.name + " / Seite " + pageName + ": \"" + errorText + "\"");
+                        }
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+        }
+    }
+
+    if (totalErrors === 0) {
+        alert("Rechtschreibprüfung abgeschlossen. Keine Rechtschreibfehler gefunden.");
+        return;
+    }
+
+    var message = "Rechtschreibprüfung abgeschlossen. Fehler gefunden: " + totalErrors + "\n\n";
+    for (var i = 0; i < findings.length; i++) {
+        message += "- " + findings[i] + "\n";
+    }
+    if (totalErrors > findings.length) {
+        message += "\n...weitere Fehler vorhanden.";
+    }
+    alert(message);
+}
 
 // --- 2. FORTSCHRITTS-FENSTER LOGIK ---
 function createProgressWindow() {

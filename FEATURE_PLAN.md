@@ -10,7 +10,7 @@
 ---
 
 ## Übersicht
-- [ ] Rechtschreibprüfung in der Mastersprache
+- [x] Rechtschreibprüfung in der Mastersprache
 - [ ] Intelligente Copyfitting-Logik
 - [ ] Automatische Musterseiten-Generierung (Legacy-Fallback)
 - [ ] Andere LLMs (ChatGPT / Gemini / Claude)
@@ -19,10 +19,10 @@
 ---
 
 ## 1. Rechtschreibprüfung in der Mastersprache
-- [ ] UI-Button "Rechtschreibprüfung" im Hauptfenster oder im Einstellungen-Dialog einbauen
-- [ ] Deutsche Masterseiten (`-de` Master) finden
-- [ ] Alle TextFrames / Stories auf diesen Seiten mit InDesign `spellingErrors` prüfen
-- [ ] Ergebnis anzeigen: Fehleranzahl + erste Fehlerstelle oder Hinweis
+- [x] UI-Button "Rechtschreibprüfung" im Hauptfenster oder im Einstellungen-Dialog einbauen
+- [x] Deutsche Masterseiten (`-de` Master) finden
+- [x] Alle TextFrames / Stories auf diesen Seiten mit InDesign `spellingErrors` prüfen
+- [x] Ergebnis anzeigen: Fehleranzahl + erste Fehlerstelle oder Hinweis
 - [ ] Optional: Sprung zum ersten Fehler anbieten
 
 **Notizen:**
