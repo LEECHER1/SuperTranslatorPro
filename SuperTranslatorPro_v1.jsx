@@ -1,7 +1,7 @@
 #targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.6 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.7 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.6";
+var SCRIPT_VERSION = "28.7";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -759,25 +759,7 @@ function findMasterLanguageBadge(masterSpread, preferredCode) {
 
 function buildLanguageSpecificMasterName(baseName, langCode) {
     var langLower = String(langCode).toLowerCase();
-    var name = String(baseName || "Musterseite");
-    name = name.replace(/\s+(copy|kopie)(?:\s*\d+)?$/i, "");
-    name = name.replace(/^\s+|\s+$/g, "");
-
-    var prefix = "";
-    var body = name;
-    var prefixMatch = name.match(/^([A-Z]+)[-_](.+)$/);
-    if (prefixMatch) {
-        prefix = prefixMatch[1];
-        body = prefixMatch[2];
-    }
-
-    body = body.replace(/[-_][a-z]{2}(?=[-_]|$)/ig, "");
-    body = body.replace(/^[-_\s]+|[-_\s]+$/g, "");
-    if (body === "") body = "Musterseite";
-    if (!/Musterseite$/i.test(body)) body = body + "-Musterseite";
-
-    if (prefix !== "") return prefix + "-" + langLower + "-" + body;
-    return langLower + "-" + body;
+    return langLower + "-Musterseite";
 }
 
 function getMasterSpreadBaseName(masterSpread) {
@@ -870,6 +852,20 @@ function cleanupAccidentalGermanMasterNames(doc, germanMaster) {
         } catch (e) {}
     }
     return cleaned;
+}
+
+function normalizeNamedLanguageMasters(doc) {
+    var renamed = [];
+    for (var i = 0; i < doc.masterSpreads.length; i++) {
+        var master = doc.masterSpreads[i];
+        if (!master || !master.isValid) continue;
+        var code = getMasterLang(master.name);
+        if (!code) continue;
+        var oldName = String(master.name);
+        var newName = renameMasterSpreadToLanguage(doc, master, code, getMasterSpreadBaseName(master));
+        if (newName !== "" && newName !== oldName) renamed.push({ oldName: oldName, newName: newName });
+    }
+    return renamed;
 }
 
 function collectBDALanguageTasks(doc) {
@@ -1024,6 +1020,7 @@ function createLegacyTargetMasters(doc, germanMaster, langCodes) {
 function prepareLegacyMasterSpreads(doc, allowCreation) {
     updateProgress(4, "Prüfe Musterseiten...", 4, "Analysiere Dokument...");
     normalizeLegacyMasterNames(doc);
+    normalizeNamedLanguageMasters(doc);
 
     var germanMaster = findGermanLegacyMasterSpread(doc);
     if (!germanMaster) {
