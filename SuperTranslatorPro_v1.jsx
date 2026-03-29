@@ -490,143 +490,60 @@ btnCancel.onClick = function() { myWindow.close(); }
 
 function runMasterSpellingCheck(doc) {
     var masterSpreads = doc.masterSpreads;
-    var germanMasterNames = {};
-    var foundGermanMaster = false;
+    var germanMasters = [];
     for (var m = 0; m < masterSpreads.length; m++) {
         var name = masterSpreads[m].name;
         if (name && name.match(/[-_]de(?:[-_]|$)/i)) {
-            germanMasterNames[name] = true;
-            foundGermanMaster = true;
+            germanMasters.push(masterSpreads[m]);
         }
     }
-    if (!foundGermanMaster) {
+    if (germanMasters.length === 0) {
         alert("Keine deutschen Masterseiten (-de-) gefunden.");
         return;
     }
 
-    // Erstelle ein minimales Fortschrittsfenster für den DeepL Check
-    var progressWin = new Window("palette", "LanguageTool Rechtschreibprüfung");
-    progressWin.orientation = "column";
-    progressWin.alignChildren = "fill";
-    var progressText = progressWin.add("statictext", undefined, "Analysiere Texte...");
-    progressText.preferredSize.width = 350;
-    var progressBar = progressWin.add("progressbar", undefined, 0, 100);
-    progressWin.show();
-
-    var textsToCheck = [];
     var totalErrors = 0;
     var findings = [];
-
-    function extractFromStory(story, locationLabel) {
-        if (!story || !story.isValid) return;
-        var text = story.contents;
-        if (text && text.length > 2) {
-            textsToCheck.push({ text: text, location: locationLabel });
-        }
-    }
-
-    function extractFromPage(page, labelPrefix) {
-        var frames = [];
-        try { frames = page.textFrames.everyItem().getElements(); } catch (e) { frames = []; }
-        for (var fi = 0; fi < frames.length; fi++) {
-            var story = getTextFrameStory(frames[fi]);
-            extractFromStory(story, labelPrefix + " / " + (page.name || "Seite"));
-        }
-    }
-
-    // Texte auslesen
-    for (var mi = 0; mi < masterSpreads.length; mi++) {
-        var master = masterSpreads[mi];
-        if (!germanMasterNames[master.name]) continue;
+    for (var mi = 0; mi < germanMasters.length; mi++) {
+        var master = germanMasters[mi];
         for (var p = 0; p < master.pages.length; p++) {
-            extractFromPage(master.pages[p], master.name);
-        }
-    }
-    for (var pi = 0; pi < doc.pages.length; pi++) {
-        var page = doc.pages[pi];
-        if (!page.appliedMaster || !page.appliedMaster.name) continue;
-        if (!germanMasterNames[page.appliedMaster.name]) continue;
-        extractFromPage(page, page.appliedMaster.name + " (Dokument)");
-    }
-
-    if (textsToCheck.length === 0) {
-        progressWin.close();
-        alert("Keine Texte auf den deutschen Seiten gefunden.");
-        return;
-    }
-
-    // LanguageTool API Setup für echte Rechtschreib- und Grammatikprüfung
-    var endpoint = "https://api.languagetool.org/v2/check";
-
-    // Limit prüfen
-    var maxChecks = textsToCheck.length > 50 ? 50 : textsToCheck.length; 
-    
-    progressBar.maxvalue = maxChecks;
-    for (var i = 0; i < maxChecks; i++) {
-        var item = textsToCheck[i];
-        progressBar.value = i + 1;
-        progressText.text = "Prüfe Textblock " + (i + 1) + " von " + maxChecks + "...";
-        progressWin.update();
-
-        var originalText = item.text.replace(/\r/g, "\n"); 
-        var safeText = encodeURIComponent(originalText);
-        
-        try {
-            var payloadStr = "language=de-DE&level=picky&text=" + safeText;
-            var file1 = new File(Folder.temp + "/lt_spell_" + new Date().getTime() + ".txt");
-            file1.open("w"); file1.encoding = "UTF-8"; file1.write(payloadStr); file1.close();
-            
-            var curlCmd = "curl -sS -X POST '" + endpoint + "' -d @'" + file1.fsName + "'";
-            var resultStr = "";
-            if (File.fs === "Macintosh") {
-                resultStr = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
-            } else {
-                var out1 = new File(Folder.temp + "/lt_out_" + new Date().getTime() + ".json");
-                var vbs1 = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
-                           'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -d @""" & "' + file1.fsName + '" & """ > """ & "' + out1.fsName + '" & """", 0, True\n';
-                app.doScript(vbs1, ScriptLanguage.VISUAL_BASIC_SCRIPT);
-                if (out1.exists) { out1.open("r"); out1.encoding = "UTF-8"; resultStr = out1.read(); out1.close(); out1.remove(); }
-            }
-            file1.remove();
-
-            if (resultStr && resultStr.indexOf('"matches"') !== -1) {
-                var parsed = eval("(" + resultStr + ")");
-                if (parsed && parsed.language && parsed.language.detectedLanguage && parsed.language.detectedLanguage.code && parsed.language.detectedLanguage.code.indexOf("de") !== 0) {
-                    // Not German, skip
-                } else if (parsed && parsed.matches && parsed.matches.length > 0) {
-                    for (var m = 0; m < parsed.matches.length; m++) {
+            var page = master.pages[p];
+            var frames = [];
+            try { frames = page.textFrames.everyItem().getElements(); } catch (e) { frames = []; }
+            for (var fi = 0; fi < frames.length; fi++) {
+                var story = getTextFrameStory(frames[fi]);
+                if (!story) continue;
+                try {
+                    var errors = story.spellingErrors;
+                    if (!errors || errors.length === 0) continue;
+                    for (var ei = 0; ei < errors.length; ei++) {
                         totalErrors++;
-                        if (findings.length < 15) {
-                            var matchObj = parsed.matches[m];
-                            var contextStr = matchObj.context.text;
-                            var errWord = contextStr.substring(matchObj.context.offset, matchObj.context.offset + matchObj.context.length);
-                            var replacement = matchObj.replacements.length > 0 ? matchObj.replacements[0].value : "kein Vorschlag";
-                            findings.push("Stelle: " + item.location + "\nFehler: '" + errWord + "' (" + matchObj.message + ")\nVorschlag: '" + replacement + "'");
+                        if (findings.length < 12) {
+                            var errorText = "";
+                            try { errorText = String(errors[ei].contents); } catch (e) { errorText = "(unbekannter Fehler)"; }
+                            var pageName = "";
+                            try { pageName = page.name; } catch (e) { pageName = "Unbekannt"; }
+                            findings.push(master.name + " / Seite " + pageName + ": \"" + errorText + "\"");
                         }
                     }
+                } catch (e) {
+                    continue;
                 }
             }
-            
-        } catch (e) {
-            // Ignoriere Fehler pro Textblock
-        } finally {
-            // Schutz vor Blockierung durch die kostenlose API (Max. 20 Anfragen / Minute)
-            $.sleep(1200);
         }
     }
-    progressWin.close();
 
     if (totalErrors === 0) {
-        alert("LanguageTool-Prüfung abgeschlossen.\n\nEs wurden keine Fehler oder Verbesserungsvorschläge gefunden.");
+        alert("Rechtschreibprüfung abgeschlossen. Keine Rechtschreibfehler gefunden.");
         return;
     }
 
-    var message = "LanguageTool-Prüfung abgeschlossen.\nVerbesserungsvorschläge gefunden: " + totalErrors + "\n\n";
-    for (var k = 0; k < findings.length; k++) {
-        message += findings[k] + "\n\n";
+    var message = "Rechtschreibprüfung abgeschlossen. Fehler gefunden: " + totalErrors + "\n\n";
+    for (var i = 0; i < findings.length; i++) {
+        message += "- " + findings[i] + "\n";
     }
     if (totalErrors > findings.length) {
-        message += "...und weitere " + (totalErrors - findings.length) + " Vorschläge.\n";
+        message += "\n...weitere Fehler vorhanden.";
     }
     alert(message);
 }
@@ -2099,13 +2016,8 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
                 var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
                 resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
             } else {
-                var outFile = new File(Folder.temp + "/dl_out_plain_" + new Date().getTime() + ".json");
-                var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
-                          'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Authorization: DeepL-Auth-Key ' + apiKey + '"" -d @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
-                app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
-                if (outFile.exists) {
-                    outFile.encoding = "UTF-8"; outFile.open("r"); resultJSON = outFile.read(); outFile.close(); try { outFile.remove(); } catch(e){}
-                }
+                alert("translateBatchDeepLPlain: Windows path not implemented.");
+                return null;
             }
             var parsedObj = eval("(" + resultJSON + ")");
             if (parsedObj && parsedObj.translations) {
