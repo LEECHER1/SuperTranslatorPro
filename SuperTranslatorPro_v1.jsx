@@ -515,7 +515,7 @@ function addGermanSpellTarget(targets, seenStoryIds, story, locationLabel) {
         seenStoryIds[storyId] = true;
     }
 
-    targets.push({ text: storyText, location: locationLabel });
+    targets.push({ story: story, text: storyText, location: locationLabel });
 }
 
 function collectGermanSpellTargets(doc) {
@@ -603,8 +603,12 @@ function runLanguageToolGermanCheck(text) {
 function buildLanguageToolFinding(item, matchObj) {
     var originalText = item.text || "";
     var issueText = "";
+    var issueOffset = 0;
+    var issueLength = 0;
     if (matchObj && matchObj.offset !== undefined && matchObj.length !== undefined) {
-        issueText = originalText.substring(matchObj.offset, matchObj.offset + matchObj.length);
+        issueOffset = matchObj.offset;
+        issueLength = matchObj.length;
+        issueText = originalText.substring(issueOffset, issueOffset + issueLength);
     }
     if (!issueText && matchObj && matchObj.context && matchObj.context.text) {
         var ctx = String(matchObj.context.text);
@@ -622,7 +626,172 @@ function buildLanguageToolFinding(item, matchObj) {
     var message = "Hinweis";
     if (matchObj && matchObj.message) message = matchObj.message;
 
-    return item.location + ': "' + issueText + '" -> ' + suggestion + " (" + message + ")";
+    return {
+        story: item.story,
+        location: item.location,
+        originalText: originalText,
+        issueText: issueText,
+        replacement: suggestion,
+        message: message,
+        offset: issueOffset,
+        length: issueLength,
+        prefix: originalText.substring(Math.max(0, issueOffset - 20), issueOffset),
+        suffix: originalText.substring(issueOffset + issueLength, Math.min(originalText.length, issueOffset + issueLength + 20))
+    };
+}
+
+function buildLanguageToolFindingSummary(finding) {
+    return finding.location + ': "' + finding.issueText + '" -> ' + finding.replacement + " (" + finding.message + ")";
+}
+
+function buildGermanFindingContext(finding) {
+    var start = Math.max(0, finding.offset - 50);
+    var end = Math.min(finding.originalText.length, finding.offset + finding.length + 50);
+    return finding.originalText.substring(start, end);
+}
+
+function findBestTextMatchIndex(fullText, findText, preferredOffset, prefix, suffix) {
+    if (!fullText || !findText || findText === "") return -1;
+    var bestIndex = -1;
+    var bestScore = -999999;
+    var searchIndex = 0;
+
+    while (true) {
+        var idx = fullText.indexOf(findText, searchIndex);
+        if (idx === -1) break;
+
+        var score = 0;
+        if (preferredOffset !== null && preferredOffset !== undefined) {
+            score -= Math.abs(idx - preferredOffset);
+        }
+        if (prefix && prefix !== "") {
+            var currentPrefix = fullText.substring(Math.max(0, idx - prefix.length), idx);
+            if (currentPrefix === prefix) score += 200;
+        }
+        if (suffix && suffix !== "") {
+            var currentSuffix = fullText.substring(idx + findText.length, Math.min(fullText.length, idx + findText.length + suffix.length));
+            if (currentSuffix === suffix) score += 200;
+        }
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestIndex = idx;
+        }
+
+        searchIndex = idx + Math.max(1, findText.length);
+    }
+
+    return bestIndex;
+}
+
+function replaceGermanFinding(finding, findText, replacementText) {
+    if (!finding || !finding.story || !finding.story.isValid) return false;
+    if (!findText || findText === "") return false;
+
+    var currentText = "";
+    try { currentText = String(finding.story.contents); } catch (e) { currentText = ""; }
+    if (currentText === "") return false;
+
+    var exactMatch = currentText.substring(finding.offset, finding.offset + findText.length);
+    var targetIndex = -1;
+    if (exactMatch === findText) {
+        targetIndex = finding.offset;
+    } else {
+        targetIndex = findBestTextMatchIndex(currentText, findText, finding.offset, finding.prefix, finding.suffix);
+    }
+    if (targetIndex === -1) return false;
+
+    var updated = currentText.substring(0, targetIndex) + replacementText + currentText.substring(targetIndex + findText.length);
+    try {
+        finding.story.contents = updated;
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function openGermanCorrectionDialog(findings) {
+    if (!findings || findings.length === 0) return { replaced: 0, skipped: 0, stopped: false };
+
+    var replacedCount = 0;
+    var skippedCount = 0;
+    var stopped = false;
+
+    for (var i = 0; i < findings.length; i++) {
+        var finding = findings[i];
+        if (!finding.story || !finding.story.isValid) {
+            skippedCount++;
+            continue;
+        }
+
+        var dlg = new Window("dialog", "Deutsch korrigieren " + (i + 1) + "/" + findings.length);
+        dlg.orientation = "column";
+        dlg.alignChildren = "fill";
+
+        dlg.add("statictext", undefined, finding.location);
+        var msgText = dlg.add("statictext", undefined, finding.message);
+        msgText.preferredSize.width = 420;
+
+        dlg.add("statictext", undefined, "Kontext:");
+        var ctxInput = dlg.add("edittext", undefined, buildGermanFindingContext(finding), { multiline: true, readonly: true });
+        ctxInput.preferredSize = [420, 90];
+
+        dlg.add("statictext", undefined, "Suchen nach:");
+        var findInput = dlg.add("edittext", undefined, finding.issueText);
+        findInput.preferredSize.width = 420;
+
+        dlg.add("statictext", undefined, "Ersetzen durch:");
+        var replaceInput = dlg.add("edittext", undefined, finding.replacement);
+        replaceInput.preferredSize.width = 420;
+
+        var btnGroup = dlg.add("group");
+        btnGroup.alignment = "right";
+        var btnSkip = btnGroup.add("button", undefined, "Überspringen");
+        var btnReplace = btnGroup.add("button", undefined, "Ersetzen");
+        var btnStop = btnGroup.add("button", undefined, "Beenden");
+
+        var action = "skip";
+        btnSkip.onClick = function() {
+            action = "skip";
+            dlg.close();
+        };
+        btnReplace.onClick = function() {
+            action = "replace";
+            dlg.close();
+        };
+        btnStop.onClick = function() {
+            action = "stop";
+            dlg.close();
+        };
+
+        dlg.show();
+
+        if (action === "stop") {
+            stopped = true;
+            break;
+        }
+        if (action === "skip") {
+            skippedCount++;
+            continue;
+        }
+
+        var findText = findInput.text;
+        var replacementText = replaceInput.text;
+        if (!findText || findText === "") {
+            alert("Das Feld 'Suchen nach' ist leer. Dieser Treffer wurde übersprungen.");
+            skippedCount++;
+            continue;
+        }
+
+        if (replaceGermanFinding(finding, findText, replacementText)) {
+            replacedCount++;
+        } else {
+            alert("Die Stelle konnte nicht automatisch ersetzt werden:\n" + buildLanguageToolFindingSummary(finding));
+            skippedCount++;
+        }
+    }
+
+    return { replaced: replacedCount, skipped: skippedCount, stopped: stopped };
 }
 
 function runMasterSpellingCheck(doc) {
@@ -641,7 +810,7 @@ function runMasterSpellingCheck(doc) {
     progressWin.show();
 
     var totalFindings = 0;
-    var resultLines = [];
+    var findings = [];
     var skippedTexts = 0;
 
     for (var i = 0; i < targets.length; i++) {
@@ -663,10 +832,9 @@ function runMasterSpellingCheck(doc) {
 
         var matches = parsed.matches || [];
         for (var m = 0; m < matches.length; m++) {
+            var finding = buildLanguageToolFinding(item, matches[m]);
+            findings.push(finding);
             totalFindings++;
-            if (resultLines.length < 15) {
-                resultLines.push(buildLanguageToolFinding(item, matches[m]));
-            }
         }
     }
 
@@ -680,16 +848,23 @@ function runMasterSpellingCheck(doc) {
     }
 
     var message = "Deutsche Rechtschreibprüfung abgeschlossen.\nGefundene Hinweise: " + totalFindings + "\n\n";
-    for (var lineIndex = 0; lineIndex < resultLines.length; lineIndex++) {
-        message += "- " + resultLines[lineIndex] + "\n";
+    var previewCount = Math.min(10, findings.length);
+    for (var lineIndex = 0; lineIndex < previewCount; lineIndex++) {
+        message += "- " + buildLanguageToolFindingSummary(findings[lineIndex]) + "\n";
     }
-    if (totalFindings > resultLines.length) {
+    if (totalFindings > previewCount) {
         message += "\n...weitere Hinweise vorhanden.";
     }
     if (skippedTexts > 0) {
         message += "\n\nNicht geprüft: " + skippedTexts + " Textblöcke.";
     }
+    message += "\n\nDanach oeffnet sich ein Korrekturfenster mit 'Suchen nach' und 'Ersetzen durch'.";
     alert(message);
+
+    var correctionResult = openGermanCorrectionDialog(findings);
+    var finalMessage = "Korrekturdialog beendet.\nErsetzt: " + correctionResult.replaced + "\nUebersprungen: " + correctionResult.skipped;
+    if (correctionResult.stopped) finalMessage += "\nVorzeitig beendet.";
+    alert(finalMessage);
 }
 
 // --- 2. FORTSCHRITTS-FENSTER LOGIK ---
