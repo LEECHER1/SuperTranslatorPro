@@ -522,19 +522,23 @@ function addGermanSpellTarget(targets, seenTextIds, textObj, story, locationLabe
 function collectGermanSpellTargets(doc) {
     var targets = [];
     var seenTextIds = {};
+    var masterSpreads = doc.masterSpreads;
 
-    for (var pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {
-        var page = doc.pages[pageIndex];
-        if (!page.appliedMaster || !isGermanMasterName(page.appliedMaster.name)) continue;
-        var pageItems = [];
-        try { pageItems = page.allPageItems; } catch (e) { pageItems = []; }
-        for (var pf = 0; pf < pageItems.length; pf++) {
-            if (!pageItems[pf] || !pageItems[pf].isValid) continue;
-            if (pageItems[pf].constructor.name !== "TextFrame") continue;
-            var pageStory = getTextFrameStory(pageItems[pf]);
-            var textObj = null;
-            try { if (pageItems[pf].texts && pageItems[pf].texts.length > 0) textObj = pageItems[pf].texts[0]; } catch (e3) { textObj = null; }
-            addGermanSpellTarget(targets, seenTextIds, textObj, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Master " + page.appliedMaster.name, page, pageItems[pf]);
+    for (var m = 0; m < masterSpreads.length; m++) {
+        var master = masterSpreads[m];
+        if (!isGermanMasterName(master.name)) continue;
+        for (var p = 0; p < master.pages.length; p++) {
+            var masterPage = master.pages[p];
+            var pageItems = [];
+            try { pageItems = masterPage.allPageItems; } catch (e) { pageItems = []; }
+            for (var pf = 0; pf < pageItems.length; pf++) {
+                if (!pageItems[pf] || !pageItems[pf].isValid) continue;
+                if (pageItems[pf].constructor.name !== "TextFrame") continue;
+                var pageStory = getTextFrameStory(pageItems[pf]);
+                var textObj = null;
+                try { if (pageItems[pf].texts && pageItems[pf].texts.length > 0) textObj = pageItems[pf].texts[0]; } catch (e3) { textObj = null; }
+                addGermanSpellTarget(targets, seenTextIds, textObj, pageStory, "Deutsche Musterseite " + master.name + " / Seite " + (masterPage.name || (p + 1)), masterPage, pageItems[pf]);
+            }
         }
     }
 
@@ -578,15 +582,48 @@ function applyGermanLanguageToTextTarget(item, germanLanguage) {
     if (!item || !item.textObj || !item.textObj.isValid || !germanLanguage || !germanLanguage.isValid) return false;
     try {
         item.textObj.appliedLanguage = germanLanguage;
+        try { item.textObj.textStyleRanges.everyItem().appliedLanguage = germanLanguage; } catch (e1) {}
         return true;
     } catch (e) {
         try {
             item.textObj.texts[0].appliedLanguage = germanLanguage;
+            try { item.textObj.textStyleRanges.everyItem().appliedLanguage = germanLanguage; } catch (e2) {}
             return true;
-        } catch (e2) {
+        } catch (e3) {
             return false;
         }
     }
+}
+
+function getTextObjectStoryRange(textObj) {
+    if (!textObj || !textObj.isValid) return null;
+    try {
+        var startIndex = textObj.insertionPoints[0].index;
+        var endIndex = textObj.insertionPoints[textObj.insertionPoints.length - 1].index;
+        return { start: startIndex, end: endIndex };
+    } catch (e) {
+        return null;
+    }
+}
+
+function buildSpellingFindingsForTarget(item, errors) {
+    var findings = [];
+    if (!item || !item.textObj || !item.textObj.isValid || !errors || errors.length === 0) return findings;
+    var textRange = getTextObjectStoryRange(item.textObj);
+    if (!textRange) return findings;
+
+    for (var i = 0; i < errors.length; i++) {
+        try {
+            var errorText = errors[i];
+            if (!errorText || !errorText.isValid) continue;
+            var errStart = errorText.insertionPoints[0].index;
+            if (errStart < textRange.start || errStart >= textRange.end) continue;
+            var finding = buildInDesignSpellingFinding(item, errorText);
+            if (!finding.issueText || finding.issueText === "") continue;
+            findings.push(finding);
+        } catch (e) {}
+    }
+    return findings;
 }
 
 function buildInDesignSpellingFinding(item, errorText) {
@@ -768,7 +805,7 @@ function openGermanCorrectionDialog(findings) {
 function runMasterSpellingCheck(doc) {
     var targets = collectGermanSpellTargets(doc);
     if (targets.length === 0) {
-        alert("Keine Texte auf Dokumentseiten mit deutscher Musterseite gefunden.");
+        alert("Keine Texte auf deutschen Musterseiten gefunden.");
         return;
     }
 
@@ -793,22 +830,19 @@ function runMasterSpellingCheck(doc) {
     for (var i = 0; i < targets.length; i++) {
         var item = targets[i];
         progressBarLocal.value = i + 1;
-        progressTextLocal.text = "Prüfe Seite mit deutscher Musterseite: Text " + (i + 1) + " von " + targets.length + "...";
+        progressTextLocal.text = "Pruefe deutsche Musterseite: Text " + (i + 1) + " von " + targets.length + "...";
         progressWin.update();
         try {
             if (!applyGermanLanguageToTextTarget(item, germanLanguage)) {
                 skippedTexts++;
                 continue;
             }
-            var errors = item.textObj.spellingErrors;
+            var errors = item.story.spellingErrors;
             if (!errors || errors.length === 0) continue;
-            for (var m = 0; m < errors.length; m++) {
-                try {
-                    var finding = buildInDesignSpellingFinding(item, errors[m]);
-                    if (!finding.issueText || finding.issueText === "") continue;
-                    findings.push(finding);
-                    totalFindings++;
-                } catch (e2) {}
+            var localFindings = buildSpellingFindingsForTarget(item, errors);
+            for (var m = 0; m < localFindings.length; m++) {
+                findings.push(localFindings[m]);
+                totalFindings++;
             }
         } catch (e) {
             skippedTexts++;
@@ -818,13 +852,13 @@ function runMasterSpellingCheck(doc) {
     progressWin.close();
 
     if (totalFindings === 0) {
-        var okMessage = "InDesign-Rechtschreibprüfung für Seiten mit deutscher Musterseite abgeschlossen. Keine Auffälligkeiten gefunden.";
+        var okMessage = "InDesign-Rechtschreibprüfung für deutsche Musterseiten abgeschlossen. Keine Auffälligkeiten gefunden.";
         if (skippedTexts > 0) okMessage += "\n\nHinweis: " + skippedTexts + " Textblöcke konnten nicht geprüft werden.";
         alert(okMessage);
         return;
     }
 
-    var message = "InDesign-Rechtschreibprüfung für Seiten mit deutscher Musterseite abgeschlossen.\nGefundene Hinweise: " + totalFindings + "\n\n";
+    var message = "InDesign-Rechtschreibprüfung für deutsche Musterseiten abgeschlossen.\nGefundene Hinweise: " + totalFindings + "\n\n";
     var previewCount = Math.min(10, findings.length);
     for (var lineIndex = 0; lineIndex < previewCount; lineIndex++) {
         message += "- " + buildLanguageToolFindingSummary(findings[lineIndex]) + "\n";
