@@ -502,7 +502,7 @@ function shouldCheckGermanText(text) {
     return lettersOnly.length >= 3;
 }
 
-function addGermanSpellTarget(targets, seenStoryIds, story, locationLabel) {
+function addGermanSpellTarget(targets, seenStoryIds, story, locationLabel, page, frame) {
     if (!story || !story.isValid) return;
     var storyText = "";
     try { storyText = story.contents; } catch (e) { storyText = ""; }
@@ -515,7 +515,7 @@ function addGermanSpellTarget(targets, seenStoryIds, story, locationLabel) {
         seenStoryIds[storyId] = true;
     }
 
-    targets.push({ story: story, text: storyText, location: locationLabel });
+    targets.push({ story: story, text: storyText, location: locationLabel, page: page || null, frame: frame || null });
 }
 
 function collectGermanSpellTargets(doc) {
@@ -532,7 +532,7 @@ function collectGermanSpellTargets(doc) {
             try { masterFrames = masterPage.textFrames.everyItem().getElements(); } catch (e) { masterFrames = []; }
             for (var f = 0; f < masterFrames.length; f++) {
                 var masterStory = getTextFrameStory(masterFrames[f]);
-                addGermanSpellTarget(targets, seenStoryIds, masterStory, "Master " + master.name + " / Seite " + (masterPage.name || (p + 1)));
+                addGermanSpellTarget(targets, seenStoryIds, masterStory, "Master " + master.name + " / Seite " + (masterPage.name || (p + 1)), masterPage, masterFrames[f]);
             }
         }
     }
@@ -544,7 +544,7 @@ function collectGermanSpellTargets(doc) {
         try { pageFrames = page.textFrames.everyItem().getElements(); } catch (e) { pageFrames = []; }
         for (var pf = 0; pf < pageFrames.length; pf++) {
             var pageStory = getTextFrameStory(pageFrames[pf]);
-            addGermanSpellTarget(targets, seenStoryIds, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Master " + page.appliedMaster.name);
+            addGermanSpellTarget(targets, seenStoryIds, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Master " + page.appliedMaster.name, page, pageFrames[pf]);
         }
     }
 
@@ -628,6 +628,8 @@ function buildLanguageToolFinding(item, matchObj) {
 
     return {
         story: item.story,
+        page: item.page,
+        frame: item.frame,
         location: item.location,
         originalText: originalText,
         issueText: issueText,
@@ -640,70 +642,121 @@ function buildLanguageToolFinding(item, matchObj) {
     };
 }
 
+function makeGermanTextVisible(text) {
+    if (text === null || text === undefined) return "";
+    return String(text).replace(/ /g, "·").replace(/\t/g, "→").replace(/\r/g, "¶").replace(/\n/g, "¶");
+}
+
 function buildLanguageToolFindingSummary(finding) {
-    return finding.location + ': "' + finding.issueText + '" -> ' + finding.replacement + " (" + finding.message + ")";
+    return finding.location + ': "' + makeGermanTextVisible(finding.issueText) + '" -> ' + makeGermanTextVisible(finding.replacement) + " (" + finding.message + ")";
+}
+
+function refreshGermanFindingFromStory(finding) {
+    if (!finding || !finding.story || !finding.story.isValid) return;
+    var currentText = "";
+    try { currentText = String(finding.story.contents); } catch (e) { currentText = ""; }
+    finding.originalText = currentText;
+
+    var safeOffset = finding.offset;
+    if (safeOffset < 0) safeOffset = 0;
+    if (safeOffset > currentText.length) safeOffset = currentText.length;
+    finding.offset = safeOffset;
+
+    var safeLength = finding.length;
+    if (safeLength < 0) safeLength = 0;
+    if (safeOffset + safeLength > currentText.length) safeLength = currentText.length - safeOffset;
+    finding.length = safeLength;
+
+    finding.issueText = currentText.substring(safeOffset, safeOffset + safeLength);
+    finding.prefix = currentText.substring(Math.max(0, safeOffset - 20), safeOffset);
+    finding.suffix = currentText.substring(safeOffset + safeLength, Math.min(currentText.length, safeOffset + safeLength + 20));
 }
 
 function buildGermanFindingContext(finding) {
+    refreshGermanFindingFromStory(finding);
     var start = Math.max(0, finding.offset - 50);
     var end = Math.min(finding.originalText.length, finding.offset + finding.length + 50);
     return finding.originalText.substring(start, end);
 }
 
-function findBestTextMatchIndex(fullText, findText, preferredOffset, prefix, suffix) {
-    if (!fullText || !findText || findText === "") return -1;
-    var bestIndex = -1;
-    var bestScore = -999999;
-    var searchIndex = 0;
+function getGermanFindingTextRange(finding, fallbackLength) {
+    if (!finding || !finding.story || !finding.story.isValid) return null;
+    refreshGermanFindingFromStory(finding);
 
-    while (true) {
-        var idx = fullText.indexOf(findText, searchIndex);
-        if (idx === -1) break;
-
-        var score = 0;
-        if (preferredOffset !== null && preferredOffset !== undefined) {
-            score -= Math.abs(idx - preferredOffset);
-        }
-        if (prefix && prefix !== "") {
-            var currentPrefix = fullText.substring(Math.max(0, idx - prefix.length), idx);
-            if (currentPrefix === prefix) score += 200;
-        }
-        if (suffix && suffix !== "") {
-            var currentSuffix = fullText.substring(idx + findText.length, Math.min(fullText.length, idx + findText.length + suffix.length));
-            if (currentSuffix === suffix) score += 200;
-        }
-
-        if (score > bestScore) {
-            bestScore = score;
-            bestIndex = idx;
-        }
-
-        searchIndex = idx + Math.max(1, findText.length);
+    var useLength = finding.length;
+    if ((useLength === 0 || useLength === undefined || useLength === null) && fallbackLength && fallbackLength > 0) {
+        useLength = fallbackLength;
     }
+    if (useLength <= 0) useLength = 1;
 
-    return bestIndex;
+    try {
+        var charCount = finding.story.characters.length;
+        if (charCount <= 0) return null;
+        var startIndex = finding.offset;
+        if (startIndex < 0) startIndex = 0;
+        if (startIndex >= charCount) startIndex = charCount - 1;
+        var endIndex = startIndex + useLength - 1;
+        if (endIndex >= charCount) endIndex = charCount - 1;
+        return finding.story.characters.itemByRange(startIndex, endIndex);
+    } catch (e) {
+        return null;
+    }
 }
 
-function replaceGermanFinding(finding, findText, replacementText) {
-    if (!finding || !finding.story || !finding.story.isValid) return false;
-    if (!findText || findText === "") return false;
-
-    var currentText = "";
-    try { currentText = String(finding.story.contents); } catch (e) { currentText = ""; }
-    if (currentText === "") return false;
-
-    var exactMatch = currentText.substring(finding.offset, finding.offset + findText.length);
-    var targetIndex = -1;
-    if (exactMatch === findText) {
-        targetIndex = finding.offset;
-    } else {
-        targetIndex = findBestTextMatchIndex(currentText, findText, finding.offset, finding.prefix, finding.suffix);
+function focusGermanFinding(finding) {
+    if (!finding) return;
+    var targetPage = finding.page;
+    if ((!targetPage || !targetPage.isValid) && finding.frame) {
+        try { targetPage = finding.frame.parentPage; } catch (e) { targetPage = null; }
     }
-    if (targetIndex === -1) return false;
 
-    var updated = currentText.substring(0, targetIndex) + replacementText + currentText.substring(targetIndex + findText.length);
     try {
-        finding.story.contents = updated;
+        if (app.layoutWindows && app.layoutWindows.length > 0 && targetPage && targetPage.isValid) {
+            try { app.layoutWindows[0].activePage = targetPage; } catch (e1) {}
+            try { app.activeWindow.activePage = targetPage; } catch (e2) {}
+        }
+    } catch (e) {}
+
+    try {
+        var range = getGermanFindingTextRange(finding);
+        if (range && range.isValid) {
+            app.select(range);
+            return;
+        }
+    } catch (e3) {}
+
+    try {
+        if (finding.frame && finding.frame.isValid) app.select(finding.frame);
+    } catch (e4) {}
+}
+
+function shiftGermanFindingsAfterReplace(findings, currentIndex, targetFinding, delta) {
+    if (!findings || delta === 0) return;
+    var story = targetFinding.story;
+    for (var i = currentIndex + 1; i < findings.length; i++) {
+        var nextFinding = findings[i];
+        if (!nextFinding || nextFinding.story !== story) continue;
+        if (nextFinding.offset > targetFinding.offset) {
+            nextFinding.offset += delta;
+            if (nextFinding.offset < 0) nextFinding.offset = 0;
+        }
+    }
+}
+
+function replaceGermanFinding(findings, currentIndex, replacementText) {
+    var finding = findings[currentIndex];
+    if (!finding || !finding.story || !finding.story.isValid) return false;
+
+    try {
+        var range = getGermanFindingTextRange(finding);
+        if (!range || !range.isValid) return false;
+        var oldText = "";
+        try { oldText = String(range.contents); } catch (e) { oldText = finding.issueText || ""; }
+        range.contents = replacementText;
+        var delta = String(replacementText).length - String(oldText).length;
+        finding.length = String(replacementText).length;
+        shiftGermanFindingsAfterReplace(findings, currentIndex, finding, delta);
+        refreshGermanFindingFromStory(finding);
         return true;
     } catch (e) {
         return false;
@@ -723,6 +776,8 @@ function openGermanCorrectionDialog(findings) {
             skippedCount++;
             continue;
         }
+        focusGermanFinding(finding);
+        refreshGermanFindingFromStory(finding);
 
         var dlg = new Window("dialog", "Deutsch korrigieren " + (i + 1) + "/" + findings.length);
         dlg.orientation = "column";
@@ -731,6 +786,8 @@ function openGermanCorrectionDialog(findings) {
         dlg.add("statictext", undefined, finding.location);
         var msgText = dlg.add("statictext", undefined, finding.message);
         msgText.preferredSize.width = 420;
+        var matchText = dlg.add("statictext", undefined, "Treffer: " + makeGermanTextVisible(finding.issueText));
+        matchText.preferredSize.width = 420;
 
         dlg.add("statictext", undefined, "Kontext:");
         var ctxInput = dlg.add("edittext", undefined, buildGermanFindingContext(finding), { multiline: true, readonly: true });
@@ -775,15 +832,8 @@ function openGermanCorrectionDialog(findings) {
             continue;
         }
 
-        var findText = findInput.text;
         var replacementText = replaceInput.text;
-        if (!findText || findText === "") {
-            alert("Das Feld 'Suchen nach' ist leer. Dieser Treffer wurde übersprungen.");
-            skippedCount++;
-            continue;
-        }
-
-        if (replaceGermanFinding(finding, findText, replacementText)) {
+        if (replaceGermanFinding(findings, i, replacementText)) {
             replacedCount++;
         } else {
             alert("Die Stelle konnte nicht automatisch ersetzt werden:\n" + buildLanguageToolFindingSummary(finding));
