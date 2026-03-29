@@ -1072,9 +1072,6 @@ function replacePageFrameSegmentText(page, frameIndex, oldText, newText) {
     } catch (e) {
         try { app.findTextPreferences = NothingEnum.nothing; } catch (e2) {}
         return false;
-        return false;
-    } catch (e) {
-        return false;
     }
 }
 
