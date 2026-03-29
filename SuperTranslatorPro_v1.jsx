@@ -158,7 +158,7 @@ function updateLanguageMasterVersionLabels(doc) {
     var masterSpreads = doc.masterSpreads;
     for (var m = 0; m < masterSpreads.length; m++) {
         var masterName = masterSpreads[m].name;
-        if (!masterName.match(/-([a-z]{2})[-_]/i)) continue;
+        if (!masterName.match(/[-_]([a-z]{2})(?:[-_]|$)/i)) continue;
         var pages = masterSpreads[m].pages;
         for (var p = 0; p < pages.length; p++) {
             var allItems = pages[p].allPageItems;
@@ -587,6 +587,7 @@ btnTranslate.onClick = function() {
 
 // --- 4. HAUPTSTEUERUNG ---
 function runMainProcess(doc, config) {
+    updateLanguageMasterVersionLabels(doc);
     if (config.mode === "BDA") {
         return runBDAMode(doc, config);
     } else {
@@ -735,7 +736,7 @@ function updateLanguageMasterVersionLabels(doc) {
     var masterSpreads = doc.masterSpreads;
     for (var m = 0; m < masterSpreads.length; m++) {
         var masterName = masterSpreads[m].name;
-        if (!masterName.match(/-([a-z]{2})[-_]/i)) continue;
+        if (!masterName.match(/[-_]([a-z]{2})(?:[-_]|$)/i)) continue;
         var pages = masterSpreads[m].pages;
         for (var p = 0; p < pages.length; p++) {
             var allItems = pages[p].allPageItems;
@@ -743,7 +744,11 @@ function updateLanguageMasterVersionLabels(doc) {
                 var item = allItems[i];
                 if (item.constructor.name !== "TextFrame") continue;
                 try {
-                    var story = item.parentStory;
+                    var story = null;
+                    try { story = item.parentStory; } catch (e) { story = null; }
+                    if ((!story || !story.isValid) && item.texts && item.texts.length > 0) {
+                        story = item.texts[0];
+                    }
                     if (!story || !story.isValid) continue;
                     var text = story.contents;
                     var newText = text;
@@ -755,6 +760,35 @@ function updateLanguageMasterVersionLabels(doc) {
                     }
                     if (newText !== text) {
                         story.contents = newText;
+                    }
+                } catch (e) {}
+            }
+        }
+        // Aktualisiere auch real existierende Seiten, die diese Masterseiten verwenden,
+        // falls Elemente überschrieben wurden.
+        for (var p2 = 0; p2 < doc.pages.length; p2++) {
+            if (!doc.pages[p2].appliedMaster || doc.pages[p2].appliedMaster.name !== masterName) continue;
+            var pageItems = doc.pages[p2].allPageItems;
+            for (var j = 0; j < pageItems.length; j++) {
+                var pageItem = pageItems[j];
+                if (pageItem.constructor.name !== "TextFrame") continue;
+                try {
+                    var pageStory = null;
+                    try { pageStory = pageItem.parentStory; } catch (e) { pageStory = null; }
+                    if ((!pageStory || !pageStory.isValid) && pageItem.texts && pageItem.texts.length > 0) {
+                        pageStory = pageItem.texts[0];
+                    }
+                    if (!pageStory || !pageStory.isValid) continue;
+                    var pageText = pageStory.contents;
+                    var newPageText = pageText;
+                    if (/Artikelnummer(_| )?v?\d{4}/i.test(newPageText)) {
+                        newPageText = newPageText.replace(/Artikelnummer(_| )?v?\d{4}/ig, versionLabel);
+                    }
+                    if (/%VERSION%/i.test(newPageText)) {
+                        newPageText = newPageText.replace(/%VERSION%/gi, versionLabel);
+                    }
+                    if (newPageText !== pageText) {
+                        pageStory.contents = newPageText;
                     }
                 } catch (e) {}
             }
