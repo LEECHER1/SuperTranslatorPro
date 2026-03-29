@@ -999,7 +999,11 @@ function syncBDATextChanges(doc, config) {
     var prevSnapshot = loadBDASnapshot(doc);
     var currentSnapshot = buildBDAChangeSnapshot(sourcePages);
     var targetsByLang = getBDATargetPagesByLang(doc);
-    if (!targetsByLang || Object.keys(targetsByLang).length === 0) {
+    var targetsCount = 0;
+    for (var key in targetsByLang) {
+        if (targetsByLang.hasOwnProperty(key)) targetsCount++;
+    }
+    if (!targetsByLang || targetsCount === 0) {
         throw new Error("Keine Zielseiten in anderen Sprachen gefunden.");
     }
     var changesByLang = {};
