@@ -182,6 +182,29 @@ function updateLanguageMasterVersionLabels(doc) {
                 } catch (e) {}
             }
         }
+        // Aktualisiere auch Seiten, die diese Masterseiten verwenden,
+        // falls Elemente überschrieben wurden.
+        for (var p2 = 0; p2 < doc.pages.length; p2++) {
+            if (!doc.pages[p2].appliedMaster || doc.pages[p2].appliedMaster.name !== masterName) continue;
+            var pageItems = doc.pages[p2].allPageItems;
+            for (var j = 0; j < pageItems.length; j++) {
+                var pageItem = pageItems[j];
+                if (pageItem.constructor.name !== "TextFrame") continue;
+                try {
+                    var pageStory = null;
+                    try { pageStory = pageItem.parentStory; } catch (e) { pageStory = null; }
+                    if ((!pageStory || !pageStory.isValid) && pageItem.texts && pageItem.texts.length > 0) {
+                        pageStory = pageItem.texts[0];
+                    }
+                    if (!pageStory || !pageStory.isValid) continue;
+                    var pageText = pageStory.contents;
+                    var newPageText = updateVersionStrings(pageText, versionLabel);
+                    if (newPageText !== pageText) {
+                        pageStory.contents = newPageText;
+                    }
+                } catch (e) {}
+            }
+        }
     }
 }
 
@@ -959,19 +982,14 @@ function getBDAOriginalPages(doc, config) {
 function buildBDAChangeSnapshot(pages) {
     var snapshot = [];
     for (var p = 0; p < pages.length; p++) {
-        var pageTexts = [];
+        var pageData = [];
         try {
-            var frames = pages[p].textFrames.everyItem().getElements();
-            for (var f = 0; f < frames.length; f++) {
-                try {
-                    var story = null;
-                    try { story = frames[f].parentStory; } catch (e) { story = null; }
-                    if ((!story || !story.isValid) && frames[f].texts && frames[f].texts.length > 0) story = frames[f].texts[0];
-                    if (story && story.isValid) pageTexts.push(story.contents);
-                } catch (e) {}
+            var items = pages[p].pageItems.everyItem().getElements();
+            for (var i = 0; i < items.length; i++) {
+                pageData.push(getItemSignature(items[i]));
             }
         } catch (e) {}
-        snapshot.push(pageTexts);
+        snapshot.push(pageData);
     }
     return snapshot;
 }
@@ -1124,65 +1142,94 @@ function syncBDATextChanges(doc, config) {
     }
     var changeBlocks = [];
     for (var p = 0; p < currentSnapshot.length; p++) {
-        var currentFrames = currentSnapshot[p] || [];
-        var previousFrames = prevSnapshot ? (prevSnapshot[p] || []) : [];
-        for (var f = 0; f < currentFrames.length; f++) {
-            var currentText = currentFrames[f] || "";
-            var previousText = prevSnapshot ? (previousFrames[f] || "") : "";
-            if (prevSnapshot === null || currentText !== previousText) {
-                var segmentDiff = getChangedTextSegment(previousText, currentText);
-                changeBlocks.push({ pageIndex: p, frameIndex: f, diff: segmentDiff });
+        var currentItems = currentSnapshot[p] || [];
+        var previousItems = prevSnapshot ? (prevSnapshot[p] || []) : [];
+        for (var i = 0; i < currentItems.length; i++) {
+            var currentSig = currentItems[i] || "";
+            var previousSig = prevSnapshot ? (previousItems[i] || "") : "";
+            if (prevSnapshot === null || currentSig !== previousSig) {
+                changeBlocks.push({ pageIndex: p, itemIndex: i });
             }
         }
     }
+    
     if (changeBlocks.length === 0) {
         saveBDASnapshot(doc, currentSnapshot);
-        return "Keine geänderten Textblöcke gefunden.";
+        return "Keine geänderten Textblöcke oder Bilder gefunden.";
     }
+    
     var anyUpdated = false;
-    for (var langCode in targetsByLang) {
-        if (!targetsByLang.hasOwnProperty(langCode)) continue;
-        var pageList = targetsByLang[langCode];
-        if (!pageList || pageList.length === 0) continue;
-        var deepLLang = getDeepLLangCode(langCode);
-        for (var i = 0; i < changeBlocks.length; i++) {
-            var block = changeBlocks[i];
-            if (!block.diff) continue;
-            var targetPage = pageList[block.pageIndex];
-            if (!targetPage) continue;
-            var targetFrames = targetPage.textFrames.everyItem().getElements();
-            if (block.frameIndex >= targetFrames.length) continue;
-            var targetFrame = targetFrames[block.frameIndex];
-            if (!targetFrame || !targetFrame.isValid) continue;
-
+    
+    for (var i = 0; i < changeBlocks.length; i++) {
+        if (cancelFlag) throw new Error("CANCELLED");
+        
+        var block = changeBlocks[i];
+        var overallStartPct = 10 + (i / changeBlocks.length) * 85;
+        var overallEndPct = 10 + ((i + 1) / changeBlocks.length) * 85;
+        
+        updateProgress(10, "Aktualisiere Inhalte für: " + block.code.toUpperCase() + "...", overallStartPct, "Sprache " + (i+1) + " von " + changeBlocks.length + ": " + block.code.toUpperCase());
+        
+        var targetTextObjArray = [];
+        var targetPageList = block.pages;
+        var replacements = [];
+        
+        for (var b = 0; b < changeBlocks.length; b++) {
+            var block = changeBlocks[b];
             var sourcePage = sourcePages[block.pageIndex];
             if (!sourcePage) continue;
-            var sourceFrames = sourcePage.textFrames.everyItem().getElements();
-            if (block.frameIndex >= sourceFrames.length) continue;
-            var sourceStory = getTextFrameStory(sourceFrames[block.frameIndex]);
-            if (!sourceStory) continue;
-
-            var oldSegment = block.diff.oldSegment;
-            var newSegment = block.diff.newSegment;
-            if (!oldSegment || !newSegment) continue;
-
-            var translatedPairs = translateBatchDeepLPlain([oldSegment, newSegment], deepLLang, 10, 20);
-            if (translatedPairs && translatedPairs.length > 1) {
-                var translatedOld = translatedPairs[0] || "";
-                var translatedNew = translatedPairs[1] || "";
-                var updated = false;
-                if (translatedOld !== "") {
-                    updated = replacePageFrameSegmentText(targetPage, block.frameIndex, translatedOld, translatedNew);
-                }
-                if (!updated) {
-                    updated = replacePageFrameSegmentText(targetPage, block.frameIndex, oldSegment, translatedNew);
-                }
-                if (updated) anyUpdated = true;
+            var targetPage = targetPageList[block.pageIndex];
+            if (!targetPage) continue;
+            
+            var sourceItems = sourcePage.pageItems.everyItem().getElements();
+            var targetItems = targetPage.pageItems.everyItem().getElements();
+            
+            if (block.itemIndex >= sourceItems.length || block.itemIndex >= targetItems.length) continue;
+            
+            replacements.push({
+                oldItem: targetItems[block.itemIndex],
+                sourceItem: sourceItems[block.itemIndex],
+                targetPage: targetPage
+            });
+        }
+        
+        if (replacements.length > 0) {
+            anyUpdated = true;
+            for (var r = 0; r < replacements.length; r++) {
+                var rep = replacements[r];
+                try {
+                    var newItem = rep.sourceItem.duplicate(rep.targetPage);
+                    var newFrames = [];
+                    if (newItem.constructor.name === "TextFrame") {
+                        newFrames.push(newItem);
+                    } else if (newItem.hasOwnProperty("allPageItems")) {
+                        var nested = newItem.allPageItems;
+                        for (var n = 0; n < nested.length; n++) {
+                            if (nested[n].constructor.name === "TextFrame") {
+                                newFrames.push(nested[n]);
+                            }
+                        }
+                    }
+                    
+                    for (var nf = 0; nf < newFrames.length; nf++) {
+                        var st = null;
+                        try { st = newFrames[nf].parentStory; } catch(e) { st = newFrames[nf].texts[0]; }
+                        if (st) targetTextObjArray.push(st);
+                    }
+                    
+                    if (rep.oldItem && rep.oldItem.isValid) {
+                        rep.oldItem.remove();
+                    }
+                } catch(e) {}
+            }
+            
+            if (targetTextObjArray.length > 0) {
+                executeTranslation(doc, targetTextObjArray, false, "", block.deepLCode, overallStartPct, overallEndPct);
             }
         }
     }
+    
     saveBDASnapshot(doc, currentSnapshot);
-    return anyUpdated ? "BDA-Textupdate ausgeführt." : "Keine geänderten Textblöcke gefunden.";
+    return anyUpdated ? "BDA-Textupdate ausgeführt für " + changeBlocks.length + " geänderte Elemente." : "Keine geänderten Textblöcke oder Bilder gefunden.";
 }
 
 function serializeJSON(obj) {
