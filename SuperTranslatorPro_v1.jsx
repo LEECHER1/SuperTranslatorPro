@@ -1137,8 +1137,7 @@ function syncBDATextChanges(doc, config) {
             var currentText = currentFrames[f] || "";
             var previousText = prevSnapshot ? (previousFrames[f] || "") : null;
             if (prevSnapshot === null || currentText !== previousText) {
-                var segmentDiff = getChangedTextSegment(previousText, currentText);
-                changeBlocks.push({ pageIndex: p, frameIndex: f, oldText: previousText, newText: currentText, diff: segmentDiff });
+                changeBlocks.push({ pageIndex: p, frameIndex: f });
             }
         }
     }
@@ -1154,7 +1153,6 @@ function syncBDATextChanges(doc, config) {
         var deepLLang = getDeepLLangCode(langCode);
         for (var i = 0; i < changeBlocks.length; i++) {
             var block = changeBlocks[i];
-            if (!block.diff) continue;
             var targetPage = pageList[block.pageIndex];
             if (!targetPage) continue;
             var targetFrames = targetPage.textFrames.everyItem().getElements();
@@ -1163,41 +1161,18 @@ function syncBDATextChanges(doc, config) {
             var targetStory = getTextFrameStory(targetFrame);
             if (!targetStory) continue;
 
-            var oldSegment = block.diff.oldSegment;
-            var newSegment = block.diff.newSegment;
-            var segmentUpdated = false;
-            if (oldSegment !== "" && oldSegment.length > 1) {
-                var oldXML = '<root>' + escapeDeepLXMLText(oldSegment) + '</root>';
-                var newXML = '<root>' + escapeDeepLXMLText(newSegment) + '</root>';
-                var translatedPairs = translateBatchDeepL([oldXML, newXML], deepLLang, 10, 20);
-                if (translatedPairs && translatedPairs.length > 1 && translatedPairs[1]) {
-                    var translatedOld = decodeDeepLXMLText(translatedPairs[0] || "");
-                    var translatedNew = decodeDeepLXMLText(translatedPairs[1]);
-                    if (translatedOld !== "" && replacePageFrameSegmentText(targetPage, block.frameIndex, translatedOld, translatedNew)) {
-                        anyUpdated = true;
-                        segmentUpdated = true;
-                    } else if (replacePageFrameSegmentText(targetPage, block.frameIndex, oldSegment, translatedNew)) {
-                        anyUpdated = true;
-                        segmentUpdated = true;
-                    }
-                }
-            }
+            var sourcePage = sourcePages[block.pageIndex];
+            if (!sourcePage) continue;
+            var sourceFrames = sourcePage.textFrames.everyItem().getElements();
+            if (block.frameIndex >= sourceFrames.length) continue;
+            var sourceStory = getTextFrameStory(sourceFrames[block.frameIndex]);
+            if (!sourceStory) continue;
 
-            if (!segmentUpdated) {
-                var sourcePage = sourcePages[block.pageIndex];
-                var sourceFrames = sourcePage.textFrames.everyItem().getElements();
-                if (block.frameIndex < sourceFrames.length) {
-                    var sourceFrame = sourceFrames[block.frameIndex];
-                    var sourceStory = getTextFrameStory(sourceFrame);
-                    if (sourceStory) {
-                        var xml = buildTextObjectXML(sourceStory);
-                        var translatedXMLs = translateBatchDeepL([xml], deepLLang, 10, 20);
-                        if (translatedXMLs && translatedXMLs[0]) {
-                            applyXMLtoInDesign(targetStory, translatedXMLs[0], deepLLang);
-                            anyUpdated = true;
-                        }
-                    }
-                }
+            var xml = buildTextObjectXML(sourceStory);
+            var translatedXMLs = translateBatchDeepL([xml], deepLLang, 10, 20);
+            if (translatedXMLs && translatedXMLs[0]) {
+                applyXMLtoInDesign(targetStory, translatedXMLs[0], deepLLang);
+                anyUpdated = true;
             }
         }
     }
