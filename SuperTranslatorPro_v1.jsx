@@ -1,7 +1,7 @@
 #targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.3 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.4 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.3";
+var SCRIPT_VERSION = "28.4";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -21,6 +21,7 @@ var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTransl
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
 var DNT_LABEL = "SuperTranslatorPRO_DNT_Styles";
+var BDA_TARGET_LANGS_LABEL = "SuperTranslatorPRO_BDA_TargetLangs";
 var formalitySetting = app.extractLabel(FORMALITY_LABEL) || "default";
 var dntStyles = app.extractLabel(DNT_LABEL) || "";
 
@@ -614,6 +615,36 @@ function isGermanMasterName(name) {
     return !!(name && name.match(/[-_]de(?:[-_]|$)/i));
 }
 
+function loadBDATargetLangCodes(doc) {
+    if (!doc || !doc.isValid) return [];
+    var raw = "";
+    try { raw = doc.extractLabel(BDA_TARGET_LANGS_LABEL) || ""; } catch (e) { raw = ""; }
+    if (raw === "") return [];
+    var parts = raw.split(",");
+    var result = [];
+    var seen = {};
+    for (var i = 0; i < parts.length; i++) {
+        var code = String(parts[i]).replace(/^\s+|\s+$/g, "").toLowerCase();
+        if (!isSupportedLegacyLanguageCode(code) || code === "de" || seen[code]) continue;
+        seen[code] = true;
+        result.push(code);
+    }
+    return result;
+}
+
+function saveBDATargetLangCodes(doc, langCodes) {
+    if (!doc || !doc.isValid) return;
+    var parts = [];
+    var seen = {};
+    for (var i = 0; i < langCodes.length; i++) {
+        var code = String(langCodes[i]).replace(/^\s+|\s+$/g, "").toLowerCase();
+        if (!isSupportedLegacyLanguageCode(code) || code === "de" || seen[code]) continue;
+        seen[code] = true;
+        parts.push(code);
+    }
+    try { doc.insertLabel(BDA_TARGET_LANGS_LABEL, parts.join(",")); } catch (e) {}
+}
+
 function normalizeLanguageBadgeText(text) {
     if (text === null || text === undefined) return "";
     return String(text).replace(/^\s+|\s+$/g, "").replace(/[\r\n\t ]+/g, "").replace(/[^A-Za-z]/g, "").toLowerCase();
@@ -791,16 +822,35 @@ function findGermanLegacyMasterSpread(doc) {
 
 function normalizeLegacyMasterNames(doc) {
     var renamed = [];
+    var germanMaster = findGermanLegacyMasterSpread(doc);
+    if (!germanMaster) return renamed;
+    var oldName = String(germanMaster.name);
+    var newName = renameMasterSpreadToLanguage(doc, germanMaster, "de", getMasterSpreadBaseName(germanMaster));
+    if (newName !== "" && newName !== oldName) renamed.push({ oldName: oldName, newName: newName });
+    return renamed;
+}
+
+function cleanupAccidentalGermanMasterNames(doc, germanMaster) {
+    var cleaned = [];
     for (var i = 0; i < doc.masterSpreads.length; i++) {
         var master = doc.masterSpreads[i];
-        if (getMasterLang(master.name)) continue;
-        var badge = findMasterLanguageBadge(master, null);
-        if (!badge || !badge.code) continue;
+        if (!master || !master.isValid || master === germanMaster) continue;
+        if (!isGermanMasterName(master.name)) continue;
+
+        var badge = findMasterLanguageBadge(master, "de");
+        if (badge && badge.code === "de") continue;
+
+        var currentBaseName = getMasterSpreadBaseName(master);
+        var restoredBaseName = currentBaseName.replace(/[-_]de(?:[-_]\d+)?$/i, "");
+        if (restoredBaseName === "" || restoredBaseName === currentBaseName) continue;
+
         var oldName = String(master.name);
-        var newName = renameMasterSpreadToLanguage(doc, master, badge.code, getMasterSpreadBaseName(master));
-        if (newName !== "" && newName !== oldName) renamed.push({ oldName: oldName, newName: newName });
+        try {
+            master.baseName = restoredBaseName;
+            cleaned.push({ oldName: oldName, newName: String(master.name) });
+        } catch (e) {}
     }
-    return renamed;
+    return cleaned;
 }
 
 function collectBDALanguageTasks(doc) {
@@ -816,10 +866,35 @@ function collectBDALanguageTasks(doc) {
     return langTasks;
 }
 
-function promptLegacyTargetLanguageSelection(existingCodeMap) {
+function buildLangCodeMap(langCodes) {
+    var map = {};
+    for (var i = 0; i < langCodes.length; i++) {
+        map[String(langCodes[i]).toLowerCase()] = true;
+    }
+    return map;
+}
+
+function filterLangTasksByCodes(langTasks, langCodes) {
+    if (!langCodes || langCodes.length === 0) return langTasks;
+    var allowed = buildLangCodeMap(langCodes);
+    var filtered = [];
+    for (var i = 0; i < langTasks.length; i++) {
+        if (allowed[langTasks[i].code]) filtered.push(langTasks[i]);
+    }
+    return filtered;
+}
+
+function promptLegacyTargetLanguageSelection(preselectedCodeMap) {
     var dlg = new Window("dialog", "Fehlende Musterseiten erzeugen");
     dlg.orientation = "column";
     dlg.alignChildren = ["fill", "top"];
+    var hasPreselection = false;
+    for (var presetKey in preselectedCodeMap) {
+        if (preselectedCodeMap.hasOwnProperty(presetKey) && preselectedCodeMap[presetKey]) {
+            hasPreselection = true;
+            break;
+        }
+    }
 
     var info = dlg.add("statictext", undefined, "Es wurden keine zielsprachigen Musterseiten erkannt.\nBitte wähle die Sprachen aus, die automatisch erzeugt werden sollen.", { multiline: true });
     info.preferredSize.width = 360;
@@ -840,10 +915,13 @@ function promptLegacyTargetLanguageSelection(existingCodeMap) {
     var visibleCount = 0;
     for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
         var opt = LEGACY_BDA_LANGUAGE_OPTIONS[i];
-        if (existingCodeMap && existingCodeMap[opt.code.toLowerCase()]) continue;
         var targetCol = (visibleCount % 2 === 0) ? leftCol : rightCol;
         var cb = targetCol.add("checkbox", undefined, opt.code + " (" + opt.label + ")");
-        cb.value = (opt.code === "EN" || opt.code === "FR" || opt.code === "IT" || opt.code === "ES");
+        var key = opt.code.toLowerCase();
+        cb.value = !!(preselectedCodeMap && preselectedCodeMap[key]);
+        if (!cb.value && !hasPreselection) {
+            cb.value = (opt.code === "EN" || opt.code === "FR" || opt.code === "IT" || opt.code === "ES");
+        }
         checkboxes.push({ code: opt.code, box: cb });
         visibleCount++;
     }
@@ -923,16 +1001,33 @@ function prepareLegacyMasterSpreads(doc, allowCreation) {
         throw new Error("Keine deutsche Musterseite erkannt. Erwartet wurde ein Sprachkästchen mit 'de'.");
     }
     renameMasterSpreadToLanguage(doc, germanMaster, "de", getMasterSpreadBaseName(germanMaster));
+    cleanupAccidentalGermanMasterNames(doc, germanMaster);
 
     var langTasks = collectBDALanguageTasks(doc);
-    if (langTasks.length === 0 && allowCreation) {
-        var selectedCodes = promptLegacyTargetLanguageSelection({});
+    var savedCodes = loadBDATargetLangCodes(doc);
+    var shouldPrompt = allowCreation && (savedCodes.length === 0 || langTasks.length === 0);
+    if (shouldPrompt) {
+        var preselectedMap = {};
+        if (savedCodes.length > 0) {
+            preselectedMap = buildLangCodeMap(savedCodes);
+        } else {
+            for (var lt = 0; lt < langTasks.length; lt++) preselectedMap[langTasks[lt].code] = true;
+        }
+        var selectedCodes = promptLegacyTargetLanguageSelection(preselectedMap);
         if (selectedCodes === null) throw new Error("Musterseiten-Erzeugung abgebrochen.");
         if (selectedCodes.length === 0) throw new Error("Keine Zielsprachen für die automatische Musterseiten-Generierung ausgewählt.");
 
         updateProgress(7, "Erzeuge fehlende Musterseiten...", 7, "Erzeuge Legacy-Fallback...");
+        saveBDATargetLangCodes(doc, selectedCodes);
         createLegacyTargetMasters(doc, germanMaster, selectedCodes);
         langTasks = collectBDALanguageTasks(doc);
+        langTasks = filterLangTasksByCodes(langTasks, selectedCodes);
+    } else if (allowCreation && savedCodes.length > 0) {
+        createLegacyTargetMasters(doc, germanMaster, savedCodes);
+        langTasks = collectBDALanguageTasks(doc);
+        langTasks = filterLangTasksByCodes(langTasks, savedCodes);
+    } else if (savedCodes.length > 0) {
+        langTasks = filterLangTasksByCodes(langTasks, savedCodes);
     }
     return { germanMaster: germanMaster, langTasks: langTasks };
 }
