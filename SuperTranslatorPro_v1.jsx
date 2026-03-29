@@ -873,6 +873,8 @@ function highlightGermanIssue(correction, edit) {
         }
         germanHighlightState = { story: correction.story, entries: entries };
         app.select(range);
+        try { $.sleep(60); } catch (e4) {}
+        fitGermanPageInWindow(correction.page || (correction.frame ? correction.frame.parentPage : null));
     } catch (e3) {}
 }
 
@@ -1030,6 +1032,37 @@ function buildGermanFindingContext(finding) {
     return finding.originalText.substring(start, end);
 }
 
+function getGermanLayoutWindow() {
+    try {
+        if (app.activeWindow && app.activeWindow.activePage !== undefined) return app.activeWindow;
+    } catch (e) {}
+    try {
+        if (app.layoutWindows && app.layoutWindows.length > 0) return app.layoutWindows[0];
+    } catch (e2) {}
+    return null;
+}
+
+function fitGermanPageInWindow(targetPage) {
+    var win = getGermanLayoutWindow();
+    if (!win) return;
+
+    try {
+        if (targetPage && targetPage.isValid) {
+            try { win.activeSpread = targetPage.parent; } catch (e1) {}
+            try { win.activePage = targetPage; } catch (e2) {}
+        }
+        try { $.sleep(80); } catch (e3) {}
+        try {
+            win.zoom(ZoomOptions.FIT_PAGE);
+            return;
+        } catch (e4) {}
+        try {
+            win.zoom(ZoomOptions.fitPage);
+            return;
+        } catch (e5) {}
+    } catch (e6) {}
+}
+
 function focusGermanFinding(finding) {
     if (!finding) return;
     var targetPage = finding.page;
@@ -1038,15 +1071,19 @@ function focusGermanFinding(finding) {
     }
 
     try {
-        if (app.layoutWindows && app.layoutWindows.length > 0 && targetPage && targetPage.isValid) {
-            try { app.layoutWindows[0].activePage = targetPage; } catch (e1) {}
-            try { app.activeWindow.activePage = targetPage; } catch (e2) {}
+        var win = getGermanLayoutWindow();
+        if (win && targetPage && targetPage.isValid) {
+            try { win.activeSpread = targetPage.parent; } catch (e1) {}
+            try { win.activePage = targetPage; } catch (e2) {}
         }
     } catch (e) {}
+    fitGermanPageInWindow(targetPage);
 
     try {
         if (finding.errorText && finding.errorText.isValid) {
             app.select(finding.errorText);
+            try { $.sleep(60); } catch (e3a) {}
+            fitGermanPageInWindow(targetPage);
             return;
         }
     } catch (e3) {}
@@ -1054,6 +1091,7 @@ function focusGermanFinding(finding) {
     try {
         if (finding.frame && finding.frame.isValid) app.select(finding.frame);
     } catch (e4) {}
+    fitGermanPageInWindow(targetPage);
     try { $.sleep(80); } catch (e5) {}
 }
 
