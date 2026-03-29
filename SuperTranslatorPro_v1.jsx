@@ -210,6 +210,21 @@ function loadCSVGlossary(path) {
     } catch(e) { return null; }
 }
 
+function getGlossaryOverrideForTarget(entry, targetUpper, shortTarget) {
+    if (!entry) return null;
+    var rawValue = null;
+
+    if (entry.hasOwnProperty(targetUpper)) rawValue = entry[targetUpper];
+    else if (entry.hasOwnProperty(shortTarget)) rawValue = entry[shortTarget];
+
+    if (rawValue === null || rawValue === undefined) return null;
+
+    var trimmed = String(rawValue).replace(/^\s+|\s+$/g, "");
+    if (trimmed === "") return null;
+    if (trimmed === "###DNT###" || trimmed.toUpperCase() === "DNT") return "###DNT###";
+    return String(rawValue);
+}
+
 function getInDesignLanguageName(deepLCode) {
     var map = {
         "EN-US": "Englisch: USA", "EN-GB": "Englisch: Großbritannien", "EN": "Englisch: USA",
@@ -2582,13 +2597,11 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         var shortTarget = targetUpper.substring(0,2); 
 
         for (var key in parsedGlossary) {
-            terms.push(key);
-            if (parsedGlossary[key][targetUpper]) {
-                glossaryMap[key.toLowerCase()] = parsedGlossary[key][targetUpper];
-            } else if (parsedGlossary[key][shortTarget]) {
-                glossaryMap[key.toLowerCase()] = parsedGlossary[key][shortTarget];
-            } else {
-                glossaryMap[key.toLowerCase()] = "###DNT###"; 
+            if (!parsedGlossary.hasOwnProperty(key)) continue;
+            var glossaryOverride = getGlossaryOverrideForTarget(parsedGlossary[key], targetUpper, shortTarget);
+            if (glossaryOverride !== null) {
+                terms.push(key);
+                glossaryMap[key.toLowerCase()] = glossaryOverride;
             }
         }
         if (terms.length > 0) {
