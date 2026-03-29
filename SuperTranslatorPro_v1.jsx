@@ -502,43 +502,33 @@ function shouldCheckGermanText(text) {
     return lettersOnly.length >= 3;
 }
 
-function addGermanSpellTarget(targets, seenTextIds, textObj, story, locationLabel, page, frame) {
+function addGermanSpellTarget(targets, textObj, story, locationLabel, page, frame) {
     if (!textObj || !textObj.isValid) return;
     if (!story || !story.isValid) return;
     var storyText = "";
     try { storyText = textObj.contents; } catch (e) { storyText = ""; }
     if (!shouldCheckGermanText(storyText)) return;
 
-    var textId = null;
-    try { textId = textObj.id; } catch (e2) { textId = null; }
-    if (textId !== null && textId !== undefined) {
-        if (seenTextIds[textId]) return;
-        seenTextIds[textId] = true;
-    }
-
     targets.push({ textObj: textObj, story: story, text: storyText, location: locationLabel, page: page || null, frame: frame || null });
 }
 
 function collectGermanSpellTargets(doc) {
     var targets = [];
-    var seenTextIds = {};
-    var masterSpreads = doc.masterSpreads;
 
-    for (var m = 0; m < masterSpreads.length; m++) {
-        var master = masterSpreads[m];
-        if (!isGermanMasterName(master.name)) continue;
-        for (var p = 0; p < master.pages.length; p++) {
-            var masterPage = master.pages[p];
-            var pageItems = [];
-            try { pageItems = masterPage.allPageItems; } catch (e) { pageItems = []; }
-            for (var pf = 0; pf < pageItems.length; pf++) {
-                if (!pageItems[pf] || !pageItems[pf].isValid) continue;
-                if (pageItems[pf].constructor.name !== "TextFrame") continue;
-                var pageStory = getTextFrameStory(pageItems[pf]);
-                var textObj = null;
-                try { if (pageItems[pf].texts && pageItems[pf].texts.length > 0) textObj = pageItems[pf].texts[0]; } catch (e3) { textObj = null; }
-                addGermanSpellTarget(targets, seenTextIds, textObj, pageStory, "Deutsche Musterseite " + master.name + " / Seite " + (masterPage.name || (p + 1)), masterPage, pageItems[pf]);
-            }
+    for (var pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {
+        var page = doc.pages[pageIndex];
+        if (!page.appliedMaster || !page.appliedMaster.isValid) continue;
+        if (!isGermanMasterName(page.appliedMaster.name)) continue;
+
+        var pageItems = [];
+        try { pageItems = page.allPageItems; } catch (e) { pageItems = []; }
+        for (var pf = 0; pf < pageItems.length; pf++) {
+            if (!pageItems[pf] || !pageItems[pf].isValid) continue;
+            if (pageItems[pf].constructor.name !== "TextFrame") continue;
+            var pageStory = getTextFrameStory(pageItems[pf]);
+            var textObj = null;
+            try { if (pageItems[pf].texts && pageItems[pf].texts.length > 0) textObj = pageItems[pf].texts[0]; } catch (e2) { textObj = null; }
+            addGermanSpellTarget(targets, textObj, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Musterseite " + page.appliedMaster.name, page, pageItems[pf]);
         }
     }
 
@@ -989,7 +979,7 @@ function openGermanCorrectionDialog(findings) {
 function runMasterSpellingCheck(doc) {
     var targets = collectGermanSpellTargets(doc);
     if (targets.length === 0) {
-        alert("Keine Texte auf deutschen Musterseiten gefunden.");
+        alert("Keine Texte auf Dokumentseiten mit deutscher Musterseite gefunden.");
         return;
     }
 
@@ -1007,7 +997,7 @@ function runMasterSpellingCheck(doc) {
     for (var i = 0; i < targets.length; i++) {
         var item = targets[i];
         progressBarLocal.value = i + 1;
-        progressTextLocal.text = "Pruefe deutsche Musterseite: Text " + (i + 1) + " von " + targets.length + "...";
+        progressTextLocal.text = "Pruefe Dokumentseiten mit deutscher Musterseite: Text " + (i + 1) + " von " + targets.length + "...";
         progressWin.update();
         try {
             var response = runLanguageToolGermanFrameCheck(item.text);
@@ -1026,13 +1016,13 @@ function runMasterSpellingCheck(doc) {
     progressWin.close();
 
     if (corrections.length === 0) {
-        var okMessage = "Korrekturpruefung fuer deutsche Musterseiten abgeschlossen. Keine Aenderungen vorgeschlagen.";
+        var okMessage = "Korrekturpruefung fuer Dokumentseiten mit deutscher Musterseite abgeschlossen. Keine Aenderungen vorgeschlagen.";
         if (skippedTexts > 0) okMessage += "\n\nHinweis: " + skippedTexts + " Textblöcke konnten nicht geprüft werden.";
         alert(okMessage);
         return;
     }
 
-    var message = "Korrekturpruefung fuer deutsche Musterseiten abgeschlossen.\nTextrahmen mit Vorschlaegen: " + corrections.length + "\n\n";
+    var message = "Korrekturpruefung fuer Dokumentseiten mit deutscher Musterseite abgeschlossen.\nTextrahmen mit Vorschlaegen: " + corrections.length + "\n\n";
     var previewCount = Math.min(10, corrections.length);
     for (var lineIndex = 0; lineIndex < previewCount; lineIndex++) {
         message += "- " + corrections[lineIndex].location + "\n";
