@@ -653,6 +653,190 @@ function buildInDesignSpellingFinding(item, errorText) {
     };
 }
 
+function runLanguageToolGermanFrameCheck(text) {
+    var endpoint = "https://api.languagetool.org/v2/check";
+    var requestId = new Date().getTime() + "_" + Math.floor(Math.random() * 100000);
+    var payloadFile = new File(Folder.temp + "/lt_payload_" + requestId + ".txt");
+    var outFile = new File(Folder.temp + "/lt_out_" + requestId + ".json");
+    var payload = "language=de-DE&motherTongue=de&level=picky&text=" + encodeURIComponent(String(text).replace(/\r/g, "\n"));
+
+    payloadFile.encoding = "UTF-8";
+    if (!payloadFile.open("w")) {
+        return { ok: false, error: "Temporäre Anfrage-Datei konnte nicht erstellt werden." };
+    }
+    payloadFile.write(payload);
+    payloadFile.close();
+
+    var resultStr = "";
+    try {
+        if (File.fs === "Macintosh") {
+            var curlCmd = "curl -sS -X POST '" + endpoint + "' -d @'" + payloadFile.fsName + "'";
+            resultStr = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+        } else {
+            var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
+                      'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -d @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
+            app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
+            if (outFile.exists) {
+                outFile.encoding = "UTF-8";
+                outFile.open("r");
+                resultStr = outFile.read();
+                outFile.close();
+            }
+        }
+    } catch (e) {
+        return { ok: false, error: e.message || "LanguageTool-Aufruf fehlgeschlagen." };
+    } finally {
+        try { if (payloadFile.exists) payloadFile.remove(); } catch (e2) {}
+        try { if (outFile.exists) outFile.remove(); } catch (e3) {}
+    }
+
+    if (!resultStr || resultStr === "") {
+        return { ok: false, error: "Keine Antwort von LanguageTool erhalten." };
+    }
+
+    try {
+        return { ok: true, data: eval("(" + resultStr + ")") };
+    } catch (e4) {
+        return { ok: false, error: "Antwort von LanguageTool konnte nicht gelesen werden." };
+    }
+}
+
+function buildLanguageToolCorrectedText(originalText, matches) {
+    if (!matches || matches.length === 0) return originalText;
+    var edits = [];
+    for (var i = 0; i < matches.length; i++) {
+        var matchObj = matches[i];
+        if (!matchObj || !matchObj.replacements || matchObj.replacements.length === 0) continue;
+        if (matchObj.offset === undefined || matchObj.length === undefined) continue;
+        edits.push({
+            offset: matchObj.offset,
+            length: matchObj.length,
+            replacement: matchObj.replacements[0].value
+        });
+    }
+    if (edits.length === 0) return originalText;
+
+    edits.sort(function(a, b) { return b.offset - a.offset; });
+    var corrected = String(originalText);
+    var lastStart = Number.MAX_VALUE;
+
+    for (var e = 0; e < edits.length; e++) {
+        var edit = edits[e];
+        if (edit.offset + edit.length > lastStart) continue;
+        corrected = corrected.substring(0, edit.offset) + edit.replacement + corrected.substring(edit.offset + edit.length);
+        lastStart = edit.offset;
+    }
+
+    return corrected;
+}
+
+function buildGermanFrameCorrection(item, matches) {
+    var originalText = item.text || "";
+    var correctedText = buildLanguageToolCorrectedText(originalText, matches);
+    if (correctedText === originalText) return null;
+
+    var firstMessage = "LanguageTool-Korrektur";
+    if (matches && matches.length > 0 && matches[0].message) firstMessage = matches[0].message;
+
+    return {
+        textObj: item.textObj,
+        story: item.story,
+        page: item.page,
+        frame: item.frame,
+        location: item.location,
+        originalText: originalText,
+        correctedText: correctedText,
+        message: firstMessage,
+        issueCount: matches ? matches.length : 0
+    };
+}
+
+function applyGermanFrameCorrection(correction, newText) {
+    if (!correction || !correction.textObj || !correction.textObj.isValid) return false;
+    try {
+        correction.textObj.contents = newText;
+        correction.originalText = newText;
+        correction.correctedText = newText;
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function openGermanFrameCorrectionDialog(corrections) {
+    if (!corrections || corrections.length === 0) return { replaced: 0, skipped: 0, stopped: false };
+
+    var replacedCount = 0;
+    var skippedCount = 0;
+    var stopped = false;
+
+    for (var i = 0; i < corrections.length; i++) {
+        var correction = corrections[i];
+        if (!correction.textObj || !correction.textObj.isValid) {
+            skippedCount++;
+            continue;
+        }
+
+        focusGermanFinding(correction);
+
+        var dlg = new Window("dialog", "Deutsch korrigieren " + (i + 1) + "/" + corrections.length);
+        dlg.orientation = "column";
+        dlg.alignChildren = "fill";
+
+        dlg.add("statictext", undefined, correction.location);
+        var msgText = dlg.add("statictext", undefined, correction.issueCount + " Hinweis(e) - " + correction.message);
+        msgText.preferredSize.width = 440;
+
+        dlg.add("statictext", undefined, "Original:");
+        var originalInput = dlg.add("edittext", undefined, correction.originalText, { multiline: true, readonly: true });
+        originalInput.preferredSize = [440, 120];
+
+        dlg.add("statictext", undefined, "Korrigiert:");
+        var correctedInput = dlg.add("edittext", undefined, correction.correctedText, { multiline: true });
+        correctedInput.preferredSize = [440, 120];
+
+        var btnGroup = dlg.add("group");
+        btnGroup.alignment = "right";
+        var btnSkip = btnGroup.add("button", undefined, "Behalten");
+        var btnReplace = btnGroup.add("button", undefined, "Uebernehmen");
+        var btnStop = btnGroup.add("button", undefined, "Beenden");
+
+        var action = "skip";
+        btnSkip.onClick = function() {
+            action = "skip";
+            dlg.close();
+        };
+        btnReplace.onClick = function() {
+            action = "replace";
+            dlg.close();
+        };
+        btnStop.onClick = function() {
+            action = "stop";
+            dlg.close();
+        };
+
+        dlg.show();
+
+        if (action === "stop") {
+            stopped = true;
+            break;
+        }
+        if (action === "skip") {
+            skippedCount++;
+            continue;
+        }
+
+        if (applyGermanFrameCorrection(correction, correctedInput.text)) {
+            replacedCount++;
+        } else {
+            alert("Der Textrahmen konnte nicht ersetzt werden:\n" + correction.location);
+            skippedCount++;
+        }
+    }
+
+    return { replaced: replacedCount, skipped: skippedCount, stopped: stopped };
+}
+
 function makeGermanTextVisible(text) {
     if (text === null || text === undefined) return "";
     return String(text).replace(/ /g, "·").replace(/\t/g, "→").replace(/\r/g, "¶").replace(/\n/g, "¶");
@@ -809,12 +993,6 @@ function runMasterSpellingCheck(doc) {
         return;
     }
 
-    var germanLanguage = getGermanSpellLanguage(doc);
-    if (!germanLanguage || !germanLanguage.isValid) {
-        alert("Keine deutsche InDesign-Sprache gefunden. Bitte pruefe, ob ein deutsches Woerterbuch in InDesign installiert ist.");
-        return;
-    }
-
     var progressWin = new Window("palette", "Deutsche Rechtschreibprüfung");
     progressWin.orientation = "column";
     progressWin.alignChildren = "fill";
@@ -823,8 +1001,7 @@ function runMasterSpellingCheck(doc) {
     var progressBarLocal = progressWin.add("progressbar", undefined, 0, targets.length);
     progressWin.show();
 
-    var totalFindings = 0;
-    var findings = [];
+    var corrections = [];
     var skippedTexts = 0;
 
     for (var i = 0; i < targets.length; i++) {
@@ -833,17 +1010,14 @@ function runMasterSpellingCheck(doc) {
         progressTextLocal.text = "Pruefe deutsche Musterseite: Text " + (i + 1) + " von " + targets.length + "...";
         progressWin.update();
         try {
-            if (!applyGermanLanguageToTextTarget(item, germanLanguage)) {
+            var response = runLanguageToolGermanFrameCheck(item.text);
+            if (!response.ok || !response.data) {
                 skippedTexts++;
                 continue;
             }
-            var errors = item.story.spellingErrors;
-            if (!errors || errors.length === 0) continue;
-            var localFindings = buildSpellingFindingsForTarget(item, errors);
-            for (var m = 0; m < localFindings.length; m++) {
-                findings.push(localFindings[m]);
-                totalFindings++;
-            }
+            var matches = response.data.matches || [];
+            var correction = buildGermanFrameCorrection(item, matches);
+            if (correction) corrections.push(correction);
         } catch (e) {
             skippedTexts++;
         }
@@ -851,28 +1025,28 @@ function runMasterSpellingCheck(doc) {
 
     progressWin.close();
 
-    if (totalFindings === 0) {
-        var okMessage = "InDesign-Rechtschreibprüfung für deutsche Musterseiten abgeschlossen. Keine Auffälligkeiten gefunden.";
+    if (corrections.length === 0) {
+        var okMessage = "Korrekturpruefung fuer deutsche Musterseiten abgeschlossen. Keine Aenderungen vorgeschlagen.";
         if (skippedTexts > 0) okMessage += "\n\nHinweis: " + skippedTexts + " Textblöcke konnten nicht geprüft werden.";
         alert(okMessage);
         return;
     }
 
-    var message = "InDesign-Rechtschreibprüfung für deutsche Musterseiten abgeschlossen.\nGefundene Hinweise: " + totalFindings + "\n\n";
-    var previewCount = Math.min(10, findings.length);
+    var message = "Korrekturpruefung fuer deutsche Musterseiten abgeschlossen.\nTextrahmen mit Vorschlaegen: " + corrections.length + "\n\n";
+    var previewCount = Math.min(10, corrections.length);
     for (var lineIndex = 0; lineIndex < previewCount; lineIndex++) {
-        message += "- " + buildLanguageToolFindingSummary(findings[lineIndex]) + "\n";
+        message += "- " + corrections[lineIndex].location + "\n";
     }
-    if (totalFindings > previewCount) {
-        message += "\n...weitere Hinweise vorhanden.";
+    if (corrections.length > previewCount) {
+        message += "\n...weitere Textrahmen vorhanden.";
     }
     if (skippedTexts > 0) {
         message += "\n\nNicht geprüft: " + skippedTexts + " Textblöcke.";
     }
-    message += "\n\nDanach oeffnet sich ein Korrekturfenster direkt auf dem nativen InDesign-Treffer.";
+    message += "\n\nDanach oeffnet sich ein Dialog mit Original- und Korrekturtext pro deutschem Textrahmen.";
     alert(message);
 
-    var correctionResult = openGermanCorrectionDialog(findings);
+    var correctionResult = openGermanFrameCorrectionDialog(corrections);
     var finalMessage = "Korrekturdialog beendet.\nErsetzt: " + correctionResult.replaced + "\nUebersprungen: " + correctionResult.skipped;
     if (correctionResult.stopped) finalMessage += "\nVorzeitig beendet.";
     alert(finalMessage);
