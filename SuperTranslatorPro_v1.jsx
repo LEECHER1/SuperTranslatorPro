@@ -1086,7 +1086,6 @@ function syncBDATextChanges(doc, config) {
     if (!targetsByLang || targetsCount === 0) {
         throw new Error("Keine Zielseiten in anderen Sprachen gefunden.");
     }
-    var changesByLang = {};
     var changeBlocks = [];
     for (var p = 0; p < currentSnapshot.length; p++) {
         var currentFrames = currentSnapshot[p] || [];
@@ -1095,48 +1094,40 @@ function syncBDATextChanges(doc, config) {
             var currentText = currentFrames[f] || "";
             var previousText = prevSnapshot ? (previousFrames[f] || "") : null;
             if (prevSnapshot === null || currentText !== previousText) {
-                var diff = prevSnapshot ? getChangedTextSegment(previousText, currentText) : { oldSegment: previousText || currentText, newSegment: currentText };
-                if (!diff || !diff.oldSegment || !diff.newSegment) {
-                    diff = { oldSegment: previousText || currentText, newSegment: currentText };
-                }
-                changeBlocks.push({ pageIndex: p, frameIndex: f, oldText: diff.oldSegment, newText: diff.newSegment });
+                changeBlocks.push({ pageIndex: p, frameIndex: f });
             }
         }
     }
-    for (var i = 0; i < changeBlocks.length; i++) {
-        var block = changeBlocks[i];
-        for (var lang in targetsByLang) {
-            if (!targetsByLang.hasOwnProperty(lang)) continue;
-            if (!changesByLang[lang]) changesByLang[lang] = [];
-            changesByLang[lang].push({ pageIndex: block.pageIndex, frameIndex: block.frameIndex, oldText: block.oldText, newText: block.newText });
-        }
+    if (changeBlocks.length === 0) {
+        saveBDASnapshot(doc, currentSnapshot);
+        return "Keine geänderten Textblöcke gefunden.";
     }
     var anyUpdated = false;
-    for (var langCode in changesByLang) {
-        if (!changesByLang.hasOwnProperty(langCode)) continue;
-        var blocks = changesByLang[langCode];
-        if (blocks.length === 0) continue;
-        var deepLLang = getDeepLLangCode(langCode);
-        var oldTexts = [];
-        var newTexts = [];
-        for (var b = 0; b < blocks.length; b++) {
-            oldTexts.push(blocks[b].oldText);
-            newTexts.push(blocks[b].newText);
-        }
-        var oldTranslated = translateBatchDeepL(oldTexts, deepLLang, 10, 20);
-        var newTranslated = translateBatchDeepL(newTexts, deepLLang, 10, 20);
-        if (!oldTranslated || !newTranslated) continue;
+    for (var langCode in targetsByLang) {
+        if (!targetsByLang.hasOwnProperty(langCode)) continue;
         var pageList = targetsByLang[langCode];
-        for (var b = 0; b < blocks.length; b++) {
-            var block = blocks[b];
-            var translatedOld = oldTranslated[b] || "";
-            var translatedNew = newTranslated[b] || "";
+        if (!pageList || pageList.length === 0) continue;
+        var deepLLang = getDeepLLangCode(langCode);
+        for (var i = 0; i < changeBlocks.length; i++) {
+            var block = changeBlocks[i];
+            var sourcePage = sourcePages[block.pageIndex];
+            if (!sourcePage) continue;
+            var sourceFrames = sourcePage.textFrames.everyItem().getElements();
+            if (block.frameIndex >= sourceFrames.length) continue;
+            var sourceStory = getTextFrameStory(sourceFrames[block.frameIndex]);
+            if (!sourceStory) continue;
+            var xml = buildTextObjectXML(sourceStory);
+            var translatedXMLs = translateBatchDeepL([xml], deepLLang, 10, 20);
+            if (!translatedXMLs || !translatedXMLs[0]) continue;
+            var translatedXML = translatedXMLs[0];
             var targetPage = pageList[block.pageIndex];
-            if (targetPage) {
-                if (translatedOld !== "" && translatedNew !== "" && replacePageFrameSegmentText(targetPage, block.frameIndex, translatedOld, translatedNew)) {
-                    anyUpdated = true;
-                }
-            }
+            if (!targetPage) continue;
+            var targetFrames = targetPage.textFrames.everyItem().getElements();
+            if (block.frameIndex >= targetFrames.length) continue;
+            var targetStory = getTextFrameStory(targetFrames[block.frameIndex]);
+            if (!targetStory) continue;
+            applyXMLtoInDesign(targetStory, translatedXML, deepLLang);
+            anyUpdated = true;
         }
     }
     saveBDASnapshot(doc, currentSnapshot);
@@ -1707,6 +1698,54 @@ function normalizeTranslatedXML(xml) {
     return xml.replace(/<root>\s+/g, '<root>')
               .replace(/(<(?:t|nt)[^>]*>)\s+/g, '$1')
               .replace(/(<root>)\s+/g, '$1');
+}
+
+function buildTextObjectXML(textObj) {
+    var xmlString = "<root>";
+    var ranges = textObj.textStyleRanges;
+    for (var r = 0; r < ranges.length; r++) {
+        var chunk = ranges[r].contents;
+        var fFamily = "Arial"; try { fFamily = ranges[r].appliedFont.fontFamily; } catch(e) {}
+        var fStyle = "Regular"; try { fStyle = ranges[r].fontStyle; } catch(e) {}
+        var pSize = 12; try { pSize = ranges[r].pointSize; } catch(e) {}
+        var pStyleName = ""; try { pStyleName = ranges[r].appliedParagraphStyle.name; } catch(e) {}
+        var ldingStr = "AUTO"; try { if (ranges[r].leading !== Leading.AUTO) ldingStr = ranges[r].leading.toString(); } catch(e) {}
+        var fColor = ""; try { fColor = ranges[r].fillColor.name.replace(/"/g, ''); } catch(e) {}
+        var cStyle = ""; try { cStyle = ranges[r].appliedCharacterStyle.name.replace(/"/g, ''); } catch(e) {}
+        var pAli = ""; try { pAli = ranges[r].justification.toString(); } catch(e) {}
+        var lInd = "0"; try { lInd = ranges[r].leftIndent.toString(); } catch(e) {}
+        var fInd = "0"; try { fInd = ranges[r].firstLineIndent.toString(); } catch(e) {}
+        var bList = ""; try { bList = ranges[r].bulletsAndNumberingListType.toString(); } catch(e) {}
+
+        chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+        chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        var dntArr = dntStyles.split(",");
+        var isDNT = false;
+        for (var d = 0; d < dntArr.length; d++) {
+            var trimDNT = dntArr[d].replace(/^\s+|\s+$/g, '');
+            if (trimDNT !== "" && (trimDNT === pStyleName || trimDNT === cStyle)) { isDNT = true; break; }
+        }
+
+        if (!isDNT) {
+            var regexArt = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*|[0-9]{4,})\b/g;
+            chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
+                var before = string.substring(0, offset);
+                var openTags = (before.match(/<nt>/g) || []).length;
+                var closeTags = (before.match(/<\/nt>/g) || []).length;
+                if (openTags > closeTags) return match;
+                if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match;
+                return '<nt>' + match + '</nt>';
+            });
+        }
+
+        chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
+        chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
+        if (chunk !== "") {
+            xmlString += '<t f="' + fFamily + '" s="' + fStyle + '" z="' + pSize + '" p="' + pStyleName + '" l="' + ldingStr + '" c="' + fColor + '" k="' + cStyle + '" a="' + pAli + '" li="' + lInd + '" fi="' + fInd + '" b="' + bList + '">' + chunk + '</t>';
+        }
+    }
+    return xmlString + "</root>";
 }
 
 function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
