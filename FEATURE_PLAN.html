@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SuperTranslatorPro Feature-Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    body {
+      margin: 0;
+      padding: 40px;
+      line-height: 1.65;
+      max-width: 1080px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    header {
+      margin-bottom: 30px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 3vw, 3rem);
+      color: #f8fafc;
+    }
+    p.lead {
+      color: #cbd5e1;
+      margin: 0;
+      font-size: 1.05rem;
+    }
+    section {
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
+    }
+    section h2 {
+      margin-top: 0;
+      color: #f1f5f9;
+      font-size: 1.45rem;
+    }
+    .meta-list {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      margin-top: 18px;
+      padding: 0;
+      list-style: none;
+    }
+    .meta-list li {
+      background: rgba(148, 163, 184, 0.08);
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+    .meta-list strong {
+      display: block;
+      color: #f8fafc;
+      margin-bottom: 4px;
+    }
+    .task-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .task-list li {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      gap: 12px;
+    }
+    .task-list input[type="checkbox"] {
+      margin-top: 4px;
+      width: 20px;
+      height: 20px;
+      accent-color: #38bdf8;
+    }
+    .task-list label {
+      cursor: pointer;
+      color: #e2e8f0;
+      flex: 1;
+    }
+    .task-list label strong {
+      color: #f8fafc;
+    }
+    textarea {
+      width: 100%;
+      min-height: 90px;
+      margin-top: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.9);
+      color: #e2e8f0;
+      padding: 14px;
+      font: inherit;
+      resize: vertical;
+    }
+    .section-row {
+      display: grid;
+      gap: 18px;
+    }
+    .section-row .small {
+      max-width: 340px;
+    }
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    .button-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    button {
+      border: none;
+      border-radius: 14px;
+      padding: 12px 18px;
+      font: inherit;
+      cursor: pointer;
+      background: #38bdf8;
+      color: #0f172a;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      background: #22d3ee;
+    }
+    button.secondary {
+      background: #475569;
+      color: #e2e8f0;
+    }
+    @media (max-width: 720px) {
+      body {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SuperTranslatorPro Feature-Plan</h1>
+    <p class="lead">Eine visuelle Checkliste, die du im Browser abhaken und jederzeit aktualisieren kannst.</p>
+  </header>
+
+  <section>
+    <h2>Aktueller Status</h2>
+    <ul class="meta-list">
+      <li><strong>Version</strong>28.1</li>
+      <li><strong>Datum</strong>29. März 2026</li>
+      <li><strong>Status</strong>Aktive Entwicklung</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Übersicht</h2>
+    <ul class="task-list">
+      <li><input type="checkbox" id="overview-1" class="plan-checkbox" /><label for="overview-1">Rechtschreibprüfung in der Mastersprache</label></li>
+      <li><input type="checkbox" id="overview-2" class="plan-checkbox" /><label for="overview-2">Intelligente Copyfitting-Logik</label></li>
+      <li><input type="checkbox" id="overview-3" class="plan-checkbox" /><label for="overview-3">Automatische Musterseiten-Generierung</label></li>
+      <li><input type="checkbox" id="overview-4" class="plan-checkbox" /><label for="overview-4">Andere LLMs (ChatGPT / Gemini / Claude)</label></li>
+      <li><input type="checkbox" id="overview-5" class="plan-checkbox" /><label for="overview-5">Migration auf UXP</label></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="section-row">
+      <div>
+        <h2>1. Rechtschreibprüfung in der Mastersprache</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-1-1" class="plan-checkbox" /><label for="task-1-1">UI-Button "Rechtschreibprüfung" im Hauptfenster oder im Einstellungen-Dialog einbauen</label></li>
+          <li><input type="checkbox" id="task-1-2" class="plan-checkbox" /><label for="task-1-2">Deutsche Masterseiten (`-de` Master) finden</label></li>
+          <li><input type="checkbox" id="task-1-3" class="plan-checkbox" /><label for="task-1-3">Alle TextFrames / Stories auf diesen Seiten mit InDesign `spellingErrors` prüfen</label></li>
+          <li><input type="checkbox" id="task-1-4" class="plan-checkbox" /><label for="task-1-4">Ergebnis anzeigen: Fehleranzahl + erste Fehlerstelle oder Hinweis</label></li>
+          <li><input type="checkbox" id="task-1-5" class="plan-checkbox" /><label for="task-1-5">Optional: Sprung zum ersten Fehler anbieten</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-1"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-row">
+      <div>
+        <h2>2. Intelligente Copyfitting-Logik</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-2-1" class="plan-checkbox" /><label for="task-2-1">Neue Helper-Funktion `applySmartCopyfit(textFrame)` erstellen</label></li>
+          <li><input type="checkbox" id="task-2-2" class="plan-checkbox" /><label for="task-2-2">Priorität 1: Tracking (Laufweite) schrittweise bis -10 reduzieren</label></li>
+          <li><input type="checkbox" id="task-2-3" class="plan-checkbox" /><label for="task-2-3">Priorität 2: Horizontal Scale (Zeichenbreite) schrittweise bis 98% reduzieren</label></li>
+          <li><input type="checkbox" id="task-2-4" class="plan-checkbox" /><label for="task-2-4">Priorität 3: Rahmenvergrößerung nur als letzter Fallback anwenden</label></li>
+          <li><input type="checkbox" id="task-2-5" class="plan-checkbox" /><label for="task-2-5">Overflow-Fix innerhalb von `executeTranslation` ersetzen</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-2"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-row">
+      <div>
+        <h2>3. Automatische Musterseiten-Generierung</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-3-1" class="plan-checkbox" /><label for="task-3-1">In `runBDAMode` prüfen, ob zielsprachige Masterseiten fehlen</label></li>
+          <li><input type="checkbox" id="task-3-2" class="plan-checkbox" /><label for="task-3-2">Deutsche `-de` Masterseite identifizieren</label></li>
+          <li><input type="checkbox" id="task-3-3" class="plan-checkbox" /><label for="task-3-3">UI-Dialog implementieren: nach benötigten Zielsprachen fragen</label></li>
+          <li><input type="checkbox" id="task-3-4" class="plan-checkbox" /><label for="task-3-4">Deutsche Masterseite für jede gewählte Sprache duplizieren</label></li>
+          <li><input type="checkbox" id="task-3-5" class="plan-checkbox" /><label for="task-3-5">Neue Masters korrekt umbenennen (`-en`, `-fr`, etc.)</label></li>
+          <li><input type="checkbox" id="task-3-6" class="plan-checkbox" /><label for="task-3-6">Danach normalen BDA-Automatikfluss fortsetzen</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-3"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-row">
+      <div>
+        <h2>4. Andere LLMs</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-4-1" class="plan-checkbox" /><label for="task-4-1">Provider-Interface für Übersetzungen definieren</label></li>
+          <li><input type="checkbox" id="task-4-2" class="plan-checkbox" /><label for="task-4-2">DeepL als Default behalten</label></li>
+          <li><input type="checkbox" id="task-4-3" class="plan-checkbox" /><label for="task-4-3">Adapter für andere Anbieter vorbereiten (OpenAI, Google, Anthropic)</label></li>
+          <li><input type="checkbox" id="task-4-4" class="plan-checkbox" /><label for="task-4-4">UI für Provider-Auswahl und API-Key-Felder hinzufügen</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-4"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-row">
+      <div>
+        <h2>5. Migration auf UXP</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-5-1" class="plan-checkbox" /><label for="task-5-1">Kernlogik / UI klar trennen</label></li>
+          <li><input type="checkbox" id="task-5-2" class="plan-checkbox" /><label for="task-5-2">UXP-Plugin-Struktur planen (`manifest.json`, HTML/CSS/JS)</label></li>
+          <li><input type="checkbox" id="task-5-3" class="plan-checkbox" /><label for="task-5-3">UXP-UI-Portierung vorbereiten</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-5"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Offene Aufgaben</h2>
+    <ul class="task-list">
+      <li><input type="checkbox" id="task-open-1" class="plan-checkbox" /><label for="task-open-1">Rechtschreibprüfung UI + Master-Scan bauen</label></li>
+      <li><input type="checkbox" id="task-open-2" class="plan-checkbox" /><label for="task-open-2">Helper für `spellingErrors` implementieren</label></li>
+      <li><input type="checkbox" id="task-open-3" class="plan-checkbox" /><label for="task-open-3">`applySmartCopyfit(textFrame)` mit Tracking/Scale/Frame bauen</label></li>
+      <li><input type="checkbox" id="task-open-4" class="plan-checkbox" /><label for="task-open-4">Overflow-Fix in `executeTranslation` ersetzen</label></li>
+      <li><input type="checkbox" id="task-open-5" class="plan-checkbox" /><label for="task-open-5">`runBDAMode` Legacy-Fallback für fehlende Masters einbauen</label></li>
+      <li><input type="checkbox" id="task-open-6" class="plan-checkbox" /><label for="task-open-6">Provider-Abstraktion für andere LLMs definieren</label></li>
+      <li><input type="checkbox" id="task-open-7" class="plan-checkbox" /><label for="task-open-7">UXP-Refactoring-Plan erstellen</label></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Prioritäten</h2>
+    <ol>
+      <li>Rechtschreibprüfung</li>
+      <li>Intelligente Copyfitting-Logik</li>
+      <li>Automatische Musterseiten-Generierung</li>
+      <li>Andere LLMs</li>
+      <li>UXP-Migration</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Änderungslog</h2>
+    <ul>
+      <li>29. März 2026: Checkliste erstellt und als `FEATURE_PLAN.md` abgelegt</li>
+    </ul>
+  </section>
+
+  <div class="button-row">
+    <button id="reset-btn">Alle Häkchen zurücksetzen</button>
+    <button class="secondary" id="clear-notes-btn">Notizen leeren</button>
+  </div>
+
+  <footer>
+    <p>Öffne diese Datei im Browser, um den Plan interaktiv zu verwenden.</p>
+  </footer>
+
+  <script>
+    const storageKey = 'supertranslatorpro-feature-plan';
+    const form = document.querySelector('body');
+    const checkboxes = document.querySelectorAll('.plan-checkbox');
+    const notes = document.querySelectorAll('textarea');
+
+    function loadState() {
+      const saved = localStorage.getItem(storageKey);
+      if (!saved) return;
+      try {
+        const state = JSON.parse(saved);
+        checkboxes.forEach(box => {
+          if (state[box.id] !== undefined) {
+            box.checked = state[box.id];
+          }
+        });
+        notes.forEach(note => {
+          if (state[note.id] !== undefined) {
+            note.value = state[note.id];
+          }
+        });
+      } catch (e) {
+        console.warn('Fehler beim Laden des Speicherzustands', e);
+      }
+    }
+
+    function saveState() {
+      const state = {};
+      checkboxes.forEach(box => { state[box.id] = box.checked; });
+      notes.forEach(note => { state[note.id] = note.value; });
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    checkboxes.forEach(box => box.addEventListener('change', saveState));
+    notes.forEach(note => note.addEventListener('input', saveState));
+
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      checkboxes.forEach(box => box.checked = false);
+      saveState();
+    });
+    document.getElementById('clear-notes-btn').addEventListener('click', () => {
+      notes.forEach(note => note.value = '');
+      saveState();
+    });
+
+    loadState();
+  </script>
+</body>
+</html>
