@@ -1762,22 +1762,33 @@ function decodeDeepLXMLText(xml) {
     return xml;
 }
 
+function escapeXMLAttr(value) {
+    if (value === null || value === undefined) return "";
+    var escaped = String(value);
+    escaped = escaped.replace(/&/g, '&amp;')
+                     .replace(/</g, '&lt;')
+                     .replace(/>/g, '&gt;')
+                     .replace(/"/g, '&quot;')
+                     .replace(/'/g, '&apos;');
+    return escaped;
+}
+
 function buildTextObjectXML(textObj) {
     var xmlString = "<root>";
     var ranges = textObj.textStyleRanges;
     for (var r = 0; r < ranges.length; r++) {
         var chunk = ranges[r].contents;
-        var fFamily = "Arial"; try { fFamily = ranges[r].appliedFont.fontFamily; } catch(e) {}
-        var fStyle = "Regular"; try { fStyle = ranges[r].fontStyle; } catch(e) {}
+        var fFamily = "Arial"; try { fFamily = escapeXMLAttr(ranges[r].appliedFont.fontFamily); } catch(e) {}
+        var fStyle = "Regular"; try { fStyle = escapeXMLAttr(ranges[r].fontStyle); } catch(e) {}
         var pSize = 12; try { pSize = ranges[r].pointSize; } catch(e) {}
-        var pStyleName = ""; try { pStyleName = ranges[r].appliedParagraphStyle.name; } catch(e) {}
-        var ldingStr = "AUTO"; try { if (ranges[r].leading !== Leading.AUTO) ldingStr = ranges[r].leading.toString(); } catch(e) {}
-        var fColor = ""; try { fColor = ranges[r].fillColor.name.replace(/"/g, ''); } catch(e) {}
-        var cStyle = ""; try { cStyle = ranges[r].appliedCharacterStyle.name.replace(/"/g, ''); } catch(e) {}
-        var pAli = ""; try { pAli = ranges[r].justification.toString(); } catch(e) {}
-        var lInd = "0"; try { lInd = ranges[r].leftIndent.toString(); } catch(e) {}
-        var fInd = "0"; try { fInd = ranges[r].firstLineIndent.toString(); } catch(e) {}
-        var bList = ""; try { bList = ranges[r].bulletsAndNumberingListType.toString(); } catch(e) {}
+        var pStyleName = ""; try { pStyleName = escapeXMLAttr(ranges[r].appliedParagraphStyle.name); } catch(e) {}
+        var ldingStr = "AUTO"; try { if (ranges[r].leading !== Leading.AUTO) ldingStr = escapeXMLAttr(ranges[r].leading.toString()); } catch(e) {}
+        var fColor = ""; try { fColor = escapeXMLAttr(ranges[r].fillColor.name); } catch(e) {}
+        var cStyle = ""; try { cStyle = escapeXMLAttr(ranges[r].appliedCharacterStyle.name); } catch(e) {}
+        var pAli = ""; try { pAli = escapeXMLAttr(ranges[r].justification.toString()); } catch(e) {}
+        var lInd = "0"; try { lInd = escapeXMLAttr(ranges[r].leftIndent.toString()); } catch(e) {}
+        var fInd = "0"; try { fInd = escapeXMLAttr(ranges[r].firstLineIndent.toString()); } catch(e) {}
+        var bList = ""; try { bList = escapeXMLAttr(ranges[r].bulletsAndNumberingListType.toString()); } catch(e) {}
 
         chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
         chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
