@@ -254,15 +254,16 @@ var checkTOC = panelBDA.add("checkbox", undefined, "Titelseite (Seite 1): Start-
 checkTOC.indent = 20;
 checkTOC.value = true;
 
-var btnTextUpdate = panelBDA.add("button", undefined, "Textupdate");
-btnTextUpdate.helpTip = "Aktualisiert nur den Text auf den Musterseiten ohne neue Seiten zu erzeugen.";
-btnTextUpdate.enabled = false;
+var cbOnlyTextUpdate = panelBDA.add("checkbox", undefined, "Nur bei Textupdate");
+cbOnlyTextUpdate.indent = 20;
+cbOnlyTextUpdate.value = false;
+cbOnlyTextUpdate.enabled = false;
 
 // START-ZUSTAND FESTLEGEN
 radioSelection.value = true;
 bdaSourceInput.enabled = false;
 checkTOC.enabled = false;
-btnTextUpdate.enabled = false;
+cbOnlyTextUpdate.enabled = false;
 
 // --- UI INTERAKTIONEN ---
 radioSelection.onClick = function() {
@@ -271,7 +272,8 @@ radioSelection.onClick = function() {
     dropdownLang.enabled = true;
     bdaSourceInput.enabled = false;
     checkTOC.enabled = false;
-    btnTextUpdate.enabled = false;
+    cbOnlyTextUpdate.enabled = false;
+    cbOnlyTextUpdate.value = false;
 }
 
 radioPages.onClick = function() {
@@ -280,7 +282,8 @@ radioPages.onClick = function() {
     dropdownLang.enabled = true;
     bdaSourceInput.enabled = false;
     checkTOC.enabled = false;
-    btnTextUpdate.enabled = false;
+    cbOnlyTextUpdate.enabled = false;
+    cbOnlyTextUpdate.value = false;
 }
 
 radioBDA.onClick = function() {
@@ -289,8 +292,7 @@ radioBDA.onClick = function() {
     dropdownLang.enabled = false;
     bdaSourceInput.enabled = true;
     checkTOC.enabled = true;
-    btnTextUpdate.enabled = true;
-    btnTextUpdate.enabled = true;
+    cbOnlyTextUpdate.enabled = true;
 }
 
 editPages.onActivate = function() {
@@ -300,6 +302,8 @@ editPages.onActivate = function() {
     dropdownLang.enabled = true;
     bdaSourceInput.enabled = false;
     checkTOC.enabled = false;
+    cbOnlyTextUpdate.enabled = false;
+    cbOnlyTextUpdate.value = false;
 }
 
 bdaSourceInput.onActivate = function() {
@@ -309,7 +313,7 @@ bdaSourceInput.onActivate = function() {
     dropdownLang.enabled = false;
     bdaSourceInput.enabled = true;
     checkTOC.enabled = true;
-    btnTextUpdate.enabled = true;
+    cbOnlyTextUpdate.enabled = true;
 }
 
 // --- BUTTONS UNTEN ---
@@ -544,7 +548,8 @@ btnTranslate.onClick = function() {
         sourcePages: editPages.text,
         bdaSourcePages: bdaSourceInput.text,
         updateTOC: checkTOC.value,
-        lang: dropdownLang.selection.text.substring(0, 2)
+        lang: dropdownLang.selection.text.substring(0, 2),
+        onlyTextUpdate: cbOnlyTextUpdate ? cbOnlyTextUpdate.value : false
     };
 
     if (config.mode !== "BDA" && config.lang.indexOf("-") !== -1) {
@@ -594,56 +599,13 @@ btnTranslate.onClick = function() {
     );
 }
 
-btnTextUpdate.onClick = function() {
-    var doc = null;
-    try { doc = app.activeDocument; } catch(e) { alert("Kein Dokument offen!"); return; }
-
-    if (!apiKey || apiKey === "") {
-        alert("Bitte trage zuerst deinen DeepL API-Key in den Einstellungen (⚙️) ein.");
-        return;
-    }
-
-    if (!doc.masterSpreads || doc.masterSpreads.length === 0) {
-        alert("Das Dokument enthält keine Mustervorlagen zum Aktualisieren.");
-        return;
-    }
-
-    createProgressWindow();
-    writeLog("=== TEXTUPDATE GESTARTET ===");
-    writeLog("Dokument: " + doc.name + " | Modus: TEXTUPDATE");
-
-    app.doScript(
-        function() {
-            try {
-                var resultMsg = runTextUpdateProcess(doc);
-                writeLog("Erfolgreich beendet. (API genutzt: " + globalStats.apiChars + " Z., API gespart: " + globalStats.savedChars + " Z., Auto-Fit: " + globalStats.fittedFrames + " Rahmen)");
-                showSuccessScreen(resultMsg ? resultMsg : "Textupdate auf Mustervorlagen abgeschlossen.");
-            } catch(e) {
-                closeProgressWindow();
-                if (e.message === "CANCELLED") {
-                    writeLog("Vorgang durch Benutzer abgebrochen.", "WARNUNG");
-                    alert("⚠️ Vorgang abgebrochen!\n\nTipp: Drücke jetzt Cmd+Z (Rückgängig), um alle bisherigen Änderungen in einem Rutsch zu verwerfen.");
-                } else {
-                    writeLog("FEHLER: " + e.message, "ERROR");
-                    alert("Ein Fehler ist aufgetreten:\n" + e.message);
-                }
-            }
-        },
-        ScriptLanguage.JAVASCRIPT,
-        undefined,
-        UndoModes.ENTIRE_SCRIPT,
-        "Super Übersetzer: Textupdate"
-    );
-}
-
-function runTextUpdateProcess(doc) {
-    updateLanguageMasterVersionLabels(doc);
-    syncMasterTextChanges(doc);
-    return "Textupdate auf Mustervorlagen durchgeführt.";
-}
-
 // --- 4. HAUPTSTEUERUNG ---
 function runMainProcess(doc, config) {
+    if (config.mode === "BDA" && config.onlyTextUpdate) {
+        updateLanguageMasterVersionLabels(doc);
+        syncMasterTextChanges(doc);
+        return "BDA-Textupdate ausgeführt.";
+    }
     updateLanguageMasterVersionLabels(doc);
     syncMasterTextChanges(doc);
     if (config.mode === "BDA") {
@@ -689,7 +651,7 @@ function runBDAMode(doc, config) {
         }
     }
 
-    updateLanguageMasterVersionLabels(doc);
+    if (!config.onlyTextUpdate) updateLanguageMasterVersionLabels(doc);
     if (langTasks.length === 0) { throw new Error("Keine anderssprachigen Mustervorlagen (z.B. -en-) gefunden."); }
     
     var originalPages = [];
