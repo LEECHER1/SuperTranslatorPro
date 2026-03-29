@@ -1730,7 +1730,7 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
             payloadStr += "&formality=" + formalitySetting;
         }
         for (var j = b; j < endBatch; j++) {
-            var safeText = textsArray[j].replace(/'/g, "'\\''").replace(/\r/g, ' ').replace(/\n/g, ' ');
+            var safeText = textsArray[j];
             payloadStr += "&text=" + encodeURIComponent(safeText);
         }
         
