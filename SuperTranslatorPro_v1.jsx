@@ -145,6 +145,46 @@ function getInDesignLanguageName(deepLCode) {
     return map[deepLCode.toUpperCase()] || "";
 }
 
+function getCurrentArticleVersionLabel() {
+    var d = new Date();
+    var year = d.getFullYear() % 100;
+    var month = d.getMonth() + 1;
+    var version = "v" + ("0" + year).slice(-2) + ("0" + month).slice(-2);
+    return "Artikelnummer_" + version;
+}
+
+function updateLanguageMasterVersionLabels(doc) {
+    var versionLabel = getCurrentArticleVersionLabel();
+    var masterSpreads = doc.masterSpreads;
+    for (var m = 0; m < masterSpreads.length; m++) {
+        var masterName = masterSpreads[m].name;
+        if (!masterName.match(/-([a-z]{2})[-_]/i)) continue;
+        var pages = masterSpreads[m].pages;
+        for (var p = 0; p < pages.length; p++) {
+            var allItems = pages[p].allPageItems;
+            for (var i = 0; i < allItems.length; i++) {
+                var item = allItems[i];
+                if (item.constructor.name !== "TextFrame") continue;
+                try {
+                    var story = item.parentStory;
+                    if (!story || !story.isValid) continue;
+                    var text = story.contents;
+                    var newText = text;
+                    if (/Artikelnummer(_| )?v?\d{4}/i.test(newText)) {
+                        newText = newText.replace(/Artikelnummer(_| )?v?\d{4}/ig, versionLabel);
+                    }
+                    if (/%VERSION%/i.test(newText)) {
+                        newText = newText.replace(/%VERSION%/gi, versionLabel);
+                    }
+                    if (newText !== text) {
+                        story.contents = newText;
+                    }
+                } catch (e) {}
+            }
+        }
+    }
+}
+
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
 var myWindow = new Window("palette", "Super Translator Pro v1.2");
 myWindow.orientation = "column";
@@ -590,6 +630,7 @@ function runBDAMode(doc, config) {
         }
     }
 
+    updateLanguageMasterVersionLabels(doc);
     if (langTasks.length === 0) { throw new Error("Keine anderssprachigen Mustervorlagen (z.B. -en-) gefunden."); }
     
     var originalPages = [];
@@ -679,6 +720,46 @@ function runBDAMode(doc, config) {
     }
 
     return resultMsg;
+}
+
+function getCurrentArticleVersionLabel() {
+    var d = new Date();
+    var year = d.getFullYear() % 100;
+    var month = d.getMonth() + 1;
+    var version = "v" + ("0" + year).slice(-2) + ("0" + month).slice(-2);
+    return "Artikelnummer_" + version;
+}
+
+function updateLanguageMasterVersionLabels(doc) {
+    var versionLabel = getCurrentArticleVersionLabel();
+    var masterSpreads = doc.masterSpreads;
+    for (var m = 0; m < masterSpreads.length; m++) {
+        var masterName = masterSpreads[m].name;
+        if (!masterName.match(/-([a-z]{2})[-_]/i)) continue;
+        var pages = masterSpreads[m].pages;
+        for (var p = 0; p < pages.length; p++) {
+            var allItems = pages[p].allPageItems;
+            for (var i = 0; i < allItems.length; i++) {
+                var item = allItems[i];
+                if (item.constructor.name !== "TextFrame") continue;
+                try {
+                    var story = item.parentStory;
+                    if (!story || !story.isValid) continue;
+                    var text = story.contents;
+                    var newText = text;
+                    if (/Artikelnummer(_| )?v?\d{4}/i.test(newText)) {
+                        newText = newText.replace(/Artikelnummer(_| )?v?\d{4}/ig, versionLabel);
+                    }
+                    if (/%VERSION%/i.test(newText)) {
+                        newText = newText.replace(/%VERSION%/gi, versionLabel);
+                    }
+                    if (newText !== text) {
+                        story.contents = newText;
+                    }
+                } catch (e) {}
+            }
+        }
+    }
 }
 
 // --- 5B. TOC RÖNTGEN-UPDATE LOGIK ---
