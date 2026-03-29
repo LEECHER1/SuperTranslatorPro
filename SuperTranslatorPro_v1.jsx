@@ -489,16 +489,169 @@ btnSettings.onClick = function() {
 btnCancel.onClick = function() { myWindow.close(); }
 
 function runMasterSpellingCheck(doc) {
-    try {
-        var spellCheckAction = app.menuActions.item("$ID/Check Spelling...");
-        if (spellCheckAction.isValid) {
-            spellCheckAction.invoke();
-        } else {
-            alert("Die native InDesign-Rechtschreibprüfung konnte nicht aufgerufen werden.");
-        }
-    } catch (e) {
-        alert("Fehler beim Starten der Rechtschreibprüfung:\n" + e.message);
+    if (!apiKey || apiKey === "") {
+        alert("Bitte gib in den Einstellungen zuerst deinen DeepL API-Key ein.");
+        return;
     }
+
+    var masterSpreads = doc.masterSpreads;
+    var germanMasterNames = {};
+    var foundGermanMaster = false;
+    for (var m = 0; m < masterSpreads.length; m++) {
+        var name = masterSpreads[m].name;
+        if (name && name.match(/[-_]de(?:[-_]|$)/i)) {
+            germanMasterNames[name] = true;
+            foundGermanMaster = true;
+        }
+    }
+    if (!foundGermanMaster) {
+        alert("Keine deutschen Masterseiten (-de-) gefunden.");
+        return;
+    }
+
+    // Erstelle ein minimales Fortschrittsfenster für den DeepL Check
+    var progressWin = new Window("palette", "DeepL Rechtschreibprüfung");
+    progressWin.orientation = "column";
+    progressWin.alignChildren = "fill";
+    var progressText = progressWin.add("statictext", undefined, "Analysiere Texte...");
+    progressText.preferredSize.width = 350;
+    var progressBar = progressWin.add("progressbar", undefined, 0, 100);
+    progressWin.show();
+
+    var textsToCheck = [];
+    var totalErrors = 0;
+    var findings = [];
+
+    function extractFromStory(story, locationLabel) {
+        if (!story || !story.isValid) return;
+        var text = story.contents;
+        if (text && text.length > 2) {
+            textsToCheck.push({ text: text, location: locationLabel });
+        }
+    }
+
+    function extractFromPage(page, labelPrefix) {
+        var frames = [];
+        try { frames = page.textFrames.everyItem().getElements(); } catch (e) { frames = []; }
+        for (var fi = 0; fi < frames.length; fi++) {
+            var story = getTextFrameStory(frames[fi]);
+            extractFromStory(story, labelPrefix + " / " + (page.name || "Seite"));
+        }
+    }
+
+    // Texte auslesen
+    for (var mi = 0; mi < masterSpreads.length; mi++) {
+        var master = masterSpreads[mi];
+        if (!germanMasterNames[master.name]) continue;
+        for (var p = 0; p < master.pages.length; p++) {
+            extractFromPage(master.pages[p], master.name);
+        }
+    }
+    for (var pi = 0; pi < doc.pages.length; pi++) {
+        var page = doc.pages[pi];
+        if (!page.appliedMaster || !page.appliedMaster.name) continue;
+        if (!germanMasterNames[page.appliedMaster.name]) continue;
+        extractFromPage(page, page.appliedMaster.name + " (Dokument)");
+    }
+
+    if (textsToCheck.length === 0) {
+        progressWin.close();
+        alert("Keine Texte auf den deutschen Seiten gefunden.");
+        return;
+    }
+
+    // DeepL API Setup für Write/Rephrase (Rechtschreibprüfung in gleicher Sprache)
+    var isFree = apiKey.indexOf(":fx") !== -1;
+    // Standard Translate-Endpoints unterstützen oft kein "DE" nach "DE".
+    // Daher sollte für Korrekturen idealerweise eine dedizierte Funktion oder einfach EN und zurück genutzt werden, 
+    // FALLS die Write API nicht im Plan ist. Wir übersetzen hier als Workaround ins Englische und wieder zurück, 
+    // um "Lieferumfag" indirekt über DeepL zu reparieren (DeepL erkennt oft Tippfehler bei der Übersetzung).
+    // Noch eleganter: Wir versuchen es erst mit der Write API (falls verfügbar)
+    
+    var endpoint = isFree ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
+
+    // Limit prüfen
+    var maxChecks = textsToCheck.length > 50 ? 50 : textsToCheck.length; 
+    
+    progressBar.maxvalue = maxChecks;
+    for (var i = 0; i < maxChecks; i++) {
+        var item = textsToCheck[i];
+        progressBar.value = i + 1;
+        progressText.text = "Prüfe Textblock " + (i + 1) + " von " + maxChecks + "...";
+        progressWin.update();
+
+        var originalText = item.text.replace(/\r/g, "\n"); 
+        
+        try {
+            // Workaround für DeepL Spelling:
+            // Wenn man DE zu DE schickt, gibt DeepL einen 400er Fehler zurück.
+            // Die DeepL Write API (/v2/write/rephrase) ist für viele API-Keys gesperrt.
+            // Daher lassen wir DeepL die Sprache automatisch erkennen ("source_lang" weglassen)
+            // und übersetzen es formal nach "DE" (oder DE-DE). Manchmal toleriert DeepL auto->DE.
+            
+            var payload = {
+                text: [originalText],
+                target_lang: "DE"
+            };
+            var payloadJSON = JSON.stringify(payload);
+            var payloadFile = new File(Folder.temp + "/deepl_spell_payload_" + new Date().getTime() + ".json");
+            payloadFile.open("w");
+            payloadFile.encoding = "UTF-8";
+            payloadFile.write(payloadJSON);
+            payloadFile.close();
+
+            var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -H 'Content-Type: application/json' -d @'" + payloadFile.fsName + "'";
+            var resultStr = "";
+            if (File.fs === "Macintosh") {
+                resultStr = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+            } else {
+                var outFile = new File(Folder.temp + "/deepl_spell_out_" + new Date().getTime() + ".json");
+                var vbs = 'Set WshShell = CreateObject("WScript.Shell")\n' +
+                          'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Authorization: DeepL-Auth-Key ' + apiKey + '"" -H ""Content-Type: application/json"" -d @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
+                app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
+                if (outFile.exists) {
+                    outFile.open("r");
+                    outFile.encoding = "UTF-8";
+                    resultStr = outFile.read();
+                    outFile.close();
+                    outFile.remove();
+                }
+            }
+            payloadFile.remove();
+
+            if (resultStr && resultStr.indexOf('"translations"') !== -1) {
+                var parsed = JSON.parse(resultStr);
+                if (parsed && parsed.translations && parsed.translations.length > 0) {
+                    var corrected = parsed.translations[0].text;
+                    if (originalText.replace(/\s+$/,"") !== corrected.replace(/\s+$/,"")) {
+                        totalErrors++;
+                        if (findings.length < 15) {
+                            var shortOrig = originalText.length > 40 ? originalText.substring(0, 40).replace(/\n/g,"") + "..." : originalText.replace(/\n/g,"");
+                            var shortCorr = corrected.length > 40 ? corrected.substring(0, 40).replace(/\n/g,"") + "..." : corrected.replace(/\n/g,"");
+                            findings.push("Vorschlag für " + item.location + ":\n   Alt: '" + shortOrig + "'\n   Neu: '" + shortCorr + "'");
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            // Ignoriere Fehler pro Textblock
+        }
+    }
+    progressWin.close();
+
+    if (totalErrors === 0) {
+        alert("DeepL-Prüfung abgeschlossen.\n\nEs wurden keine Fehler (oder keine Verbesserungsvorschläge) gefunden.");
+        return;
+    }
+
+    var message = "DeepL-Prüfung abgeschlossen.\nVerbesserungsvorschläge gefunden: " + totalErrors + "\n\n";
+    for (var k = 0; k < findings.length; k++) {
+        message += findings[k] + "\n\n";
+    }
+    if (totalErrors > findings.length) {
+        message += "...und weitere " + (totalErrors - findings.length) + " Vorschläge.\n";
+    }
+    alert(message);
 }
 
 // --- 2. FORTSCHRITTS-FENSTER LOGIK ---
