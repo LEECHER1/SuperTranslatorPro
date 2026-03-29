@@ -29,6 +29,7 @@ var progressWin, progressBar, progressText;
 var overallBar, overallText, etaText, btnStopProgress;
 var cancelFlag = false;
 var startTime = 0;
+var germanHighlightState = null;
 
 var logPath = Folder.temp + "/SuperTranslatorPRO_Log.txt";
 
@@ -749,8 +750,6 @@ function buildGermanFrameCorrection(item, matches) {
     var originalText = item.text || "";
     var edits = buildLanguageToolEdits(originalText, matches);
     if (edits.length === 0) return null;
-    var correctedText = buildLanguageToolCorrectedText(originalText, matches);
-    if (correctedText === originalText) return null;
 
     return {
         textObj: item.textObj,
@@ -759,34 +758,132 @@ function buildGermanFrameCorrection(item, matches) {
         frame: item.frame,
         location: item.location,
         originalText: originalText,
-        correctedText: correctedText,
         message: "LanguageTool-Korrektur",
         issueCount: edits.length,
         edits: edits
     };
 }
 
-function applyGermanFrameCorrection(correction) {
-    if (!correction || !correction.textObj || !correction.textObj.isValid) return false;
-    if (!correction.story || !correction.story.isValid) return false;
-    if (!correction.edits || correction.edits.length === 0) return false;
+function refreshGermanFrameCorrection(correction) {
+    if (!correction || !correction.textObj || !correction.textObj.isValid) return null;
+    var currentText = "";
+    try { currentText = String(correction.textObj.contents); } catch (e) { currentText = ""; }
+    if (currentText === "") return null;
 
     try {
-        var textRange = getTextObjectStoryRange(correction.textObj);
-        if (!textRange) return false;
+        var response = runLanguageToolGermanFrameCheck(currentText);
+        if (!response.ok || !response.data) return null;
+        return buildGermanFrameCorrection({
+            textObj: correction.textObj,
+            story: correction.story,
+            page: correction.page,
+            frame: correction.frame,
+            location: correction.location,
+            text: currentText
+        }, response.data.matches || []);
+    } catch (e) {
+        return null;
+    }
+}
 
-        for (var i = correction.edits.length - 1; i >= 0; i--) {
-            var edit = correction.edits[i];
-            var startIndex = textRange.start + edit.offset;
-            if (edit.length > 0) {
-                var endIndex = startIndex + edit.length - 1;
-                correction.story.characters.itemByRange(startIndex, endIndex).contents = edit.replacement;
-            } else {
-                correction.story.insertionPoints.item(startIndex).contents = edit.replacement;
-            }
+function getGermanHighlightSwatch(doc) {
+    if (!doc) return null;
+    try {
+        var existing = doc.colors.itemByName("STP_Temp_Magenta");
+        if (existing && existing.isValid) return existing;
+    } catch (e) {}
+    try {
+        return doc.colors.add({
+            name: "STP_Temp_Magenta",
+            model: ColorModel.PROCESS,
+            space: ColorSpace.CMYK,
+            colorValue: [0, 100, 0, 0]
+        });
+    } catch (e2) {
+        try {
+            var fallback = doc.swatches.itemByName("Magenta");
+            if (fallback && fallback.isValid) return fallback;
+        } catch (e3) {}
+    }
+    return null;
+}
+
+function clearGermanIssueHighlight() {
+    if (!germanHighlightState || !germanHighlightState.story || !germanHighlightState.story.isValid) {
+        germanHighlightState = null;
+        return;
+    }
+    try {
+        for (var i = 0; i < germanHighlightState.entries.length; i++) {
+            var entry = germanHighlightState.entries[i];
+            try {
+                var ch = germanHighlightState.story.characters.item(entry.index);
+                if (ch && ch.isValid) ch.fillColor = entry.fillColor;
+            } catch (e) {}
+        }
+    } catch (e2) {}
+    germanHighlightState = null;
+}
+
+function getGermanEditTextRange(correction, edit) {
+    if (!correction || !edit || !correction.textObj || !correction.textObj.isValid || !correction.story || !correction.story.isValid) return null;
+    var textRange = getTextObjectStoryRange(correction.textObj);
+    if (!textRange) return null;
+    var startIndex = textRange.start + edit.offset;
+    if (startIndex < textRange.start) startIndex = textRange.start;
+    var endIndex = startIndex + Math.max(1, edit.length) - 1;
+    if (endIndex >= textRange.end) endIndex = textRange.end - 1;
+    try {
+        return correction.story.characters.itemByRange(startIndex, endIndex);
+    } catch (e) {
+        return null;
+    }
+}
+
+function highlightGermanIssue(correction, edit) {
+    clearGermanIssueHighlight();
+    if (!correction || !edit || !correction.story || !correction.story.isValid) return;
+    focusGermanFinding(correction);
+
+    var range = getGermanEditTextRange(correction, edit);
+    if (!range || !range.isValid) return;
+
+    try {
+        var doc = app.activeDocument;
+        var magenta = getGermanHighlightSwatch(doc);
+        if (!magenta || !magenta.isValid) {
+            app.select(range);
+            return;
         }
 
-        correction.originalText = correction.correctedText;
+        var textRange = getTextObjectStoryRange(correction.textObj);
+        if (!textRange) return;
+        var startIndex = textRange.start + edit.offset;
+        var endIndex = startIndex + Math.max(1, edit.length) - 1;
+        if (endIndex >= textRange.end) endIndex = textRange.end - 1;
+
+        var entries = [];
+        for (var idx = startIndex; idx <= endIndex; idx++) {
+            try {
+                var ch = correction.story.characters.item(idx);
+                if (!ch || !ch.isValid) continue;
+                entries.push({ index: idx, fillColor: ch.fillColor });
+                ch.fillColor = magenta;
+            } catch (e2) {}
+        }
+        germanHighlightState = { story: correction.story, entries: entries };
+        app.select(range);
+    } catch (e3) {}
+}
+
+function applyGermanSingleEdit(correction, editIndex) {
+    if (!correction || !correction.edits || editIndex < 0 || editIndex >= correction.edits.length) return false;
+    var edit = correction.edits[editIndex];
+    var range = getGermanEditTextRange(correction, edit);
+    if (!range || !range.isValid) return false;
+    clearGermanIssueHighlight();
+    try {
+        range.contents = edit.replacement;
         return true;
     } catch (e) {
         return false;
@@ -802,88 +899,106 @@ function openGermanFrameCorrectionDialog(corrections) {
 
     for (var i = 0; i < corrections.length; i++) {
         var correction = corrections[i];
-        if (!correction.textObj || !correction.textObj.isValid) {
-            skippedCount++;
-            continue;
-        }
+        while (correction && correction.edits && correction.edits.length > 0) {
+            if (!correction.textObj || !correction.textObj.isValid) {
+                skippedCount++;
+                break;
+            }
 
-        focusGermanFinding(correction);
-
-        var dlg = new Window("dialog", "Suchen/Ersetzen Deutsch " + (i + 1) + "/" + corrections.length);
-        dlg.orientation = "column";
-        dlg.alignChildren = "fill";
-
-        dlg.add("statictext", undefined, correction.location);
-        var summaryText = dlg.add("statictext", undefined, correction.issueCount + " konkrete Hinweis(e) in diesem Textrahmen");
-        summaryText.preferredSize.width = 440;
-
-        dlg.add("statictext", undefined, "Auffälligkeiten:");
-        var issueList = dlg.add("listbox", undefined, [], { multiselect: false });
-        issueList.preferredSize = [440, 120];
-        for (var issueIndex = 0; issueIndex < correction.edits.length; issueIndex++) {
-            var issue = correction.edits[issueIndex];
-            issueList.add("item", (issueIndex + 1) + ". " + makeGermanTextVisible(issue.issueText) + " -> " + makeGermanTextVisible(issue.replacement));
-        }
-
-        var detailPanel = dlg.add("panel", undefined, "Aktueller Treffer");
-        detailPanel.orientation = "column";
-        detailPanel.alignChildren = "fill";
-
-        detailPanel.add("statictext", undefined, "Hinweis:");
-        var messageBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
-        messageBox.preferredSize = [440, 70];
-
-        function updateIssuePreview() {
-            if (!issueList.selection) return;
-            var selectedIssue = correction.edits[issueList.selection.index];
-            messageBox.text = "Fehler: " + makeGermanTextVisible(selectedIssue.issueText) + "\nVorschlag: " + makeGermanTextVisible(selectedIssue.replacement) + "\nHinweis: " + selectedIssue.message;
             focusGermanFinding(correction);
-        }
-        if (issueList.items.length > 0) {
-            issueList.selection = 0;
-            updateIssuePreview();
-        }
-        issueList.onChange = updateIssuePreview;
 
-        var btnGroup = dlg.add("group");
-        btnGroup.alignment = "right";
-        var btnSkip = btnGroup.add("button", undefined, "Behalten");
-        var btnReplace = btnGroup.add("button", undefined, "Übernehmen");
-        var btnStop = btnGroup.add("button", undefined, "Beenden");
+            var dlg = new Window("dialog", "Suchen/Ersetzen Deutsch " + (i + 1) + "/" + corrections.length);
+            dlg.orientation = "column";
+            dlg.alignChildren = "fill";
 
-        var action = "skip";
-        btnSkip.onClick = function() {
-            action = "skip";
-            dlg.close();
-        };
-        btnReplace.onClick = function() {
-            action = "replace";
-            dlg.close();
-        };
-        btnStop.onClick = function() {
-            action = "stop";
-            dlg.close();
-        };
+            dlg.add("statictext", undefined, correction.location);
+            var summaryText = dlg.add("statictext", undefined, correction.issueCount + " konkrete Hinweis(e) in diesem Textrahmen");
+            summaryText.preferredSize.width = 440;
 
-        dlg.show();
+            dlg.add("statictext", undefined, "Auffälligkeiten:");
+            var issueList = dlg.add("listbox", undefined, [], { multiselect: false });
+            issueList.preferredSize = [440, 120];
+            for (var issueIndex = 0; issueIndex < correction.edits.length; issueIndex++) {
+                var issue = correction.edits[issueIndex];
+                issueList.add("item", (issueIndex + 1) + ". " + makeGermanTextVisible(issue.issueText) + " -> " + makeGermanTextVisible(issue.replacement));
+            }
 
-        if (action === "stop") {
-            stopped = true;
-            break;
+            var detailPanel = dlg.add("panel", undefined, "Aktueller Treffer");
+            detailPanel.orientation = "column";
+            detailPanel.alignChildren = "fill";
+
+            detailPanel.add("statictext", undefined, "Hinweis:");
+            var messageBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
+            messageBox.preferredSize = [440, 70];
+
+            var selectedEditIndex = 0;
+            function updateIssuePreview() {
+                if (!issueList.selection) return;
+                selectedEditIndex = issueList.selection.index;
+                var selectedIssue = correction.edits[selectedEditIndex];
+                messageBox.text = "Fehler: " + makeGermanTextVisible(selectedIssue.issueText) + "\nVorschlag: " + makeGermanTextVisible(selectedIssue.replacement) + "\nHinweis: " + selectedIssue.message;
+                highlightGermanIssue(correction, selectedIssue);
+            }
+            if (issueList.items.length > 0) {
+                issueList.selection = 0;
+                updateIssuePreview();
+            }
+            issueList.onChange = updateIssuePreview;
+
+            var btnGroup = dlg.add("group");
+            btnGroup.alignment = "right";
+            var btnSkip = btnGroup.add("button", undefined, "Behalten");
+            var btnReplace = btnGroup.add("button", undefined, "Übernehmen");
+            var btnStop = btnGroup.add("button", undefined, "Beenden");
+
+            var action = "skip";
+            btnSkip.onClick = function() {
+                action = "skip";
+                clearGermanIssueHighlight();
+                dlg.close();
+            };
+            btnReplace.onClick = function() {
+                action = "replace";
+                clearGermanIssueHighlight();
+                dlg.close();
+            };
+            btnStop.onClick = function() {
+                action = "stop";
+                clearGermanIssueHighlight();
+                dlg.close();
+            };
+            dlg.onClose = function() {
+                clearGermanIssueHighlight();
+                return true;
+            };
+
+            dlg.show();
+
+            if (action === "stop") {
+                stopped = true;
+                break;
+            }
+            if (action === "skip") {
+                correction.edits.splice(selectedEditIndex, 1);
+                correction.issueCount = correction.edits.length;
+                skippedCount++;
+                continue;
+            }
+
+            if (applyGermanSingleEdit(correction, selectedEditIndex)) {
+                replacedCount++;
+                correction = refreshGermanFrameCorrection(correction);
+            } else {
+                alert("Die Stelle konnte nicht übernommen werden:\n" + correction.location);
+                skippedCount++;
+                correction.edits.splice(selectedEditIndex, 1);
+                correction.issueCount = correction.edits.length;
+            }
         }
-        if (action === "skip") {
-            skippedCount++;
-            continue;
-        }
-
-        if (applyGermanFrameCorrection(correction)) {
-            replacedCount++;
-        } else {
-            alert("Der Textrahmen konnte nicht ersetzt werden:\n" + correction.location);
-            skippedCount++;
-        }
+        if (stopped) break;
     }
 
+    clearGermanIssueHighlight();
     return { replaced: replacedCount, skipped: skippedCount, stopped: stopped };
 }
 
