@@ -745,6 +745,7 @@ function runBDAMode(doc, config) {
         var originalPages = getBDAOriginalPages(doc, config);
         if (originalPages && originalPages.length > 0) {
             saveBDASnapshot(doc, buildBDAChangeSnapshot(originalPages));
+        }
         var snapshotPages = getBDAOriginalPages(doc, config);
         if (snapshotPages && snapshotPages.length > 0) {
             saveBDASnapshot(doc, buildBDAChangeSnapshot(snapshotPages));
