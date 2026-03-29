@@ -1033,6 +1033,7 @@ function findAndReplaceTextInStory(story, findString, replaceString) {
 }
 
 function replacePageFrameSegmentText(page, frameIndex, oldText, newText) {
+    if (!page || !oldText || oldText === "" || newText === undefined || newText === null) return false;
     try {
         var frames = page.textFrames.everyItem().getElements();
         if (frameIndex >= frames.length) return false;
@@ -1040,38 +1041,37 @@ function replacePageFrameSegmentText(page, frameIndex, oldText, newText) {
         if (!targetFrame.isValid) return false;
         var story = getTextFrameStory(targetFrame);
         if (!story) return false;
-        
-        // Nutze Suchen/Ersetzen, um Formatierung zu bewahren
+
+        app.findTextPreferences = NothingEnum.nothing;
+        app.changeTextPreferences = NothingEnum.nothing;
         app.findTextPreferences.findWhat = oldText;
         var foundRanges = story.findText();
-        if (!foundRanges || foundRanges.length === 0) {
-            // Fallback: Suche in allen Frames dieser Seite
-            for (var i = 0; i < frames.length; i++) {
-                var fallbackStory = getTextFrameStory(frames[i]);
-                if (fallbackStory) {
-                    app.findTextPreferences.findWhat = oldText;
-                    foundRanges = fallbackStory.findText();
-                    if (foundRanges && foundRanges.length > 0) {
-                        for (var j = 0; j < foundRanges.length; j++) {
-                            try { foundRanges[j].contents = newText; } catch (e) {}
-                        }
-                        return true;
+        if (foundRanges && foundRanges.length > 0) {
+            for (var k = 0; k < foundRanges.length; k++) {
+                try { foundRanges[k].contents = newText; } catch (e) {}
+            }
+            return true;
+        }
+
+        for (var i = 0; i < frames.length; i++) {
+            var fallbackStory = getTextFrameStory(frames[i]);
+            if (fallbackStory) {
+                app.findTextPreferences.findWhat = oldText;
+                foundRanges = fallbackStory.findText();
+                if (foundRanges && foundRanges.length > 0) {
+                    for (var j = 0; j < foundRanges.length; j++) {
+                        try { foundRanges[j].contents = newText; } catch (e) {}
                     }
+                    return true;
                 }
             }
-            app.findTextPreferences = NothingEnum.nothing;
-            return false;
         }
-        
-        // Ersetze in den gefundenen Ranges
-        for (var k = 0; k < foundRanges.length; k++) {
-            try { foundRanges[k].contents = newText; } catch (e) {}
-        }
-        app.findTextPreferences = NothingEnum.nothing;
-        return true;
-    } catch (e) {
-        try { app.findTextPreferences = NothingEnum.nothing; } catch (e2) {}
         return false;
+    } catch (e) {
+        return false;
+    } finally {
+        try { app.findTextPreferences = NothingEnum.nothing; } catch (e) {}
+        try { app.changeTextPreferences = NothingEnum.nothing; } catch (e) {}
     }
 }
 
@@ -1146,18 +1146,16 @@ function syncBDATextChanges(doc, config) {
             var oldSegment = block.diff.oldSegment;
             var newSegment = block.diff.newSegment;
             if (oldSegment !== "" && oldSegment.length > 1) {
-                var sourcePage = sourcePages[block.pageIndex];
-                var sourceFrames = sourcePage.textFrames.everyItem().getElements();
-                var sourceFrame = sourceFrames[block.frameIndex];
-                var sourceStory = getTextFrameStory(sourceFrame);
-                if (sourceStory) {
-                    var translatedSegments = translateBatchDeepL([newSegment], deepLLang, 10, 20);
-                    if (translatedSegments && translatedSegments[0]) {
-                        var translatedSegment = translatedSegments[0];
-                        translatedSegment = translatedSegment.replace(/^<root>/, "").replace(/<\/root>$/, "");
-                        if (replacePageFrameSegmentText(targetPage, block.frameIndex, oldSegment, translatedSegment)) {
-                            anyUpdated = true;
-                        }
+                var translatedPairs = translateBatchDeepL([oldSegment, newSegment], deepLLang, 10, 20);
+                if (translatedPairs && translatedPairs.length > 1 && translatedPairs[1]) {
+                    var translatedOld = translatedPairs[0] || "";
+                    var translatedNew = translatedPairs[1];
+                    translatedOld = translatedOld.replace(/^<root>/, "").replace(/<\/root>$/, "");
+                    translatedNew = translatedNew.replace(/^<root>/, "").replace(/<\/root>$/, "");
+                    if (translatedOld !== "" && replacePageFrameSegmentText(targetPage, block.frameIndex, translatedOld, translatedNew)) {
+                        anyUpdated = true;
+                    } else if (replacePageFrameSegmentText(targetPage, block.frameIndex, oldSegment, translatedNew)) {
+                        anyUpdated = true;
                     }
                 }
             }
