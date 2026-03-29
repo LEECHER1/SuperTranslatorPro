@@ -619,7 +619,7 @@ function runBDAMode(doc, config) {
     
     for (var m = 0; m < masterSpreads.length; m++) {
         var mName = masterSpreads[m].name;
-        var match = mName.match(/-([a-z]{2})[-_]/i); 
+        var match = mName.match(/[-_]([a-z]{2})(?:[-_]|$)/i); 
         if (match) {
             var code = match[1].toLowerCase();
             if (code !== "de") { 
@@ -727,8 +727,27 @@ function getCurrentArticleVersionLabel() {
     var d = new Date();
     var year = d.getFullYear() % 100;
     var month = d.getMonth() + 1;
-    var version = "v" + ("0" + year).slice(-2) + ("0" + month).slice(-2);
-    return "Artikelnummer_" + version;
+    var versionId = "v" + ("0" + year).slice(-2) + ("0" + month).slice(-2);
+    return "Artikelnummer_" + versionId;
+}
+
+function getCurrentVersionToken() {
+    var d = new Date();
+    var year = d.getFullYear() % 100;
+    var month = d.getMonth() + 1;
+    return "v" + ("0" + year).slice(-2) + ("0" + month).slice(-2);
+}
+
+function updateVersionStrings(text, versionLabel) {
+    if (!text) return text;
+    var versionToken = versionLabel.split("_").pop();
+    text = text.replace(/Artikelnummer(_| )?v?\d{4}/ig, versionLabel);
+    text = text.replace(/_?V\d{4}\b/ig, function(match) {
+        var out = versionToken;
+        if (match.charAt(match[0] === '_' ? 1 : 0) === 'V') out = versionToken.toUpperCase();
+        return match.charAt(0) === '_' ? '_' + out : out;
+    });
+    return text;
 }
 
 function updateLanguageMasterVersionLabels(doc) {
@@ -751,20 +770,14 @@ function updateLanguageMasterVersionLabels(doc) {
                     }
                     if (!story || !story.isValid) continue;
                     var text = story.contents;
-                    var newText = text;
-                    if (/Artikelnummer(_| )?v?\d{4}/i.test(newText)) {
-                        newText = newText.replace(/Artikelnummer(_| )?v?\d{4}/ig, versionLabel);
-                    }
-                    if (/%VERSION%/i.test(newText)) {
-                        newText = newText.replace(/%VERSION%/gi, versionLabel);
-                    }
+                    var newText = updateVersionStrings(text, versionLabel);
                     if (newText !== text) {
                         story.contents = newText;
                     }
                 } catch (e) {}
             }
         }
-        // Aktualisiere auch real existierende Seiten, die diese Masterseiten verwenden,
+        // Aktualisiere auch Seiten, die diese Masterseiten verwenden,
         // falls Elemente überschrieben wurden.
         for (var p2 = 0; p2 < doc.pages.length; p2++) {
             if (!doc.pages[p2].appliedMaster || doc.pages[p2].appliedMaster.name !== masterName) continue;
@@ -780,13 +793,7 @@ function updateLanguageMasterVersionLabels(doc) {
                     }
                     if (!pageStory || !pageStory.isValid) continue;
                     var pageText = pageStory.contents;
-                    var newPageText = pageText;
-                    if (/Artikelnummer(_| )?v?\d{4}/i.test(newPageText)) {
-                        newPageText = newPageText.replace(/Artikelnummer(_| )?v?\d{4}/ig, versionLabel);
-                    }
-                    if (/%VERSION%/i.test(newPageText)) {
-                        newPageText = newPageText.replace(/%VERSION%/gi, versionLabel);
-                    }
+                    var newPageText = updateVersionStrings(pageText, versionLabel);
                     if (newPageText !== pageText) {
                         pageStory.contents = newPageText;
                     }
