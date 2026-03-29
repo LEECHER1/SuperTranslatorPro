@@ -939,7 +939,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
             finalTranslations[i] = ""; 
         } else if (tm[selectedLang][xml]) {
-            finalTranslations[i] = tm[selectedLang][xml];
+            finalTranslations[i] = normalizeTranslatedXML(tm[selectedLang][xml]);
             globalStats.savedChars += textOnlyLength;
         } else {
             deepLQueue.push({ index: i, xml: xml, len: textOnlyLength });
@@ -958,6 +958,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             for(var q=0; q < deepLQueue.length; q++) {
                 var trXML = translatedBatch[q];
                 if (trXML) { 
+                    trXML = normalizeTranslatedXML(trXML);
                     finalTranslations[deepLQueue[q].index] = trXML;
                     tm[selectedLang][deepLQueue[q].xml] = trXML;
                     tmUpdated = true;
@@ -1089,12 +1090,19 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
             }
             
             var parsedObj = eval("(" + resultJSON + ")");
-            if (parsedObj && parsedObj.translations) { for (var k = 0; k < parsedObj.translations.length; k++) translated.push(parsedObj.translations[k].text); } 
+            if (parsedObj && parsedObj.translations) { for (var k = 0; k < parsedObj.translations.length; k++) translated.push(normalizeTranslatedXML(parsedObj.translations[k].text)); } 
             else { alert("Fehler bei DeepL Batch:\n" + resultJSON); return null; }
         } catch (e) { alert("Verbindungsfehler im Batch!\n" + e.message); return null; }
         finally { try { payloadFile.remove(); } catch(e){} }
     }
     return translated;
+}
+
+function normalizeTranslatedXML(xml) {
+    if (!xml || xml === "") return xml;
+    return xml.replace(/<root>\s+/g, '<root>')
+              .replace(/(<(?:t|nt)[^>]*>)\s+/g, '$1')
+              .replace(/(<root>)\s+/g, '$1');
 }
 
 function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
