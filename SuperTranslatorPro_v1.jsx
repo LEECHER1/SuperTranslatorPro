@@ -1,7 +1,7 @@
 #targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.8 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.9 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.8";
+var SCRIPT_VERSION = "28.9";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -3006,7 +3006,7 @@ function updateTOCForLanguage(doc, langCode, newStartPage) {
     } catch(e) {}
 }
 
-function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
+function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globalParkedImages, textTargets) {
     try {
         app.findGrepPreferences = NothingEnum.nothing;
         app.changeGrepPreferences = NothingEnum.nothing;
@@ -3030,33 +3030,47 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
 
         try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.itemLayer.visible = true; } catch (e4) {}
 
-        app.findGrepPreferences.findWhat = "###IMG_\\s*\\d+\\s*###";
-        var allFoundImages = doc.findGrep();
-        for (var f = allFoundImages.length - 1; f >= 0; f--) {
-            var placeholderRange = allFoundImages[f];
-            var match = placeholderRange.contents.match(/IMG_\s*(\d+)/);
-            if (!match) continue;
-            var imgID = match[1];
-            var targetImageInStorage = null;
-            var storageItems = storageEnv.frame.allPageItems;
-            for (var j = 0; j < storageItems.length; j++) {
-                if (storageItems[j].label === "TMP_IMG_" + imgID) {
-                    targetImageInStorage = storageItems[j];
-                    break;
-                }
+        for (var imgIdx = globalParkedImages.length - 1; imgIdx >= 0; imgIdx--) {
+            var parkedImage = globalParkedImages[imgIdx];
+            app.findGrepPreferences.findWhat = "[ \t]*###IMG_\\s*" + parkedImage.id + "\\s*###[ \t]*";
+            var imgResults = doc.findGrep();
+            if (imgResults.length > 0) {
+                try {
+                    if (parkedImage.character && parkedImage.character.isValid) {
+                        parkedImage.character.move(LocationOptions.AFTER, imgResults[0].insertionPoints.item(0));
+                        imgResults[0].remove();
+                        continue;
+                    }
+                } catch (e5) {}
             }
-            if (targetImageInStorage !== null) {
+
+            var targetImageInStorage = null;
+            try {
+                var storageItems = storageEnv.frame.allPageItems;
+                for (var j = 0; j < storageItems.length; j++) {
+                    if (storageItems[j].label === "TMP_IMG_" + parkedImage.id) {
+                        targetImageInStorage = storageItems[j];
+                        break;
+                    }
+                }
+            } catch (e6) {}
+
+            if (targetImageInStorage !== null && imgResults.length > 0) {
                 try {
                     var targetChar = targetImageInStorage.parent;
                     while (targetChar && targetChar.constructor.name !== "Character" && targetChar.constructor.name !== "Story" && targetChar.constructor.name !== "Application") targetChar = targetChar.parent;
                     if (targetChar && targetChar.constructor.name === "Character") {
-                        targetChar.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
-                        placeholderRange.remove();
+                        targetChar.move(LocationOptions.AFTER, imgResults[0].insertionPoints.item(0));
+                        imgResults[0].remove();
                     } else {
-                        targetImageInStorage.parent.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
-                        placeholderRange.remove();
+                        targetImageInStorage.parent.move(LocationOptions.AFTER, imgResults[0].insertionPoints.item(0));
+                        imgResults[0].remove();
                     }
-                } catch (e5) {}
+                } catch (e7) {}
+            } else if (textTargets && textTargets.length > 0) {
+                try {
+                    if (parkedImage.character && parkedImage.character.isValid) parkedImage.character.move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1));
+                } catch (e8) {}
             }
         }
     } catch (restoreErr) {
@@ -3127,7 +3141,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         for (var s = 0; s < textTargetsRaw.length; s++) addTarget(textTargetsRaw[s]);
     }
 
-    var globalParkedTables = []; var tableCounter = 0; var imageCounter = 0;
+    var globalParkedTables = []; var globalParkedImages = []; var tableCounter = 0; var imageCounter = 0;
 
     try {
         for (var i = 0; i < textTargets.length; i++) {
@@ -3168,6 +3182,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                     
                     var p = anchorChar.parent; var idx = anchorChar.index;
                     anchorChar.move(LocationOptions.AFTER, storageEnv.frame.insertionPoints.item(-1));
+                    globalParkedImages.push({ id: imgID, character: anchorChar });
                     p.insertionPoints.item(idx).contents = marker;
 
                     try {
@@ -3301,7 +3316,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
         updateProgress(95, "Stelle Tabellen und Bilder wieder her...", overEndPct, null);
     } finally {
-        restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets);
+        restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globalParkedImages, textTargets);
     }
 
     updateProgress(98, "Prüfe auf Textübersatz (Auto-Fit)...", overEndPct, null);
