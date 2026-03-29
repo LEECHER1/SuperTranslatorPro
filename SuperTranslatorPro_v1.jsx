@@ -590,8 +590,10 @@ function runMasterSpellingCheck(doc) {
             file1.remove();
 
             if (resultStr && resultStr.indexOf('"matches"') !== -1) {
-                var parsed = JSON.parse(resultStr);
-                if (parsed && parsed.matches && parsed.matches.length > 0) {
+                var parsed = eval("(" + resultStr + ")");
+                if (parsed && parsed.language && parsed.language.detectedLanguage && parsed.language.detectedLanguage.code && parsed.language.detectedLanguage.code.indexOf("de") !== 0) {
+                    // Not German, skip
+                } else if (parsed && parsed.matches && parsed.matches.length > 0) {
                     for (var m = 0; m < parsed.matches.length; m++) {
                         totalErrors++;
                         if (findings.length < 15) {
@@ -605,10 +607,11 @@ function runMasterSpellingCheck(doc) {
                 }
             }
             
-            // Schutz vor Blockierung durch die kostenlose API (Max. 20 Anfragen / Minute)
-            $.sleep(1200); 
         } catch (e) {
             // Ignoriere Fehler pro Textblock
+        } finally {
+            // Schutz vor Blockierung durch die kostenlose API (Max. 20 Anfragen / Minute)
+            $.sleep(1200);
         }
     }
     progressWin.close();
