@@ -1053,6 +1053,23 @@ function replacePageFrameSegmentText(page, frameIndex, oldText, newText) {
             return true;
         }
 
+        var contents = story.contents;
+        if (contents && oldText && oldText !== "") {
+            var normalizedOld = oldText.replace(/\n/g, '\r');
+            var fallbackPos = contents.indexOf(normalizedOld);
+            if (fallbackPos === -1 && oldText.indexOf('\r') !== -1) {
+                fallbackPos = contents.indexOf(oldText.replace(/\r/g, '\n'));
+            }
+            if (fallbackPos !== -1) {
+                try {
+                    var endPos = fallbackPos + normalizedOld.length - 1;
+                    var replaceRange = story.characters.itemByRange(fallbackPos, endPos);
+                    replaceRange.contents = newText;
+                    return true;
+                } catch (e) {}
+            }
+        }
+
         for (var i = 0; i < frames.length; i++) {
             var fallbackStory = getTextFrameStory(frames[i]);
             if (fallbackStory) {
@@ -1143,19 +1160,42 @@ function syncBDATextChanges(doc, config) {
             var targetFrames = targetPage.textFrames.everyItem().getElements();
             if (block.frameIndex >= targetFrames.length) continue;
             var targetFrame = targetFrames[block.frameIndex];
+            var targetStory = getTextFrameStory(targetFrame);
+            if (!targetStory) continue;
+
             var oldSegment = block.diff.oldSegment;
             var newSegment = block.diff.newSegment;
+            var segmentUpdated = false;
             if (oldSegment !== "" && oldSegment.length > 1) {
-                var translatedPairs = translateBatchDeepL([oldSegment, newSegment], deepLLang, 10, 20);
+                var oldXML = '<root>' + escapeDeepLXMLText(oldSegment) + '</root>';
+                var newXML = '<root>' + escapeDeepLXMLText(newSegment) + '</root>';
+                var translatedPairs = translateBatchDeepL([oldXML, newXML], deepLLang, 10, 20);
                 if (translatedPairs && translatedPairs.length > 1 && translatedPairs[1]) {
-                    var translatedOld = translatedPairs[0] || "";
-                    var translatedNew = translatedPairs[1];
-                    translatedOld = translatedOld.replace(/^<root>/, "").replace(/<\/root>$/, "");
-                    translatedNew = translatedNew.replace(/^<root>/, "").replace(/<\/root>$/, "");
+                    var translatedOld = decodeDeepLXMLText(translatedPairs[0] || "");
+                    var translatedNew = decodeDeepLXMLText(translatedPairs[1]);
                     if (translatedOld !== "" && replacePageFrameSegmentText(targetPage, block.frameIndex, translatedOld, translatedNew)) {
                         anyUpdated = true;
+                        segmentUpdated = true;
                     } else if (replacePageFrameSegmentText(targetPage, block.frameIndex, oldSegment, translatedNew)) {
                         anyUpdated = true;
+                        segmentUpdated = true;
+                    }
+                }
+            }
+
+            if (!segmentUpdated) {
+                var sourcePage = sourcePages[block.pageIndex];
+                var sourceFrames = sourcePage.textFrames.everyItem().getElements();
+                if (block.frameIndex < sourceFrames.length) {
+                    var sourceFrame = sourceFrames[block.frameIndex];
+                    var sourceStory = getTextFrameStory(sourceFrame);
+                    if (sourceStory) {
+                        var xml = buildTextObjectXML(sourceStory);
+                        var translatedXMLs = translateBatchDeepL([xml], deepLLang, 10, 20);
+                        if (translatedXMLs && translatedXMLs[0]) {
+                            applyXMLtoInDesign(targetStory, translatedXMLs[0], deepLLang);
+                            anyUpdated = true;
+                        }
                     }
                 }
             }
@@ -1729,6 +1769,22 @@ function normalizeTranslatedXML(xml) {
     return xml.replace(/<root>\s+/g, '<root>')
               .replace(/(<(?:t|nt)[^>]*>)\s+/g, '$1')
               .replace(/(<root>)\s+/g, '$1');
+}
+
+function escapeDeepLXMLText(text) {
+    if (text === null || text === undefined) return "";
+    var result = String(text);
+    result = result.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    result = result.replace(/\r\n/g, '<pbr/>').replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
+    return result;
+}
+
+function decodeDeepLXMLText(xml) {
+    if (!xml) return "";
+    xml = xml.replace(/^<root>/, '').replace(/<\/root>$/, '');
+    xml = xml.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    xml = xml.replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t');
+    return xml;
 }
 
 function buildTextObjectXML(textObj) {
