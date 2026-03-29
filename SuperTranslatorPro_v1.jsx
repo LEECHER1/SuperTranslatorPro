@@ -852,7 +852,13 @@ function loadMasterSnapshot(doc) {
         file.close();
         if (!content || content === "") return null;
         var data = eval("(" + content + ")");
-        return data[getDocSnapshotKey(doc)] || null;
+        var key = getDocSnapshotKey(doc);
+        if (data[key]) return data[key];
+        if (doc.fullName && doc.fullName !== "") {
+            var alt = "UNSAVED_" + doc.name;
+            if (data[alt]) return data[alt];
+        }
+        return null;
     } catch (e) {
         return null;
     }
@@ -895,7 +901,13 @@ function loadBDASnapshot(doc) {
         file.close();
         if (!content || content === "") return null;
         var data = eval("(" + content + ")");
-        return data[getDocSnapshotKey(doc)] || null;
+        var key = getDocSnapshotKey(doc);
+        if (data[key]) return data[key];
+        if (doc.fullName && doc.fullName !== "") {
+            var alt = "UNSAVED_" + doc.name;
+            if (data[alt]) return data[alt];
+        }
+        return null;
     } catch (e) {
         return null;
     }
