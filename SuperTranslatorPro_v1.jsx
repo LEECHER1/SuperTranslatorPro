@@ -1,7 +1,7 @@
 #targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.7 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.8 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.7";
+var SCRIPT_VERSION = "28.8";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -1063,10 +1063,8 @@ function pageContainsCopyrightMarker(page) {
     if (!page || !page.isValid) return false;
     var frames = getTextFramesFromContainer(page);
     for (var i = 0; i < frames.length; i++) {
-        var story = getTextFrameStory(frames[i]);
-        if (!story || !story.isValid) continue;
         try {
-            if (String(story.contents).indexOf("©") !== -1) return true;
+            if (getTextFrameLocalContents(frames[i]).indexOf("©") !== -1) return true;
         } catch (e) {}
     }
     return false;
@@ -2518,6 +2516,18 @@ function getTextFrameStory(tf) {
     if ((!story || !story.isValid) && tf.texts && tf.texts.length > 0) story = tf.texts[0];
     if (!story || !story.isValid) return null;
     return story;
+}
+
+function getTextFrameLocalContents(tf) {
+    if (!tf || !tf.isValid) return "";
+    try {
+        if (tf.texts && tf.texts.length > 0 && tf.texts[0].isValid) {
+            return String(tf.texts[0].contents);
+        }
+    } catch (e) {}
+    var story = getTextFrameStory(tf);
+    if (!story || !story.isValid) return "";
+    try { return String(story.contents); } catch (e2) { return ""; }
 }
 
 function findAndReplaceTextInStory(story, findString, replaceString) {
