@@ -254,10 +254,15 @@ var checkTOC = panelBDA.add("checkbox", undefined, "Titelseite (Seite 1): Start-
 checkTOC.indent = 20;
 checkTOC.value = true;
 
+var btnTextUpdate = panelBDA.add("button", undefined, "Textupdate");
+btnTextUpdate.helpTip = "Aktualisiert nur den Text auf den Musterseiten ohne neue Seiten zu erzeugen.";
+btnTextUpdate.enabled = false;
+
 // START-ZUSTAND FESTLEGEN
 radioSelection.value = true;
 bdaSourceInput.enabled = false;
 checkTOC.enabled = false;
+btnTextUpdate.enabled = false;
 
 // --- UI INTERAKTIONEN ---
 radioSelection.onClick = function() {
@@ -266,6 +271,7 @@ radioSelection.onClick = function() {
     dropdownLang.enabled = true;
     bdaSourceInput.enabled = false;
     checkTOC.enabled = false;
+    btnTextUpdate.enabled = false;
 }
 
 radioPages.onClick = function() {
@@ -274,6 +280,7 @@ radioPages.onClick = function() {
     dropdownLang.enabled = true;
     bdaSourceInput.enabled = false;
     checkTOC.enabled = false;
+    btnTextUpdate.enabled = false;
 }
 
 radioBDA.onClick = function() {
@@ -282,6 +289,8 @@ radioBDA.onClick = function() {
     dropdownLang.enabled = false;
     bdaSourceInput.enabled = true;
     checkTOC.enabled = true;
+    btnTextUpdate.enabled = true;
+    btnTextUpdate.enabled = true;
 }
 
 editPages.onActivate = function() {
@@ -300,14 +309,13 @@ bdaSourceInput.onActivate = function() {
     dropdownLang.enabled = false;
     bdaSourceInput.enabled = true;
     checkTOC.enabled = true;
+    btnTextUpdate.enabled = true;
 }
 
 // --- BUTTONS UNTEN ---
 var groupButtons = myWindow.add("group"); 
 groupButtons.alignment = "center";
 var btnTranslate = groupButtons.add("button", undefined, "Übersetzung starten");
-var btnTextUpdate = groupButtons.add("button", undefined, "Textupdate");
-btnTextUpdate.helpTip = "Aktualisiert nur den Text auf den Musterseiten ohne neue Seiten zu erzeugen.";
 var btnCancel = groupButtons.add("button", undefined, "Schließen");
 
 // --- EINSTELLUNGEN FENSTER ---
