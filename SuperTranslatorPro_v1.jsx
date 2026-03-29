@@ -702,13 +702,14 @@ function buildLanguageToolCorrectedText(originalText, matches) {
     return corrected;
 }
 
-function buildMarkedGermanContext(originalText, offset, length) {
+function buildGermanContextParts(originalText, offset, length) {
     var start = Math.max(0, offset - 45);
     var end = Math.min(originalText.length, offset + length + 45);
-    var before = originalText.substring(start, offset);
-    var issueText = originalText.substring(offset, offset + length);
-    var after = originalText.substring(offset + length, end);
-    return makeGermanTextVisible(before + "[[" + issueText + "]]" + after);
+    return {
+        before: makeGermanTextVisible(originalText.substring(start, offset)),
+        issue: makeGermanTextVisible(originalText.substring(offset, offset + length)),
+        after: makeGermanTextVisible(originalText.substring(offset + length, end))
+    };
 }
 
 function buildLanguageToolEdits(originalText, matches) {
@@ -727,7 +728,7 @@ function buildLanguageToolEdits(originalText, matches) {
             replacement: matchObj.replacements[0].value,
             issueText: issueText,
             message: matchObj.message || "LanguageTool-Hinweis",
-            contextMarked: buildMarkedGermanContext(originalText, matchObj.offset, matchObj.length)
+            contextParts: buildGermanContextParts(originalText, matchObj.offset, matchObj.length)
         });
     }
 
@@ -808,39 +809,60 @@ function openGermanFrameCorrectionDialog(corrections) {
 
         focusGermanFinding(correction);
 
-        var dlg = new Window("dialog", "Deutsch korrigieren " + (i + 1) + "/" + corrections.length);
+        var dlg = new Window("dialog", "Suchen/Ersetzen Deutsch " + (i + 1) + "/" + corrections.length);
         dlg.orientation = "column";
         dlg.alignChildren = "fill";
 
         dlg.add("statictext", undefined, correction.location);
-        var msgText = dlg.add("statictext", undefined, correction.issueCount + " konkrete Hinweis(e)");
-        msgText.preferredSize.width = 440;
+        var summaryText = dlg.add("statictext", undefined, correction.issueCount + " konkrete Hinweis(e) in diesem Textrahmen");
+        summaryText.preferredSize.width = 440;
 
         dlg.add("statictext", undefined, "Auffälligkeiten:");
         var issueList = dlg.add("listbox", undefined, [], { multiselect: false });
-        issueList.preferredSize = [440, 100];
+        issueList.preferredSize = [440, 90];
         for (var issueIndex = 0; issueIndex < correction.edits.length; issueIndex++) {
             var issue = correction.edits[issueIndex];
             issueList.add("item", (issueIndex + 1) + ". " + makeGermanTextVisible(issue.issueText) + " -> " + makeGermanTextVisible(issue.replacement));
         }
 
-        dlg.add("statictext", undefined, "Markierter Kontext:");
-        var contextInput = dlg.add("edittext", undefined, "", { multiline: true, readonly: true });
-        contextInput.preferredSize = [440, 70];
+        var detailPanel = dlg.add("panel", undefined, "Aktueller Treffer");
+        detailPanel.orientation = "column";
+        detailPanel.alignChildren = "fill";
 
-        dlg.add("statictext", undefined, "Original:");
-        var originalInput = dlg.add("edittext", undefined, correction.originalText, { multiline: true, readonly: true });
-        originalInput.preferredSize = [440, 90];
+        detailPanel.add("statictext", undefined, "Hinweis:");
+        var messageBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
+        messageBox.preferredSize = [440, 42];
 
-        dlg.add("statictext", undefined, "Korrigiert:");
-        var correctedInput = dlg.add("edittext", undefined, correction.correctedText, { multiline: true, readonly: true });
-        correctedInput.preferredSize = [440, 90];
+        detailPanel.add("statictext", undefined, "Fehlerwort:");
+        var issueWord = detailPanel.add("statictext", undefined, "");
+        issueWord.preferredSize.width = 440;
+        issueWord.graphics.font = ScriptUI.newFont(issueWord.graphics.font.family, "BOLD", 18);
+        issueWord.graphics.foregroundColor = issueWord.graphics.newPen(issueWord.graphics.PenType.SOLID_COLOR, [0.85, 0.15, 0.15], 1);
+
+        detailPanel.add("statictext", undefined, "Vorschlag:");
+        var replacementWord = detailPanel.add("statictext", undefined, "");
+        replacementWord.preferredSize.width = 440;
+        replacementWord.graphics.font = ScriptUI.newFont(replacementWord.graphics.font.family, "BOLD", 16);
+
+        detailPanel.add("statictext", undefined, "Text davor:");
+        var beforeBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
+        beforeBox.preferredSize = [440, 44];
+
+        detailPanel.add("statictext", undefined, "Text danach:");
+        var afterBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
+        afterBox.preferredSize = [440, 44];
+
+        var infoText = dlg.add("statictext", undefined, "Mit 'Uebernehmen' werden alle Vorschläge dieses Textrahmens formatierungserhaltend angewendet.");
+        infoText.preferredSize.width = 440;
 
         function updateIssuePreview() {
             if (!issueList.selection) return;
             var selectedIssue = correction.edits[issueList.selection.index];
-            msgText.text = selectedIssue.message;
-            contextInput.text = selectedIssue.contextMarked;
+            messageBox.text = selectedIssue.message;
+            issueWord.text = selectedIssue.contextParts.issue;
+            replacementWord.text = makeGermanTextVisible(selectedIssue.replacement);
+            beforeBox.text = selectedIssue.contextParts.before;
+            afterBox.text = selectedIssue.contextParts.after;
         }
         if (issueList.items.length > 0) {
             issueList.selection = 0;
@@ -1084,20 +1106,6 @@ function runMasterSpellingCheck(doc) {
         alert(okMessage);
         return;
     }
-
-    var message = "Korrekturpruefung fuer Dokumentseiten mit deutscher Musterseite abgeschlossen.\nTextrahmen mit Vorschlaegen: " + corrections.length + "\n\n";
-    var previewCount = Math.min(10, corrections.length);
-    for (var lineIndex = 0; lineIndex < previewCount; lineIndex++) {
-        message += "- " + corrections[lineIndex].location + "\n";
-    }
-    if (corrections.length > previewCount) {
-        message += "\n...weitere Textrahmen vorhanden.";
-    }
-    if (skippedTexts > 0) {
-        message += "\n\nNicht geprüft: " + skippedTexts + " Textblöcke.";
-    }
-    message += "\n\nDanach oeffnet sich ein Dialog mit Original- und Korrekturtext pro deutschem Textrahmen.";
-    alert(message);
 
     var correctionResult = openGermanFrameCorrectionDialog(corrections);
     var finalMessage = "Korrekturdialog beendet.\nErsetzt: " + correctionResult.replaced + "\nUebersprungen: " + correctionResult.skipped;
