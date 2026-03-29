@@ -588,6 +588,7 @@ btnTranslate.onClick = function() {
 // --- 4. HAUPTSTEUERUNG ---
 function runMainProcess(doc, config) {
     updateLanguageMasterVersionLabels(doc);
+    syncMasterTextChanges(doc);
     if (config.mode === "BDA") {
         return runBDAMode(doc, config);
     } else {
@@ -801,6 +802,198 @@ function updateLanguageMasterVersionLabels(doc) {
             }
         }
     }
+}
+
+function getMasterSnapshotFile() {
+    return new File(Folder.userData + "/SuperTranslatorPRO_MasterSnapshot.json");
+}
+
+function getDocSnapshotKey(doc) {
+    try {
+        if (doc.fullName && doc.fullName !== "") return doc.fullName.fsName;
+    } catch (e) {}
+    return "UNSAVED_" + doc.name;
+}
+
+function loadMasterSnapshot(doc) {
+    var file = getMasterSnapshotFile();
+    if (!file.exists) return null;
+    try {
+        file.encoding = "UTF-8";
+        file.open("r");
+        var content = file.read();
+        file.close();
+        if (!content || content === "") return null;
+        var data = eval("(" + content + ")");
+        return data[getDocSnapshotKey(doc)] || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveMasterSnapshot(doc, snapshot) {
+    var file = getMasterSnapshotFile();
+    var data = {};
+    if (file.exists) {
+        try {
+            file.encoding = "UTF-8";
+            file.open("r");
+            var content = file.read();
+            file.close();
+            if (content && content !== "") data = eval("(" + content + ")");
+        } catch (e) {
+            data = {};
+        }
+    }
+    data[getDocSnapshotKey(doc)] = snapshot;
+    try {
+        file.encoding = "UTF-8";
+        file.open("w");
+        file.write(serializeJSON(data));
+        file.close();
+    } catch (e) {}
+}
+
+function serializeJSON(obj) {
+    if (obj === null) return "null";
+    if (typeof obj === "string") return '"' + obj.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n") + '"';
+    if (typeof obj === "number" || typeof obj === "boolean") return String(obj);
+    if (obj instanceof Array) {
+        var items = [];
+        for (var i = 0; i < obj.length; i++) items.push(serializeJSON(obj[i]));
+        return "[" + items.join(",") + "]";
+    }
+    var pairs = [];
+    for (var key in obj) {
+        if (!obj.hasOwnProperty(key)) continue;
+        pairs.push(serializeJSON(key) + ":" + serializeJSON(obj[key]));
+    }
+    return "{" + pairs.join(",") + "}";
+}
+
+function getMasterLang(masterName) {
+    var match = masterName.match(/[-_]([a-z]{2})(?:[-_]|$)/i);
+    return match ? match[1].toLowerCase() : null;
+}
+
+function getMasterPrefix(masterName) {
+    var match = masterName.match(/^(.*?)(?:[-_][a-z]{2})(?:[-_]|$)/i);
+    return match ? match[1] : masterName;
+}
+
+function buildMasterTextSnapshot(doc) {
+    var snapshot = {};
+    var masterSpreads = doc.masterSpreads;
+    for (var m = 0; m < masterSpreads.length; m++) {
+        var master = masterSpreads[m];
+        var pages = master.pages;
+        var pagesData = [];
+        for (var p = 0; p < pages.length; p++) {
+            var texts = [];
+            try {
+                var frames = pages[p].textFrames.everyItem().getElements();
+                for (var f = 0; f < frames.length; f++) {
+                    var tf = frames[f];
+                    try {
+                        var story = null;
+                        try { story = tf.parentStory; } catch (e) { story = null; }
+                        if ((!story || !story.isValid) && tf.texts && tf.texts.length > 0) story = tf.texts[0];
+                        if (story && story.isValid) texts.push(story.contents);
+                    } catch (e) {}
+                }
+            } catch (e) {}
+            pagesData.push(texts);
+        }
+        snapshot[master.name] = pagesData;
+    }
+    return snapshot;
+}
+
+function getRelatedTargetMasterSpreads(doc, sourceMasterName) {
+    var sourcePrefix = getMasterPrefix(sourceMasterName);
+    var result = [];
+    var masterSpreads = doc.masterSpreads;
+    for (var m = 0; m < masterSpreads.length; m++) {
+        var masterName = masterSpreads[m].name;
+        if (masterName === sourceMasterName) continue;
+        if (getMasterPrefix(masterName) !== sourcePrefix) continue;
+        var lang = getMasterLang(masterName);
+        if (!lang || lang === "de") continue;
+        result.push(masterSpreads[m]);
+    }
+    return result;
+}
+
+function getDeepLLangCode(code) {
+    var deepLLang = code.toUpperCase();
+    if (deepLLang === "EN") return "EN-US";
+    if (deepLLang === "PT") return "PT-PT";
+    return deepLLang;
+}
+
+function replaceMasterFrameText(masterSpread, pageIndex, frameIndex, contents) {
+    try {
+        var page = masterSpread.pages[pageIndex];
+        if (!page) return false;
+        var frames = page.textFrames.everyItem().getElements();
+        if (frameIndex >= frames.length) return false;
+        var tf = frames[frameIndex];
+        var story = null;
+        try { story = tf.parentStory; } catch (e) { story = null; }
+        if ((!story || !story.isValid) && tf.texts && tf.texts.length > 0) story = tf.texts[0];
+        if (!story || !story.isValid) return false;
+        story.contents = contents;
+        return true;
+    } catch (e) { return false; }
+}
+
+function syncMasterTextChanges(doc) {
+    var prevSnapshot = loadMasterSnapshot(doc);
+    var currentSnapshot = buildMasterTextSnapshot(doc);
+    if (!prevSnapshot) {
+        saveMasterSnapshot(doc, currentSnapshot);
+        return;
+    }
+    var changesByLang = {};
+    for (var masterName in currentSnapshot) {
+        if (!currentSnapshot.hasOwnProperty(masterName)) continue;
+        if (!masterName.match(/[-_]de(?:[-_]|$)/i)) continue;
+        var currentPages = currentSnapshot[masterName];
+        var previousPages = prevSnapshot[masterName] || [];
+        for (var p = 0; p < currentPages.length; p++) {
+            var currentFrames = currentPages[p] || [];
+            var previousFrames = previousPages[p] || [];
+            for (var f = 0; f < currentFrames.length; f++) {
+                var currentText = currentFrames[f] || "";
+                var previousText = previousFrames[f] || "";
+                if (currentText !== previousText) {
+                    var targets = getRelatedTargetMasterSpreads(doc, masterName);
+                    for (var t = 0; t < targets.length; t++) {
+                        var targetMaster = targets[t];
+                        var lang = getMasterLang(targetMaster.name);
+                        if (!lang) continue;
+                        if (!changesByLang[lang]) changesByLang[lang] = [];
+                        changesByLang[lang].push({ master: targetMaster, pageIndex: p, frameIndex: f, text: currentText });
+                    }
+                }
+            }
+        }
+    }
+    for (var langCode in changesByLang) {
+        if (!changesByLang.hasOwnProperty(langCode)) continue;
+        var blocks = changesByLang[langCode];
+        if (blocks.length === 0) continue;
+        var deepLLang = getDeepLLangCode(langCode);
+        var texts = [];
+        for (var b = 0; b < blocks.length; b++) texts.push(blocks[b].text);
+        var translated = translateBatchDeepL(texts, deepLLang, 10, 20);
+        if (!translated) continue;
+        for (var b = 0; b < blocks.length; b++) {
+            if (!translated[b]) continue;
+            replaceMasterFrameText(blocks[b].master, blocks[b].pageIndex, blocks[b].frameIndex, translated[b]);
+        }
+    }
+    saveMasterSnapshot(doc, currentSnapshot);
 }
 
 // --- 5B. TOC RÖNTGEN-UPDATE LOGIK ---
