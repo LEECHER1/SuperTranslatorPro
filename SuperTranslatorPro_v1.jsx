@@ -502,25 +502,26 @@ function shouldCheckGermanText(text) {
     return lettersOnly.length >= 3;
 }
 
-function addGermanSpellTarget(targets, seenStoryIds, story, locationLabel, page, frame) {
+function addGermanSpellTarget(targets, seenTextIds, textObj, story, locationLabel, page, frame) {
+    if (!textObj || !textObj.isValid) return;
     if (!story || !story.isValid) return;
     var storyText = "";
-    try { storyText = story.contents; } catch (e) { storyText = ""; }
+    try { storyText = textObj.contents; } catch (e) { storyText = ""; }
     if (!shouldCheckGermanText(storyText)) return;
 
-    var storyId = null;
-    try { storyId = story.id; } catch (e) { storyId = null; }
-    if (storyId !== null && storyId !== undefined) {
-        if (seenStoryIds[storyId]) return;
-        seenStoryIds[storyId] = true;
+    var textId = null;
+    try { textId = textObj.id; } catch (e2) { textId = null; }
+    if (textId !== null && textId !== undefined) {
+        if (seenTextIds[textId]) return;
+        seenTextIds[textId] = true;
     }
 
-    targets.push({ story: story, text: storyText, location: locationLabel, page: page || null, frame: frame || null });
+    targets.push({ textObj: textObj, story: story, text: storyText, location: locationLabel, page: page || null, frame: frame || null });
 }
 
 function collectGermanSpellTargets(doc) {
     var targets = [];
-    var seenStoryIds = {};
+    var seenTextIds = {};
 
     for (var pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {
         var page = doc.pages[pageIndex];
@@ -531,11 +532,61 @@ function collectGermanSpellTargets(doc) {
             if (!pageItems[pf] || !pageItems[pf].isValid) continue;
             if (pageItems[pf].constructor.name !== "TextFrame") continue;
             var pageStory = getTextFrameStory(pageItems[pf]);
-            addGermanSpellTarget(targets, seenStoryIds, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Master " + page.appliedMaster.name, page, pageItems[pf]);
+            var textObj = null;
+            try { if (pageItems[pf].texts && pageItems[pf].texts.length > 0) textObj = pageItems[pf].texts[0]; } catch (e3) { textObj = null; }
+            addGermanSpellTarget(targets, seenTextIds, textObj, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Master " + page.appliedMaster.name, page, pageItems[pf]);
         }
     }
 
     return targets;
+}
+
+function getGermanSpellLanguage(doc) {
+    var exactNames = [
+        "Deutsch",
+        "Deutsch: Rechtschreibreform 2006",
+        "German",
+        "German: 2006 Reform"
+    ];
+    var collections = [];
+    try { collections.push(doc.languagesWithVendors); } catch (e) {}
+    try { collections.push(app.languagesWithVendors); } catch (e2) {}
+
+    for (var c = 0; c < collections.length; c++) {
+        var coll = collections[c];
+        if (!coll) continue;
+        for (var i = 0; i < exactNames.length; i++) {
+            try {
+                var candidate = coll.itemByName(exactNames[i]);
+                if (candidate && candidate.isValid) return candidate;
+            } catch (e3) {}
+        }
+        try {
+            for (var j = 0; j < coll.length; j++) {
+                var lang = coll[j];
+                if (!lang || !lang.isValid) continue;
+                var langName = "";
+                try { langName = String(lang.name); } catch (e4) { langName = ""; }
+                if (langName.match(/deutsch|german/i)) return lang;
+            }
+        } catch (e5) {}
+    }
+    return null;
+}
+
+function applyGermanLanguageToTextTarget(item, germanLanguage) {
+    if (!item || !item.textObj || !item.textObj.isValid || !germanLanguage || !germanLanguage.isValid) return false;
+    try {
+        item.textObj.appliedLanguage = germanLanguage;
+        return true;
+    } catch (e) {
+        try {
+            item.textObj.texts[0].appliedLanguage = germanLanguage;
+            return true;
+        } catch (e2) {
+            return false;
+        }
+    }
 }
 
 function buildInDesignSpellingFinding(item, errorText) {
@@ -550,6 +601,7 @@ function buildInDesignSpellingFinding(item, errorText) {
     length = issueText.length;
 
     return {
+        textObj: item.textObj,
         story: item.story,
         errorText: errorText,
         page: item.page,
@@ -720,6 +772,12 @@ function runMasterSpellingCheck(doc) {
         return;
     }
 
+    var germanLanguage = getGermanSpellLanguage(doc);
+    if (!germanLanguage || !germanLanguage.isValid) {
+        alert("Keine deutsche InDesign-Sprache gefunden. Bitte pruefe, ob ein deutsches Woerterbuch in InDesign installiert ist.");
+        return;
+    }
+
     var progressWin = new Window("palette", "Deutsche Rechtschreibprüfung");
     progressWin.orientation = "column";
     progressWin.alignChildren = "fill";
@@ -738,7 +796,11 @@ function runMasterSpellingCheck(doc) {
         progressTextLocal.text = "Prüfe Seite mit deutscher Musterseite: Text " + (i + 1) + " von " + targets.length + "...";
         progressWin.update();
         try {
-            var errors = item.story.spellingErrors;
+            if (!applyGermanLanguageToTextTarget(item, germanLanguage)) {
+                skippedTexts++;
+                continue;
+            }
+            var errors = item.textObj.spellingErrors;
             if (!errors || errors.length === 0) continue;
             for (var m = 0; m < errors.length; m++) {
                 try {
