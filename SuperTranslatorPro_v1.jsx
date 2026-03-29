@@ -489,11 +489,6 @@ btnSettings.onClick = function() {
 btnCancel.onClick = function() { myWindow.close(); }
 
 function runMasterSpellingCheck(doc) {
-    if (!apiKey || apiKey === "") {
-        alert("Bitte gib in den Einstellungen zuerst deinen DeepL API-Key ein.");
-        return;
-    }
-
     var masterSpreads = doc.masterSpreads;
     var germanMasterNames = {};
     var foundGermanMaster = false;
@@ -510,7 +505,7 @@ function runMasterSpellingCheck(doc) {
     }
 
     // Erstelle ein minimales Fortschrittsfenster für den DeepL Check
-    var progressWin = new Window("palette", "DeepL Rechtschreibprüfung");
+    var progressWin = new Window("palette", "LanguageTool Rechtschreibprüfung");
     progressWin.orientation = "column";
     progressWin.alignChildren = "fill";
     var progressText = progressWin.add("statictext", undefined, "Analysiere Texte...");
@@ -560,9 +555,8 @@ function runMasterSpellingCheck(doc) {
         return;
     }
 
-    // DeepL API Setup für Roundtrip-Rechtschreibprüfung (DE -> EN -> DE)
-    var isFree = apiKey.indexOf(":fx") !== -1;
-    var endpoint = isFree ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
+    // LanguageTool API Setup für echte Rechtschreib- und Grammatikprüfung
+    var endpoint = "https://api.languagetool.org/v2/check";
 
     // Limit prüfen
     var maxChecks = textsToCheck.length > 50 ? 50 : textsToCheck.length; 
@@ -575,70 +569,44 @@ function runMasterSpellingCheck(doc) {
         progressWin.update();
 
         var originalText = item.text.replace(/\r/g, "\n"); 
+        var safeText = encodeURIComponent(originalText);
         
         try {
-            // STEP 1: Übersetze DE -> EN
-            var payload1 = { text: [originalText], target_lang: "EN-GB", source_lang: "DE" };
-            var file1 = new File(Folder.temp + "/deepl_spell_1_" + new Date().getTime() + ".json");
-            file1.open("w"); file1.encoding = "UTF-8"; file1.write(JSON.stringify(payload1)); file1.close();
-
-            var curlCmd1 = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -H 'Content-Type: application/json' -d @'" + file1.fsName + "'";
-            var resultStr1 = "";
+            var payloadStr = "language=de-DE&level=picky&text=" + safeText;
+            var file1 = new File(Folder.temp + "/lt_spell_" + new Date().getTime() + ".txt");
+            file1.open("w"); file1.encoding = "UTF-8"; file1.write(payloadStr); file1.close();
+            
+            var curlCmd = "curl -sS -X POST '" + endpoint + "' -d @'" + file1.fsName + "'";
+            var resultStr = "";
             if (File.fs === "Macintosh") {
-                resultStr1 = app.doScript('do shell script "' + curlCmd1.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+                resultStr = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
             } else {
-                var out1 = new File(Folder.temp + "/deepl_out1_" + new Date().getTime() + ".json");
-                var vbs1 = 'Set WshShell = CreateObject("WScript.Shell")\n' +
-                           'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Authorization: DeepL-Auth-Key ' + apiKey + '"" -H ""Content-Type: application/json"" -d @""" & "' + file1.fsName + '" & """ > """ & "' + out1.fsName + '" & """", 0, True\n';
+                var out1 = new File(Folder.temp + "/lt_out_" + new Date().getTime() + ".json");
+                var vbs1 = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
+                           'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -d @""" & "' + file1.fsName + '" & """ > """ & "' + out1.fsName + '" & """", 0, True\n';
                 app.doScript(vbs1, ScriptLanguage.VISUAL_BASIC_SCRIPT);
-                if (out1.exists) { out1.open("r"); out1.encoding = "UTF-8"; resultStr1 = out1.read(); out1.close(); out1.remove(); }
+                if (out1.exists) { out1.open("r"); out1.encoding = "UTF-8"; resultStr = out1.read(); out1.close(); out1.remove(); }
             }
             file1.remove();
 
-            if (resultStr1 && resultStr1.indexOf('"translations"') !== -1) {
-                var parsed1 = JSON.parse(resultStr1);
-                if (parsed1 && parsed1.translations && parsed1.translations.length > 0) {
-                    var englishText = parsed1.translations[0].text;
-                    
-                    // STEP 2: Übersetze EN -> DE
-                    var payload2 = { text: [englishText], target_lang: "DE", source_lang: "EN" };
-                    var file2 = new File(Folder.temp + "/deepl_spell_2_" + new Date().getTime() + ".json");
-                    file2.open("w"); file2.encoding = "UTF-8"; file2.write(JSON.stringify(payload2)); file2.close();
-
-                    var curlCmd2 = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -H 'Content-Type: application/json' -d @'" + file2.fsName + "'";
-                    var resultStr2 = "";
-                    if (File.fs === "Macintosh") {
-                        resultStr2 = app.doScript('do shell script "' + curlCmd2.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
-                    } else {
-                        var out2 = new File(Folder.temp + "/deepl_out2_" + new Date().getTime() + ".json");
-                        var vbs2 = 'Set WshShell = CreateObject("WScript.Shell")\n' +
-                                   'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Authorization: DeepL-Auth-Key ' + apiKey + '"" -H ""Content-Type: application/json"" -d @""" & "' + file2.fsName + '" & """ > """ & "' + out2.fsName + '" & """", 0, True\n';
-                        app.doScript(vbs2, ScriptLanguage.VISUAL_BASIC_SCRIPT);
-                        if (out2.exists) { out2.open("r"); out2.encoding = "UTF-8"; resultStr2 = out2.read(); out2.close(); out2.remove(); }
-                    }
-                    file2.remove();
-
-                    if (resultStr2 && resultStr2.indexOf('"translations"') !== -1) {
-                        var parsed2 = JSON.parse(resultStr2);
-                        if (parsed2 && parsed2.translations && parsed2.translations.length > 0) {
-                            var correctedText = parsed2.translations[0].text;
-                            
-                            // Bereinige Whitespaces für einen sauberen Vergleich
-                            var cleanOriginal = originalText.replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
-                            var cleanCorrected = correctedText.replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
-                            
-                            if (cleanOriginal !== cleanCorrected && cleanOriginal.toLowerCase() !== cleanCorrected.toLowerCase()) {
-                                totalErrors++;
-                                if (findings.length < 15) {
-                                    var shortOrig = originalText.length > 40 ? originalText.substring(0, 40).replace(/\n/g,"") + "..." : originalText.replace(/\n/g,"");
-                                    var shortCorr = correctedText.length > 40 ? correctedText.substring(0, 40).replace(/\n/g,"") + "..." : correctedText.replace(/\n/g,"");
-                                    findings.push("Vorschlag für " + item.location + ":\n   Alt: '" + shortOrig + "'\n   Neu: '" + shortCorr + "'");
-                                }
-                            }
+            if (resultStr && resultStr.indexOf('"matches"') !== -1) {
+                var parsed = JSON.parse(resultStr);
+                if (parsed && parsed.matches && parsed.matches.length > 0) {
+                    for (var m = 0; m < parsed.matches.length; m++) {
+                        totalErrors++;
+                        if (findings.length < 15) {
+                            var matchObj = parsed.matches[m];
+                            var contextStr = matchObj.context.text;
+                            var errWord = contextStr.substring(matchObj.context.offset, matchObj.context.offset + matchObj.context.length);
+                            var replacement = matchObj.replacements.length > 0 ? matchObj.replacements[0].value : "kein Vorschlag";
+                            findings.push("Stelle: " + item.location + "\nFehler: '" + errWord + "' (" + matchObj.message + ")\nVorschlag: '" + replacement + "'");
                         }
                     }
                 }
             }
+            
+            // Schutz vor Blockierung durch die kostenlose API (Max. 20 Anfragen / Minute)
+            $.sleep(1200); 
         } catch (e) {
             // Ignoriere Fehler pro Textblock
         }
@@ -646,11 +614,11 @@ function runMasterSpellingCheck(doc) {
     progressWin.close();
 
     if (totalErrors === 0) {
-        alert("DeepL-Prüfung abgeschlossen.\n\nEs wurden keine Fehler (oder keine Verbesserungsvorschläge) gefunden.");
+        alert("LanguageTool-Prüfung abgeschlossen.\n\nEs wurden keine Fehler oder Verbesserungsvorschläge gefunden.");
         return;
     }
 
-    var message = "DeepL-Prüfung abgeschlossen.\nVerbesserungsvorschläge gefunden: " + totalErrors + "\n\n";
+    var message = "LanguageTool-Prüfung abgeschlossen.\nVerbesserungsvorschläge gefunden: " + totalErrors + "\n\n";
     for (var k = 0; k < findings.length; k++) {
         message += findings[k] + "\n\n";
     }
@@ -2128,8 +2096,13 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
                 var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
                 resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
             } else {
-                alert("translateBatchDeepLPlain: Windows path not implemented.");
-                return null;
+                var outFile = new File(Folder.temp + "/dl_out_plain_" + new Date().getTime() + ".json");
+                var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
+                          'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Authorization: DeepL-Auth-Key ' + apiKey + '"" -d @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
+                app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
+                if (outFile.exists) {
+                    outFile.encoding = "UTF-8"; outFile.open("r"); resultJSON = outFile.read(); outFile.close(); try { outFile.remove(); } catch(e){}
+                }
             }
             var parsedObj = eval("(" + resultJSON + ")");
             if (parsedObj && parsedObj.translations) {
