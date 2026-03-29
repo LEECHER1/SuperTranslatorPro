@@ -345,7 +345,8 @@ bdaSourceInput.onActivate = function() {
 var groupButtons = myWindow.add("group"); 
 groupButtons.alignment = "center";
 var btnTranslate = groupButtons.add("button", undefined, "Übersetzung starten");
-var btnSpellCheck = groupButtons.add("button", undefined, "Rechtschreibprüfung");
+var btnSpellCheck = groupButtons.add("button", undefined, "Deutsch prüfen");
+btnSpellCheck.helpTip = "Prüft deutsche Texte auf -de-Masterseiten und deren Dokumentseiten.";
 var btnCancel = groupButtons.add("button", undefined, "Schließen");
 
 btnSpellCheck.onClick = function() {
@@ -488,62 +489,205 @@ btnSettings.onClick = function() {
 
 btnCancel.onClick = function() { myWindow.close(); }
 
-function runMasterSpellingCheck(doc) {
-    var masterSpreads = doc.masterSpreads;
-    var germanMasters = [];
-    for (var m = 0; m < masterSpreads.length; m++) {
-        var name = masterSpreads[m].name;
-        if (name && name.match(/[-_]de(?:[-_]|$)/i)) {
-            germanMasters.push(masterSpreads[m]);
-        }
-    }
-    if (germanMasters.length === 0) {
-        alert("Keine deutschen Masterseiten (-de-) gefunden.");
-        return;
+function isGermanMasterName(name) {
+    return !!(name && name.match(/[-_]de(?:[-_]|$)/i));
+}
+
+function shouldCheckGermanText(text) {
+    if (text === null || text === undefined) return false;
+    var normalized = String(text).replace(/[\r\n\t]/g, " ").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+    if (normalized.length < 3) return false;
+    if (normalized.match(/^#+(?:TBL|IMG)_\d+#+$/)) return false;
+    var lettersOnly = normalized.replace(/[^A-Za-zÄÖÜäöüß]/g, "");
+    return lettersOnly.length >= 3;
+}
+
+function addGermanSpellTarget(targets, seenStoryIds, story, locationLabel) {
+    if (!story || !story.isValid) return;
+    var storyText = "";
+    try { storyText = story.contents; } catch (e) { storyText = ""; }
+    if (!shouldCheckGermanText(storyText)) return;
+
+    var storyId = null;
+    try { storyId = story.id; } catch (e) { storyId = null; }
+    if (storyId !== null && storyId !== undefined) {
+        if (seenStoryIds[storyId]) return;
+        seenStoryIds[storyId] = true;
     }
 
-    var totalErrors = 0;
-    var findings = [];
-    for (var mi = 0; mi < germanMasters.length; mi++) {
-        var master = germanMasters[mi];
+    targets.push({ text: storyText, location: locationLabel });
+}
+
+function collectGermanSpellTargets(doc) {
+    var targets = [];
+    var seenStoryIds = {};
+    var masterSpreads = doc.masterSpreads;
+
+    for (var m = 0; m < masterSpreads.length; m++) {
+        var master = masterSpreads[m];
+        if (!isGermanMasterName(master.name)) continue;
         for (var p = 0; p < master.pages.length; p++) {
-            var page = master.pages[p];
-            var frames = [];
-            try { frames = page.textFrames.everyItem().getElements(); } catch (e) { frames = []; }
-            for (var fi = 0; fi < frames.length; fi++) {
-                var story = getTextFrameStory(frames[fi]);
-                if (!story) continue;
-                try {
-                    var errors = story.spellingErrors;
-                    if (!errors || errors.length === 0) continue;
-                    for (var ei = 0; ei < errors.length; ei++) {
-                        totalErrors++;
-                        if (findings.length < 12) {
-                            var errorText = "";
-                            try { errorText = String(errors[ei].contents); } catch (e) { errorText = "(unbekannter Fehler)"; }
-                            var pageName = "";
-                            try { pageName = page.name; } catch (e) { pageName = "Unbekannt"; }
-                            findings.push(master.name + " / Seite " + pageName + ": \"" + errorText + "\"");
-                        }
-                    }
-                } catch (e) {
-                    continue;
-                }
+            var masterPage = master.pages[p];
+            var masterFrames = [];
+            try { masterFrames = masterPage.textFrames.everyItem().getElements(); } catch (e) { masterFrames = []; }
+            for (var f = 0; f < masterFrames.length; f++) {
+                var masterStory = getTextFrameStory(masterFrames[f]);
+                addGermanSpellTarget(targets, seenStoryIds, masterStory, "Master " + master.name + " / Seite " + (masterPage.name || (p + 1)));
             }
         }
     }
 
-    if (totalErrors === 0) {
-        alert("Rechtschreibprüfung abgeschlossen. Keine Rechtschreibfehler gefunden.");
+    for (var pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {
+        var page = doc.pages[pageIndex];
+        if (!page.appliedMaster || !isGermanMasterName(page.appliedMaster.name)) continue;
+        var pageFrames = [];
+        try { pageFrames = page.textFrames.everyItem().getElements(); } catch (e) { pageFrames = []; }
+        for (var pf = 0; pf < pageFrames.length; pf++) {
+            var pageStory = getTextFrameStory(pageFrames[pf]);
+            addGermanSpellTarget(targets, seenStoryIds, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Master " + page.appliedMaster.name);
+        }
+    }
+
+    return targets;
+}
+
+function runLanguageToolGermanCheck(text) {
+    var endpoint = "https://api.languagetool.org/v2/check";
+    var requestId = new Date().getTime() + "_" + Math.floor(Math.random() * 100000);
+    var payloadFile = new File(Folder.temp + "/lt_payload_" + requestId + ".txt");
+    var outFile = new File(Folder.temp + "/lt_out_" + requestId + ".json");
+    var payload = "language=de-DE&motherTongue=de&text=" + encodeURIComponent(String(text).replace(/\r/g, "\n"));
+
+    payloadFile.encoding = "UTF-8";
+    if (!payloadFile.open("w")) {
+        return { ok: false, error: "Temporäre Anfrage-Datei konnte nicht erstellt werden." };
+    }
+    payloadFile.write(payload);
+    payloadFile.close();
+
+    var resultStr = "";
+    try {
+        if (File.fs === "Macintosh") {
+            var curlCmd = "curl -sS -X POST '" + endpoint + "' -d @'" + payloadFile.fsName + "'";
+            resultStr = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+        } else {
+            var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
+                      'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -d @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
+            app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
+            if (outFile.exists) {
+                outFile.encoding = "UTF-8";
+                outFile.open("r");
+                resultStr = outFile.read();
+                outFile.close();
+            }
+        }
+    } catch (e) {
+        return { ok: false, error: e.message || "LanguageTool-Aufruf fehlgeschlagen." };
+    } finally {
+        try { if (payloadFile.exists) payloadFile.remove(); } catch (e) {}
+        try { if (outFile.exists) outFile.remove(); } catch (e) {}
+    }
+
+    if (!resultStr || resultStr === "") {
+        return { ok: false, error: "Keine Antwort von LanguageTool erhalten." };
+    }
+
+    try {
+        var parsed = eval("(" + resultStr + ")");
+        return { ok: true, data: parsed };
+    } catch (e) {
+        return { ok: false, error: "Antwort von LanguageTool konnte nicht gelesen werden." };
+    }
+}
+
+function buildLanguageToolFinding(item, matchObj) {
+    var originalText = item.text || "";
+    var issueText = "";
+    if (matchObj && matchObj.offset !== undefined && matchObj.length !== undefined) {
+        issueText = originalText.substring(matchObj.offset, matchObj.offset + matchObj.length);
+    }
+    if (!issueText && matchObj && matchObj.context && matchObj.context.text) {
+        var ctx = String(matchObj.context.text);
+        var ctxOffset = matchObj.context.offset || 0;
+        var ctxLength = matchObj.context.length || 0;
+        issueText = ctx.substring(ctxOffset, ctxOffset + ctxLength);
+    }
+    if (!issueText || issueText === "") issueText = "(unbekannte Stelle)";
+
+    var suggestion = "kein Vorschlag";
+    if (matchObj && matchObj.replacements && matchObj.replacements.length > 0) {
+        suggestion = matchObj.replacements[0].value;
+    }
+
+    var message = "Hinweis";
+    if (matchObj && matchObj.message) message = matchObj.message;
+
+    return item.location + ': "' + issueText + '" -> ' + suggestion + " (" + message + ")";
+}
+
+function runMasterSpellingCheck(doc) {
+    var targets = collectGermanSpellTargets(doc);
+    if (targets.length === 0) {
+        alert("Keine deutschen Texte auf -de-Masterseiten oder deren Dokumentseiten gefunden.");
         return;
     }
 
-    var message = "Rechtschreibprüfung abgeschlossen. Fehler gefunden: " + totalErrors + "\n\n";
-    for (var i = 0; i < findings.length; i++) {
-        message += "- " + findings[i] + "\n";
+    var progressWin = new Window("palette", "Deutsche Rechtschreibprüfung");
+    progressWin.orientation = "column";
+    progressWin.alignChildren = "fill";
+    var progressTextLocal = progressWin.add("statictext", undefined, "Bereite Prüfung vor...");
+    progressTextLocal.preferredSize.width = 380;
+    var progressBarLocal = progressWin.add("progressbar", undefined, 0, targets.length);
+    progressWin.show();
+
+    var totalFindings = 0;
+    var resultLines = [];
+    var skippedTexts = 0;
+
+    for (var i = 0; i < targets.length; i++) {
+        var item = targets[i];
+        progressBarLocal.value = i + 1;
+        progressTextLocal.text = "Prüfe deutschen Text " + (i + 1) + " von " + targets.length + "...";
+        progressWin.update();
+
+        var response = runLanguageToolGermanCheck(item.text);
+        if (!response.ok || !response.data) {
+            skippedTexts++;
+            continue;
+        }
+
+        var parsed = response.data;
+        var detectedCode = "";
+        try { detectedCode = parsed.language.detectedLanguage.code || ""; } catch (e) { detectedCode = ""; }
+        if (detectedCode !== "" && detectedCode.indexOf("de") !== 0) continue;
+
+        var matches = parsed.matches || [];
+        for (var m = 0; m < matches.length; m++) {
+            totalFindings++;
+            if (resultLines.length < 15) {
+                resultLines.push(buildLanguageToolFinding(item, matches[m]));
+            }
+        }
     }
-    if (totalErrors > findings.length) {
-        message += "\n...weitere Fehler vorhanden.";
+
+    progressWin.close();
+
+    if (totalFindings === 0) {
+        var okMessage = "Deutsche Rechtschreibprüfung abgeschlossen. Keine Auffälligkeiten gefunden.";
+        if (skippedTexts > 0) okMessage += "\n\nHinweis: " + skippedTexts + " Textblöcke konnten nicht geprüft werden.";
+        alert(okMessage);
+        return;
+    }
+
+    var message = "Deutsche Rechtschreibprüfung abgeschlossen.\nGefundene Hinweise: " + totalFindings + "\n\n";
+    for (var lineIndex = 0; lineIndex < resultLines.length; lineIndex++) {
+        message += "- " + resultLines[lineIndex] + "\n";
+    }
+    if (totalFindings > resultLines.length) {
+        message += "\n...weitere Hinweise vorhanden.";
+    }
+    if (skippedTexts > 0) {
+        message += "\n\nNicht geprüft: " + skippedTexts + " Textblöcke.";
     }
     alert(message);
 }
