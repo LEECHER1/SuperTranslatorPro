@@ -1007,6 +1007,72 @@ function getItemSignature(item) {
     return sig;
 }
 
+function normalizeBounds(bounds) {
+    if (!bounds || bounds.length !== 4) return null;
+    return [parseFloat(bounds[0]), parseFloat(bounds[1]), parseFloat(bounds[2]), parseFloat(bounds[3])];
+}
+
+function getItemDescriptor(item) {
+    var desc = { type: null, bounds: null, textLen: 0, graphicPath: null };
+    if (!item || !item.isValid) return desc;
+    desc.type = item.constructor.name;
+    try {
+        desc.bounds = normalizeBounds(item.geometricBounds);
+    } catch (e) { desc.bounds = null; }
+    try {
+        if (desc.type === "TextFrame") {
+            var story = getTextFrameStory(item);
+            if (story) desc.textLen = story.contents.length;
+        } else if (item.allGraphics && item.allGraphics.length > 0) {
+            try {
+                var link = item.allGraphics[0].itemLink;
+                if (link && link.isValid) desc.graphicPath = link.filePath;
+            } catch (e) {}
+        }
+    } catch (e) {}
+    return desc;
+}
+
+function boundsDistance(a, b) {
+    if (!a || !b) return Number.MAX_VALUE;
+    return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) + Math.abs(a[3] - b[3]);
+}
+
+function findBestMatchingTargetItem(sourceItem, targetItems, fallbackIndex) {
+    if (!sourceItem || !targetItems || targetItems.length === 0) return null;
+    var sourceDesc = getItemDescriptor(sourceItem);
+    var bestMatch = null;
+    var bestScore = Number.MAX_VALUE;
+    for (var i = 0; i < targetItems.length; i++) {
+        var targetItem = targetItems[i];
+        if (!targetItem || !targetItem.isValid) continue;
+        var targetDesc = getItemDescriptor(targetItem);
+        if (targetDesc.type !== sourceDesc.type) continue;
+        var score = 0;
+        if (sourceDesc.graphicPath && targetDesc.graphicPath) {
+            if (sourceDesc.graphicPath === targetDesc.graphicPath) score -= 1000;
+            else score += 1000;
+        }
+        if (sourceDesc.bounds && targetDesc.bounds) {
+            score += boundsDistance(sourceDesc.bounds, targetDesc.bounds);
+        } else {
+            score += 500;
+        }
+        if (sourceDesc.type === "TextFrame") {
+            score += Math.abs(sourceDesc.textLen - targetDesc.textLen);
+        }
+        if (score < bestScore) {
+            bestScore = score;
+            bestMatch = targetItem;
+        }
+    }
+    if (bestMatch) return bestMatch;
+    if (fallbackIndex !== undefined && fallbackIndex !== null && fallbackIndex < targetItems.length) {
+        return targetItems[fallbackIndex];
+    }
+    return null;
+}
+
 function buildBDAChangeSnapshot(pages) {
     var snapshot = [];
     for (var p = 0; p < pages.length; p++) {
@@ -1208,13 +1274,15 @@ function syncBDATextChanges(doc, config) {
             var targetPage = targetPages[block.pageIndex];
             if (!sourcePage || !targetPage) continue;
 
-            var sourceItems = sourcePage.pageItems.everyItem().getElements();
+                var sourceItems = sourcePage.pageItems.everyItem().getElements();
             var targetItems = targetPage.pageItems.everyItem().getElements();
-            if (block.itemIndex >= sourceItems.length || block.itemIndex >= targetItems.length) continue;
+            if (block.itemIndex >= sourceItems.length) continue;
 
             var sourceItem = sourceItems[block.itemIndex];
-            var oldTargetItem = targetItems[block.itemIndex];
-            if (!sourceItem || !oldTargetItem) continue;
+            if (!sourceItem) continue;
+
+            var oldTargetItem = findBestMatchingTargetItem(sourceItem, targetItems, block.itemIndex);
+            if (!oldTargetItem) continue;
 
             try {
                 var duplicated = sourceItem.duplicate(targetPage);
