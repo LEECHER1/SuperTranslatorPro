@@ -490,47 +490,63 @@ btnCancel.onClick = function() { myWindow.close(); }
 
 function runMasterSpellingCheck(doc) {
     var masterSpreads = doc.masterSpreads;
-    var germanMasters = [];
+    var germanMasterNames = [];
     for (var m = 0; m < masterSpreads.length; m++) {
         var name = masterSpreads[m].name;
         if (name && name.match(/[-_]de(?:[-_]|$)/i)) {
-            germanMasters.push(masterSpreads[m]);
+            germanMasterNames.push(name);
         }
     }
-    if (germanMasters.length === 0) {
+    if (germanMasterNames.length === 0) {
         alert("Keine deutschen Masterseiten (-de-) gefunden.");
         return;
     }
 
     var totalErrors = 0;
     var findings = [];
-    for (var mi = 0; mi < germanMasters.length; mi++) {
-        var master = germanMasters[mi];
-        for (var p = 0; p < master.pages.length; p++) {
-            var page = master.pages[p];
-            var frames = [];
-            try { frames = page.textFrames.everyItem().getElements(); } catch (e) { frames = []; }
-            for (var fi = 0; fi < frames.length; fi++) {
-                var story = getTextFrameStory(frames[fi]);
-                if (!story) continue;
-                try {
-                    var errors = story.spellingErrors;
-                    if (!errors || errors.length === 0) continue;
-                    for (var ei = 0; ei < errors.length; ei++) {
-                        totalErrors++;
-                        if (findings.length < 12) {
-                            var errorText = "";
-                            try { errorText = String(errors[ei].contents); } catch (e) { errorText = "(unbekannter Fehler)"; }
-                            var pageName = "";
-                            try { pageName = page.name; } catch (e) { pageName = "Unbekannt"; }
-                            findings.push(master.name + " / Seite " + pageName + ": \"" + errorText + "\"");
-                        }
-                    }
-                } catch (e) {
-                    continue;
-                }
+
+    function collectErrorsFromStory(story, locationLabel) {
+        if (!story || !story.isValid) return;
+        var errors = null;
+        try { errors = story.spellingErrors; } catch (e) { errors = null; }
+        if (!errors) return;
+        var count = (typeof errors.length === 'number') ? errors.length : (typeof errors.count === 'function' ? errors.count() : 0);
+        if (count === 0) return;
+        for (var ei = 0; ei < count; ei++) {
+            totalErrors++;
+            if (findings.length < 12) {
+                var errorText = "";
+                try { errorText = String(errors[ei].contents); } catch (e) { errorText = "(unbekannter Fehler)"; }
+                findings.push(locationLabel + ": \"" + errorText + "\"");
             }
         }
+    }
+
+    function collectErrorsFromPage(page, labelPrefix) {
+        var frames = [];
+        try { frames = page.textFrames.everyItem().getElements(); } catch (e) { frames = []; }
+        for (var fi = 0; fi < frames.length; fi++) {
+            var story = getTextFrameStory(frames[fi]);
+            if (!story) continue;
+            collectErrorsFromStory(story, labelPrefix + " / " + (page.name || "Seite"));
+        }
+    }
+
+    // Scan master spreads directly
+    for (var mi = 0; mi < masterSpreads.length; mi++) {
+        var master = masterSpreads[mi];
+        if (germanMasterNames.indexOf(master.name) === -1) continue;
+        for (var p = 0; p < master.pages.length; p++) {
+            collectErrorsFromPage(master.pages[p], master.name);
+        }
+    }
+
+    // Scan actual document pages that use a German master
+    for (var pi = 0; pi < doc.pages.length; pi++) {
+        var page = doc.pages[pi];
+        if (!page.appliedMaster || !page.appliedMaster.name) continue;
+        if (germanMasterNames.indexOf(page.appliedMaster.name) === -1) continue;
+        collectErrorsFromPage(page, page.appliedMaster.name + " (Dokument)");
     }
 
     if (totalErrors === 0) {
