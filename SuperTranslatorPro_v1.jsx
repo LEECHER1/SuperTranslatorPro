@@ -521,30 +521,17 @@ function addGermanSpellTarget(targets, seenStoryIds, story, locationLabel, page,
 function collectGermanSpellTargets(doc) {
     var targets = [];
     var seenStoryIds = {};
-    var masterSpreads = doc.masterSpreads;
-
-    for (var m = 0; m < masterSpreads.length; m++) {
-        var master = masterSpreads[m];
-        if (!isGermanMasterName(master.name)) continue;
-        for (var p = 0; p < master.pages.length; p++) {
-            var masterPage = master.pages[p];
-            var masterFrames = [];
-            try { masterFrames = masterPage.textFrames.everyItem().getElements(); } catch (e) { masterFrames = []; }
-            for (var f = 0; f < masterFrames.length; f++) {
-                var masterStory = getTextFrameStory(masterFrames[f]);
-                addGermanSpellTarget(targets, seenStoryIds, masterStory, "Master " + master.name + " / Seite " + (masterPage.name || (p + 1)), masterPage, masterFrames[f]);
-            }
-        }
-    }
 
     for (var pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {
         var page = doc.pages[pageIndex];
         if (!page.appliedMaster || !isGermanMasterName(page.appliedMaster.name)) continue;
-        var pageFrames = [];
-        try { pageFrames = page.textFrames.everyItem().getElements(); } catch (e) { pageFrames = []; }
-        for (var pf = 0; pf < pageFrames.length; pf++) {
-            var pageStory = getTextFrameStory(pageFrames[pf]);
-            addGermanSpellTarget(targets, seenStoryIds, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Master " + page.appliedMaster.name, page, pageFrames[pf]);
+        var pageItems = [];
+        try { pageItems = page.allPageItems; } catch (e) { pageItems = []; }
+        for (var pf = 0; pf < pageItems.length; pf++) {
+            if (!pageItems[pf] || !pageItems[pf].isValid) continue;
+            if (pageItems[pf].constructor.name !== "TextFrame") continue;
+            var pageStory = getTextFrameStory(pageItems[pf]);
+            addGermanSpellTarget(targets, seenStoryIds, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Master " + page.appliedMaster.name, page, pageItems[pf]);
         }
     }
 
@@ -729,7 +716,7 @@ function openGermanCorrectionDialog(findings) {
 function runMasterSpellingCheck(doc) {
     var targets = collectGermanSpellTargets(doc);
     if (targets.length === 0) {
-        alert("Keine deutschen Texte auf -de-Masterseiten oder deren Dokumentseiten gefunden.");
+        alert("Keine Texte auf Dokumentseiten mit deutscher Musterseite gefunden.");
         return;
     }
 
@@ -748,7 +735,7 @@ function runMasterSpellingCheck(doc) {
     for (var i = 0; i < targets.length; i++) {
         var item = targets[i];
         progressBarLocal.value = i + 1;
-        progressTextLocal.text = "Prüfe deutschen Text " + (i + 1) + " von " + targets.length + "...";
+        progressTextLocal.text = "Prüfe Seite mit deutscher Musterseite: Text " + (i + 1) + " von " + targets.length + "...";
         progressWin.update();
         try {
             var errors = item.story.spellingErrors;
@@ -769,13 +756,13 @@ function runMasterSpellingCheck(doc) {
     progressWin.close();
 
     if (totalFindings === 0) {
-        var okMessage = "Deutsche InDesign-Rechtschreibprüfung abgeschlossen. Keine Auffälligkeiten gefunden.";
+        var okMessage = "InDesign-Rechtschreibprüfung für Seiten mit deutscher Musterseite abgeschlossen. Keine Auffälligkeiten gefunden.";
         if (skippedTexts > 0) okMessage += "\n\nHinweis: " + skippedTexts + " Textblöcke konnten nicht geprüft werden.";
         alert(okMessage);
         return;
     }
 
-    var message = "Deutsche InDesign-Rechtschreibprüfung abgeschlossen.\nGefundene Hinweise: " + totalFindings + "\n\n";
+    var message = "InDesign-Rechtschreibprüfung für Seiten mit deutscher Musterseite abgeschlossen.\nGefundene Hinweise: " + totalFindings + "\n\n";
     var previewCount = Math.min(10, findings.length);
     for (var lineIndex = 0; lineIndex < previewCount; lineIndex++) {
         message += "- " + buildLanguageToolFindingSummary(findings[lineIndex]) + "\n";
