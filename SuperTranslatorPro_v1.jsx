@@ -1058,9 +1058,9 @@ function replacePageFrameSegmentText(page, frameIndex, oldText, newText) {
         app.findTextPreferences = NothingEnum.nothing;
         app.changeTextPreferences = NothingEnum.nothing;
         app.findTextPreferences.findWhat = searchText;
-        var foundRanges = frameScope.findText();
-        if (foundRanges && foundRanges.length > 0) {
-            try { foundRanges[0].contents = replaceText; } catch (e) {}
+        app.changeTextPreferences.changeTo = replaceText;
+        var changedRanges = frameScope.changeText();
+        if (changedRanges && changedRanges.length > 0) {
             return true;
         }
 
@@ -1070,9 +1070,9 @@ function replacePageFrameSegmentText(page, frameIndex, oldText, newText) {
             if (!fallbackScope) fallbackScope = getTextFrameStory(frames[i]);
             if (!fallbackScope) continue;
             app.findTextPreferences.findWhat = searchText;
-            foundRanges = fallbackScope.findText();
-            if (foundRanges && foundRanges.length > 0) {
-                try { foundRanges[0].contents = replaceText; } catch (e) {}
+            app.changeTextPreferences.changeTo = replaceText;
+            changedRanges = fallbackScope.changeText();
+            if (changedRanges && changedRanges.length > 0) {
                 return true;
             }
         }
