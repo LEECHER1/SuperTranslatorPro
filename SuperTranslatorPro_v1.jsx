@@ -819,7 +819,7 @@ function openGermanFrameCorrectionDialog(corrections) {
 
         dlg.add("statictext", undefined, "Auffälligkeiten:");
         var issueList = dlg.add("listbox", undefined, [], { multiselect: false });
-        issueList.preferredSize = [440, 90];
+        issueList.preferredSize = [440, 120];
         for (var issueIndex = 0; issueIndex < correction.edits.length; issueIndex++) {
             var issue = correction.edits[issueIndex];
             issueList.add("item", (issueIndex + 1) + ". " + makeGermanTextVisible(issue.issueText) + " -> " + makeGermanTextVisible(issue.replacement));
@@ -831,38 +831,13 @@ function openGermanFrameCorrectionDialog(corrections) {
 
         detailPanel.add("statictext", undefined, "Hinweis:");
         var messageBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
-        messageBox.preferredSize = [440, 42];
-
-        detailPanel.add("statictext", undefined, "Fehlerwort:");
-        var issueWord = detailPanel.add("statictext", undefined, "");
-        issueWord.preferredSize.width = 440;
-        issueWord.graphics.font = ScriptUI.newFont(issueWord.graphics.font.family, "BOLD", 18);
-        issueWord.graphics.foregroundColor = issueWord.graphics.newPen(issueWord.graphics.PenType.SOLID_COLOR, [0.85, 0.15, 0.15], 1);
-
-        detailPanel.add("statictext", undefined, "Vorschlag:");
-        var replacementWord = detailPanel.add("statictext", undefined, "");
-        replacementWord.preferredSize.width = 440;
-        replacementWord.graphics.font = ScriptUI.newFont(replacementWord.graphics.font.family, "BOLD", 16);
-
-        detailPanel.add("statictext", undefined, "Text davor:");
-        var beforeBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
-        beforeBox.preferredSize = [440, 44];
-
-        detailPanel.add("statictext", undefined, "Text danach:");
-        var afterBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
-        afterBox.preferredSize = [440, 44];
-
-        var infoText = dlg.add("statictext", undefined, "Mit 'Uebernehmen' werden alle Vorschläge dieses Textrahmens formatierungserhaltend angewendet.");
-        infoText.preferredSize.width = 440;
+        messageBox.preferredSize = [440, 70];
 
         function updateIssuePreview() {
             if (!issueList.selection) return;
             var selectedIssue = correction.edits[issueList.selection.index];
-            messageBox.text = selectedIssue.message;
-            issueWord.text = selectedIssue.contextParts.issue;
-            replacementWord.text = makeGermanTextVisible(selectedIssue.replacement);
-            beforeBox.text = selectedIssue.contextParts.before;
-            afterBox.text = selectedIssue.contextParts.after;
+            messageBox.text = "Fehler: " + makeGermanTextVisible(selectedIssue.issueText) + "\nVorschlag: " + makeGermanTextVisible(selectedIssue.replacement) + "\nHinweis: " + selectedIssue.message;
+            focusGermanFinding(correction);
         }
         if (issueList.items.length > 0) {
             issueList.selection = 0;
@@ -873,7 +848,7 @@ function openGermanFrameCorrectionDialog(corrections) {
         var btnGroup = dlg.add("group");
         btnGroup.alignment = "right";
         var btnSkip = btnGroup.add("button", undefined, "Behalten");
-        var btnReplace = btnGroup.add("button", undefined, "Uebernehmen");
+        var btnReplace = btnGroup.add("button", undefined, "Übernehmen");
         var btnStop = btnGroup.add("button", undefined, "Beenden");
 
         var action = "skip";
@@ -964,6 +939,7 @@ function focusGermanFinding(finding) {
     try {
         if (finding.frame && finding.frame.isValid) app.select(finding.frame);
     } catch (e4) {}
+    try { $.sleep(80); } catch (e5) {}
 }
 
 function replaceGermanFinding(finding, replacementText) {
