@@ -604,7 +604,8 @@ function runMainProcess(doc, config) {
     if (config.mode === "BDA" && config.onlyTextUpdate) {
         updateLanguageMasterVersionLabels(doc);
         syncMasterTextChanges(doc);
-        return "BDA-Textupdate ausgeführt.";
+        var updateMsg = syncBDATextChanges(doc, config);
+        return updateMsg;
     }
     updateLanguageMasterVersionLabels(doc);
     syncMasterTextChanges(doc);
@@ -740,6 +741,13 @@ function runBDAMode(doc, config) {
         }
     }
 
+    try {
+        var originalPages = getBDAOriginalPages(doc, config);
+        if (originalPages && originalPages.length > 0) {
+            saveBDASnapshot(doc, buildBDAChangeSnapshot(originalPages));
+        }
+    } catch (e) {}
+
     return resultMsg;
 }
 
@@ -871,6 +879,167 @@ function saveMasterSnapshot(doc, snapshot) {
         file.write(serializeJSON(data));
         file.close();
     } catch (e) {}
+}
+
+function getBDASnapshotFile() {
+    return new File(Folder.userData + "/SuperTranslatorPRO_BDAChangeSnapshot.json");
+}
+
+function loadBDASnapshot(doc) {
+    var file = getBDASnapshotFile();
+    if (!file.exists) return null;
+    try {
+        file.encoding = "UTF-8";
+        file.open("r");
+        var content = file.read();
+        file.close();
+        if (!content || content === "") return null;
+        var data = eval("(" + content + ")");
+        return data[getDocSnapshotKey(doc)] || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveBDASnapshot(doc, snapshot) {
+    var file = getBDASnapshotFile();
+    var data = {};
+    if (file.exists) {
+        try {
+            file.encoding = "UTF-8";
+            file.open("r");
+            var content = file.read();
+            file.close();
+            if (content && content !== "") data = eval("(" + content + ")");
+        } catch (e) {
+            data = {};
+        }
+    }
+    data[getDocSnapshotKey(doc)] = snapshot;
+    try {
+        file.encoding = "UTF-8";
+        file.open("w");
+        file.write(serializeJSON(data));
+        file.close();
+    } catch (e) {}
+}
+
+function getBDAOriginalPages(doc, config) {
+    if (config.bdaSourcePages && config.bdaSourcePages.toUpperCase() !== "AUTO") {
+        return getPagesFromString(doc, config.bdaSourcePages);
+    }
+    var pages = [];
+    for (var i = 0; i < doc.pages.length; i++) {
+        try {
+            var applied = doc.pages[i].appliedMaster;
+            if (applied && applied.name.match(/[-_]de(?:[-_]|$)/i)) {
+                pages.push(doc.pages[i]);
+            }
+        } catch (e) {}
+    }
+    return pages;
+}
+
+function buildBDAChangeSnapshot(pages) {
+    var snapshot = [];
+    for (var p = 0; p < pages.length; p++) {
+        var pageTexts = [];
+        try {
+            var frames = pages[p].textFrames.everyItem().getElements();
+            for (var f = 0; f < frames.length; f++) {
+                try {
+                    var story = null;
+                    try { story = frames[f].parentStory; } catch (e) { story = null; }
+                    if ((!story || !story.isValid) && frames[f].texts && frames[f].texts.length > 0) story = frames[f].texts[0];
+                    if (story && story.isValid) pageTexts.push(story.contents);
+                } catch (e) {}
+            }
+        } catch (e) {}
+        snapshot.push(pageTexts);
+    }
+    return snapshot;
+}
+
+function getBDATargetPagesByLang(doc) {
+    var pagesByLang = {};
+    for (var i = 0; i < doc.pages.length; i++) {
+        try {
+            var applied = doc.pages[i].appliedMaster;
+            if (!applied) continue;
+            var match = applied.name.match(/[-_]([a-z]{2})(?:[-_]|$)/i);
+            if (!match) continue;
+            var code = match[1].toLowerCase();
+            if (code === "de") continue;
+            if (!pagesByLang[code]) pagesByLang[code] = [];
+            pagesByLang[code].push(doc.pages[i]);
+        } catch (e) {}
+    }
+    return pagesByLang;
+}
+
+function replacePageFrameText(page, frameIndex, contents) {
+    try {
+        var frames = page.textFrames.everyItem().getElements();
+        if (frameIndex >= frames.length) return false;
+        var tf = frames[frameIndex];
+        var story = null;
+        try { story = tf.parentStory; } catch (e) { story = null; }
+        if ((!story || !story.isValid) && tf.texts && tf.texts.length > 0) story = tf.texts[0];
+        if (!story || !story.isValid) return false;
+        story.contents = contents;
+        return true;
+    } catch (e) { return false; }
+}
+
+function syncBDATextChanges(doc, config) {
+    var sourcePages = getBDAOriginalPages(doc, config);
+    if (!sourcePages || sourcePages.length === 0) {
+        throw new Error("Keine deutschen Originalseiten zum Vergleich gefunden.");
+    }
+    var prevSnapshot = loadBDASnapshot(doc);
+    var currentSnapshot = buildBDAChangeSnapshot(sourcePages);
+    var targetsByLang = getBDATargetPagesByLang(doc);
+    if (!targetsByLang || Object.keys(targetsByLang).length === 0) {
+        throw new Error("Keine Zielseiten in anderen Sprachen gefunden.");
+    }
+    var changesByLang = {};
+    for (var p = 0; p < currentSnapshot.length; p++) {
+        var currentFrames = currentSnapshot[p] || [];
+        var previousFrames = prevSnapshot ? (prevSnapshot[p] || []) : [];
+        for (var f = 0; f < currentFrames.length; f++) {
+            var currentText = currentFrames[f] || "";
+            var previousText = prevSnapshot ? (previousFrames[f] || "") : null;
+            if (prevSnapshot === null || currentText !== previousText) {
+                for (var lang in targetsByLang) {
+                    if (!targetsByLang.hasOwnProperty(lang)) continue;
+                    if (!changesByLang[lang]) changesByLang[lang] = [];
+                    changesByLang[lang].push({ pageIndex: p, frameIndex: f, text: currentText });
+                }
+            }
+        }
+    }
+    var anyUpdated = false;
+    for (var langCode in changesByLang) {
+        if (!changesByLang.hasOwnProperty(langCode)) continue;
+        var blocks = changesByLang[langCode];
+        if (blocks.length === 0) continue;
+        var deepLLang = getDeepLLangCode(langCode);
+        var texts = [];
+        for (var b = 0; b < blocks.length; b++) texts.push(blocks[b].text);
+        var translated = translateBatchDeepL(texts, deepLLang, 10, 20);
+        if (!translated) continue;
+        var pageList = targetsByLang[langCode];
+        for (var b = 0; b < blocks.length; b++) {
+            var block = blocks[b];
+            var translatedText = translated[b] || "";
+            var targetPage = pageList[block.pageIndex];
+            if (targetPage) {
+                if (replacePageFrameText(targetPage, block.frameIndex, translatedText)) anyUpdated = true;
+            }
+        }
+    }
+    saveBDASnapshot(doc, currentSnapshot);
+    return anyUpdated ? "BDA-Textupdate ausgeführt." : "Keine geänderten Textblöcke gefunden.";
 }
 
 function serializeJSON(obj) {
