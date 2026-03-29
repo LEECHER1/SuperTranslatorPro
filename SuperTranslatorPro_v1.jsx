@@ -1,7 +1,7 @@
 #targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.9 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.6 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.9";
+var SCRIPT_VERSION = "28.6";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -759,7 +759,25 @@ function findMasterLanguageBadge(masterSpread, preferredCode) {
 
 function buildLanguageSpecificMasterName(baseName, langCode) {
     var langLower = String(langCode).toLowerCase();
-    return langLower + "-Musterseite";
+    var name = String(baseName || "Musterseite");
+    name = name.replace(/\s+(copy|kopie)(?:\s*\d+)?$/i, "");
+    name = name.replace(/^\s+|\s+$/g, "");
+
+    var prefix = "";
+    var body = name;
+    var prefixMatch = name.match(/^([A-Z]+)[-_](.+)$/);
+    if (prefixMatch) {
+        prefix = prefixMatch[1];
+        body = prefixMatch[2];
+    }
+
+    body = body.replace(/[-_][a-z]{2}(?=[-_]|$)/ig, "");
+    body = body.replace(/^[-_\s]+|[-_\s]+$/g, "");
+    if (body === "") body = "Musterseite";
+    if (!/Musterseite$/i.test(body)) body = body + "-Musterseite";
+
+    if (prefix !== "") return prefix + "-" + langLower + "-" + body;
+    return langLower + "-" + body;
 }
 
 function getMasterSpreadBaseName(masterSpread) {
@@ -852,20 +870,6 @@ function cleanupAccidentalGermanMasterNames(doc, germanMaster) {
         } catch (e) {}
     }
     return cleaned;
-}
-
-function normalizeNamedLanguageMasters(doc) {
-    var renamed = [];
-    for (var i = 0; i < doc.masterSpreads.length; i++) {
-        var master = doc.masterSpreads[i];
-        if (!master || !master.isValid) continue;
-        var code = getMasterLang(master.name);
-        if (!code) continue;
-        var oldName = String(master.name);
-        var newName = renameMasterSpreadToLanguage(doc, master, code, getMasterSpreadBaseName(master));
-        if (newName !== "" && newName !== oldName) renamed.push({ oldName: oldName, newName: newName });
-    }
-    return renamed;
 }
 
 function collectBDALanguageTasks(doc) {
@@ -1020,7 +1024,6 @@ function createLegacyTargetMasters(doc, germanMaster, langCodes) {
 function prepareLegacyMasterSpreads(doc, allowCreation) {
     updateProgress(4, "Prüfe Musterseiten...", 4, "Analysiere Dokument...");
     normalizeLegacyMasterNames(doc);
-    normalizeNamedLanguageMasters(doc);
 
     var germanMaster = findGermanLegacyMasterSpread(doc);
     if (!germanMaster) {
@@ -1063,8 +1066,10 @@ function pageContainsCopyrightMarker(page) {
     if (!page || !page.isValid) return false;
     var frames = getTextFramesFromContainer(page);
     for (var i = 0; i < frames.length; i++) {
+        var story = getTextFrameStory(frames[i]);
+        if (!story || !story.isValid) continue;
         try {
-            if (getTextFrameLocalContents(frames[i]).indexOf("©") !== -1) return true;
+            if (String(story.contents).indexOf("©") !== -1) return true;
         } catch (e) {}
     }
     return false;
@@ -2518,18 +2523,6 @@ function getTextFrameStory(tf) {
     return story;
 }
 
-function getTextFrameLocalContents(tf) {
-    if (!tf || !tf.isValid) return "";
-    try {
-        if (tf.texts && tf.texts.length > 0 && tf.texts[0].isValid) {
-            return String(tf.texts[0].contents);
-        }
-    } catch (e) {}
-    var story = getTextFrameStory(tf);
-    if (!story || !story.isValid) return "";
-    try { return String(story.contents); } catch (e2) { return ""; }
-}
-
 function findAndReplaceTextInStory(story, findString, replaceString) {
     if (!story || !findString || findString === "" || replaceString === undefined || replaceString === null) return false;
     try {
@@ -3006,7 +2999,7 @@ function updateTOCForLanguage(doc, langCode, newStartPage) {
     } catch(e) {}
 }
 
-function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globalParkedImages, textTargets) {
+function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
     try {
         app.findGrepPreferences = NothingEnum.nothing;
         app.changeGrepPreferences = NothingEnum.nothing;
@@ -3030,47 +3023,33 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
 
         try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.itemLayer.visible = true; } catch (e4) {}
 
-        for (var imgIdx = globalParkedImages.length - 1; imgIdx >= 0; imgIdx--) {
-            var parkedImage = globalParkedImages[imgIdx];
-            app.findGrepPreferences.findWhat = "[ \t]*###IMG_\\s*" + parkedImage.id + "\\s*###[ \t]*";
-            var imgResults = doc.findGrep();
-            if (imgResults.length > 0) {
-                try {
-                    if (parkedImage.character && parkedImage.character.isValid) {
-                        parkedImage.character.move(LocationOptions.AFTER, imgResults[0].insertionPoints.item(0));
-                        imgResults[0].remove();
-                        continue;
-                    }
-                } catch (e5) {}
-            }
-
+        app.findGrepPreferences.findWhat = "###IMG_\\s*\\d+\\s*###";
+        var allFoundImages = doc.findGrep();
+        for (var f = allFoundImages.length - 1; f >= 0; f--) {
+            var placeholderRange = allFoundImages[f];
+            var match = placeholderRange.contents.match(/IMG_\s*(\d+)/);
+            if (!match) continue;
+            var imgID = match[1];
             var targetImageInStorage = null;
-            try {
-                var storageItems = storageEnv.frame.allPageItems;
-                for (var j = 0; j < storageItems.length; j++) {
-                    if (storageItems[j].label === "TMP_IMG_" + parkedImage.id) {
-                        targetImageInStorage = storageItems[j];
-                        break;
-                    }
+            var storageItems = storageEnv.frame.allPageItems;
+            for (var j = 0; j < storageItems.length; j++) {
+                if (storageItems[j].label === "TMP_IMG_" + imgID) {
+                    targetImageInStorage = storageItems[j];
+                    break;
                 }
-            } catch (e6) {}
-
-            if (targetImageInStorage !== null && imgResults.length > 0) {
+            }
+            if (targetImageInStorage !== null) {
                 try {
                     var targetChar = targetImageInStorage.parent;
                     while (targetChar && targetChar.constructor.name !== "Character" && targetChar.constructor.name !== "Story" && targetChar.constructor.name !== "Application") targetChar = targetChar.parent;
                     if (targetChar && targetChar.constructor.name === "Character") {
-                        targetChar.move(LocationOptions.AFTER, imgResults[0].insertionPoints.item(0));
-                        imgResults[0].remove();
+                        targetChar.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
+                        placeholderRange.remove();
                     } else {
-                        targetImageInStorage.parent.move(LocationOptions.AFTER, imgResults[0].insertionPoints.item(0));
-                        imgResults[0].remove();
+                        targetImageInStorage.parent.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
+                        placeholderRange.remove();
                     }
-                } catch (e7) {}
-            } else if (textTargets && textTargets.length > 0) {
-                try {
-                    if (parkedImage.character && parkedImage.character.isValid) parkedImage.character.move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1));
-                } catch (e8) {}
+                } catch (e5) {}
             }
         }
     } catch (restoreErr) {
@@ -3141,7 +3120,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         for (var s = 0; s < textTargetsRaw.length; s++) addTarget(textTargetsRaw[s]);
     }
 
-    var globalParkedTables = []; var globalParkedImages = []; var tableCounter = 0; var imageCounter = 0;
+    var globalParkedTables = []; var tableCounter = 0; var imageCounter = 0;
 
     try {
         for (var i = 0; i < textTargets.length; i++) {
@@ -3182,7 +3161,6 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                     
                     var p = anchorChar.parent; var idx = anchorChar.index;
                     anchorChar.move(LocationOptions.AFTER, storageEnv.frame.insertionPoints.item(-1));
-                    globalParkedImages.push({ id: imgID, character: anchorChar });
                     p.insertionPoints.item(idx).contents = marker;
 
                     try {
@@ -3316,7 +3294,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
         updateProgress(95, "Stelle Tabellen und Bilder wieder her...", overEndPct, null);
     } finally {
-        restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globalParkedImages, textTargets);
+        restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets);
     }
 
     updateProgress(98, "Prüfe auf Textübersatz (Auto-Fit)...", overEndPct, null);
