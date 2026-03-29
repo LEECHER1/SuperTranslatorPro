@@ -1878,8 +1878,9 @@ btnTranslate.onClick = function() {
 
 // --- 4. HAUPTSTEUERUNG ---
 function runMainProcess(doc, config) {
+    var preparedLegacy = null;
     if (config.mode === "BDA") {
-        prepareLegacyMasterSpreads(doc, !config.onlyTextUpdate);
+        preparedLegacy = prepareLegacyMasterSpreads(doc, !config.onlyTextUpdate);
     }
     if (config.mode === "BDA" && config.onlyTextUpdate) {
         updateLanguageMasterVersionLabels(doc);
@@ -1890,7 +1891,7 @@ function runMainProcess(doc, config) {
     updateLanguageMasterVersionLabels(doc);
     syncMasterTextChanges(doc);
     if (config.mode === "BDA") {
-        return runBDAMode(doc, config);
+        return runBDAMode(doc, config, preparedLegacy);
     } else {
         updateProgress(5, "Lese Textrahmen aus...", 5, "Vorbereitung");
         var targetTextObjArray = [];
@@ -1913,9 +1914,13 @@ function runMainProcess(doc, config) {
 }
 
 // --- 5. BDA AUTOMATIK LOGIK ---
-function runBDAMode(doc, config) {
+function runBDAMode(doc, config, preparedLegacy) {
     updateProgress(5, "Suche Mustervorlagen...", 5, "Analysiere Dokument...");
-    var langTasks = collectBDALanguageTasks(doc);
+    var langTasks = (preparedLegacy && preparedLegacy.langTasks) ? preparedLegacy.langTasks : collectBDALanguageTasks(doc);
+    if ((!langTasks || langTasks.length === 0) && !config.onlyTextUpdate) {
+        preparedLegacy = prepareLegacyMasterSpreads(doc, true);
+        langTasks = (preparedLegacy && preparedLegacy.langTasks) ? preparedLegacy.langTasks : collectBDALanguageTasks(doc);
+    }
 
     if (!config.onlyTextUpdate) updateLanguageMasterVersionLabels(doc);
     if (langTasks.length === 0) { throw new Error("Keine anderssprachigen Mustervorlagen (z.B. -en-) gefunden."); }
