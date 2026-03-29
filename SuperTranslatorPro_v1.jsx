@@ -490,14 +490,16 @@ btnCancel.onClick = function() { myWindow.close(); }
 
 function runMasterSpellingCheck(doc) {
     var masterSpreads = doc.masterSpreads;
-    var germanMasterNames = [];
+    var germanMasterNames = {};
+    var foundGermanMaster = false;
     for (var m = 0; m < masterSpreads.length; m++) {
         var name = masterSpreads[m].name;
         if (name && name.match(/[-_]de(?:[-_]|$)/i)) {
-            germanMasterNames.push(name);
+            germanMasterNames[name] = true;
+            foundGermanMaster = true;
         }
     }
-    if (germanMasterNames.length === 0) {
+    if (!foundGermanMaster) {
         alert("Keine deutschen Masterseiten (-de-) gefunden.");
         return;
     }
@@ -535,7 +537,7 @@ function runMasterSpellingCheck(doc) {
     // Scan master spreads directly
     for (var mi = 0; mi < masterSpreads.length; mi++) {
         var master = masterSpreads[mi];
-        if (germanMasterNames.indexOf(master.name) === -1) continue;
+        if (!germanMasterNames[master.name]) continue;
         for (var p = 0; p < master.pages.length; p++) {
             collectErrorsFromPage(master.pages[p], master.name);
         }
@@ -545,7 +547,7 @@ function runMasterSpellingCheck(doc) {
     for (var pi = 0; pi < doc.pages.length; pi++) {
         var page = doc.pages[pi];
         if (!page.appliedMaster || !page.appliedMaster.name) continue;
-        if (germanMasterNames.indexOf(page.appliedMaster.name) === -1) continue;
+        if (!germanMasterNames[page.appliedMaster.name]) continue;
         collectErrorsFromPage(page, page.appliedMaster.name + " (Dokument)");
     }
 
