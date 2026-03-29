@@ -745,6 +745,9 @@ function runBDAMode(doc, config) {
         var originalPages = getBDAOriginalPages(doc, config);
         if (originalPages && originalPages.length > 0) {
             saveBDASnapshot(doc, buildBDAChangeSnapshot(originalPages));
+        var snapshotPages = getBDAOriginalPages(doc, config);
+        if (snapshotPages && snapshotPages.length > 0) {
+            saveBDASnapshot(doc, buildBDAChangeSnapshot(snapshotPages));
         }
     } catch (e) {}
 
@@ -1311,12 +1314,12 @@ function syncMasterTextChanges(doc) {
         if (blocks.length === 0) continue;
         var deepLLang = getDeepLLangCode(langCode);
         var texts = [];
-        for (var b = 0; b < blocks.length; b++) texts.push(blocks[b].text);
+        for (var b = 0; b < blocks.length; b++) texts.push("<root>" + escapeDeepLXMLText(blocks[b].text) + "</root>");
         var translated = translateBatchDeepL(texts, deepLLang, 10, 20);
         if (!translated) continue;
         for (var b = 0; b < blocks.length; b++) {
             if (!translated[b]) continue;
-            replaceMasterFrameText(blocks[b].master, blocks[b].pageIndex, blocks[b].frameIndex, translated[b]);
+            replaceMasterFrameText(blocks[b].master, blocks[b].pageIndex, blocks[b].frameIndex, decodeDeepLXMLText(translated[b]));
         }
     }
     saveMasterSnapshot(doc, currentSnapshot);
