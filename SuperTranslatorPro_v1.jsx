@@ -306,6 +306,8 @@ bdaSourceInput.onActivate = function() {
 var groupButtons = myWindow.add("group"); 
 groupButtons.alignment = "center";
 var btnTranslate = groupButtons.add("button", undefined, "Übersetzung starten");
+var btnTextUpdate = groupButtons.add("button", undefined, "Textupdate");
+btnTextUpdate.helpTip = "Aktualisiert nur den Text auf den Musterseiten ohne neue Seiten zu erzeugen.";
 var btnCancel = groupButtons.add("button", undefined, "Schließen");
 
 // --- EINSTELLUNGEN FENSTER ---
@@ -584,6 +586,53 @@ btnTranslate.onClick = function() {
     );
 }
 
+btnTextUpdate.onClick = function() {
+    var doc = null;
+    try { doc = app.activeDocument; } catch(e) { alert("Kein Dokument offen!"); return; }
+
+    if (!apiKey || apiKey === "") {
+        alert("Bitte trage zuerst deinen DeepL API-Key in den Einstellungen (⚙️) ein.");
+        return;
+    }
+
+    if (!doc.masterSpreads || doc.masterSpreads.length === 0) {
+        alert("Das Dokument enthält keine Mustervorlagen zum Aktualisieren.");
+        return;
+    }
+
+    createProgressWindow();
+    writeLog("=== TEXTUPDATE GESTARTET ===");
+    writeLog("Dokument: " + doc.name + " | Modus: TEXTUPDATE");
+
+    app.doScript(
+        function() {
+            try {
+                var resultMsg = runTextUpdateProcess(doc);
+                writeLog("Erfolgreich beendet. (API genutzt: " + globalStats.apiChars + " Z., API gespart: " + globalStats.savedChars + " Z., Auto-Fit: " + globalStats.fittedFrames + " Rahmen)");
+                showSuccessScreen(resultMsg ? resultMsg : "Textupdate auf Mustervorlagen abgeschlossen.");
+            } catch(e) {
+                closeProgressWindow();
+                if (e.message === "CANCELLED") {
+                    writeLog("Vorgang durch Benutzer abgebrochen.", "WARNUNG");
+                    alert("⚠️ Vorgang abgebrochen!\n\nTipp: Drücke jetzt Cmd+Z (Rückgängig), um alle bisherigen Änderungen in einem Rutsch zu verwerfen.");
+                } else {
+                    writeLog("FEHLER: " + e.message, "ERROR");
+                    alert("Ein Fehler ist aufgetreten:\n" + e.message);
+                }
+            }
+        },
+        ScriptLanguage.JAVASCRIPT,
+        undefined,
+        UndoModes.ENTIRE_SCRIPT,
+        "Super Übersetzer: Textupdate"
+    );
+}
+
+function runTextUpdateProcess(doc) {
+    updateLanguageMasterVersionLabels(doc);
+    syncMasterTextChanges(doc);
+    return "Textupdate auf Mustervorlagen durchgeführt.";
+}
 
 // --- 4. HAUPTSTEUERUNG ---
 function runMainProcess(doc, config) {
