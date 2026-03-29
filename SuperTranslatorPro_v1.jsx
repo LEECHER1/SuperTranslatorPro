@@ -1,7 +1,7 @@
 #targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.4 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.5 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.4";
+var SCRIPT_VERSION = "28.5";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -753,12 +753,25 @@ function findMasterLanguageBadge(masterSpread, preferredCode) {
 
 function buildLanguageSpecificMasterName(baseName, langCode) {
     var langLower = String(langCode).toLowerCase();
-    var name = String(baseName || "Master");
+    var name = String(baseName || "Musterseite");
     name = name.replace(/\s+(copy|kopie)(?:\s*\d+)?$/i, "");
-    if (name.match(/[-_]([a-z]{2})(?:[-_]|$)/i)) {
-        return name.replace(/([-_])([a-z]{2})(?=(?:[-_]|$))/i, "$1" + langLower);
+    name = name.replace(/^\s+|\s+$/g, "");
+
+    var prefix = "";
+    var body = name;
+    var prefixMatch = name.match(/^([A-Z]+)[-_](.+)$/);
+    if (prefixMatch) {
+        prefix = prefixMatch[1];
+        body = prefixMatch[2];
     }
-    return name + "-" + langLower;
+
+    body = body.replace(/[-_][a-z]{2}(?=[-_]|$)/ig, "");
+    body = body.replace(/^[-_\s]+|[-_\s]+$/g, "");
+    if (body === "") body = "Musterseite";
+    if (!/Musterseite$/i.test(body)) body = body + "-Musterseite";
+
+    if (prefix !== "") return prefix + "-" + langLower + "-" + body;
+    return langLower + "-" + body;
 }
 
 function getMasterSpreadBaseName(masterSpread) {
@@ -900,30 +913,20 @@ function promptLegacyTargetLanguageSelection(preselectedCodeMap) {
     info.preferredSize.width = 360;
 
     var listGroup = dlg.add("group");
-    listGroup.orientation = "row";
+    listGroup.orientation = "column";
     listGroup.alignChildren = ["left", "top"];
 
-    var leftCol = listGroup.add("group");
-    leftCol.orientation = "column";
-    leftCol.alignChildren = "left";
-
-    var rightCol = listGroup.add("group");
-    rightCol.orientation = "column";
-    rightCol.alignChildren = "left";
-
     var checkboxes = [];
-    var visibleCount = 0;
+    var defaultMap = { en: true, fr: true, it: true, es: true, cs: true, hu: true };
     for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
         var opt = LEGACY_BDA_LANGUAGE_OPTIONS[i];
-        var targetCol = (visibleCount % 2 === 0) ? leftCol : rightCol;
-        var cb = targetCol.add("checkbox", undefined, opt.code + " (" + opt.label + ")");
+        var cb = listGroup.add("checkbox", undefined, opt.code + " (" + opt.label + ")");
         var key = opt.code.toLowerCase();
         cb.value = !!(preselectedCodeMap && preselectedCodeMap[key]);
         if (!cb.value && !hasPreselection) {
-            cb.value = (opt.code === "EN" || opt.code === "FR" || opt.code === "IT" || opt.code === "ES");
+            cb.value = !!defaultMap[key];
         }
         checkboxes.push({ code: opt.code, box: cb });
-        visibleCount++;
     }
 
     var buttonRow = dlg.add("group");
