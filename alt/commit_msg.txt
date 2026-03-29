@@ -1,5 +1,0 @@
-Fix spelling check script to only detect errors on German texts and prevent crashes
-
-- Replaced JSON.parse with eval() in LanguageTool response handling, as JSON is often undefined in Adobe ExtendScript.
-- Added a condition to check the detectedLanguage.code from the LanguageTool API response and skip texts that are not detected as German (start with "de"). This fulfills the requirement that only German is checked.
-- Wrapped API sleep call in finally block to ensure it occurs even if an exception is thrown, preventing IP blocks.
