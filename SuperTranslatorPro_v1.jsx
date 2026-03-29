@@ -9,6 +9,8 @@ var DEEPL_KEY_LABEL = "SuperTranslatorPRO_DeepL_API_Key";
 var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
+var SCRIPT_NAME = "Super Translator Pro";
+var SCRIPT_VERSION = "28.1";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -209,7 +211,7 @@ function updateLanguageMasterVersionLabels(doc) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var myWindow = new Window("palette", "Super Translator Pro v1.2");
+var myWindow = new Window("palette", SCRIPT_NAME + " v" + SCRIPT_VERSION);
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 
@@ -412,6 +414,8 @@ btnSettings.onClick = function() {
     leftGrp.alignment = "left";
     var btnClearTM = leftGrp.add("button", undefined, "Memory leeren");
     btnClearTM.preferredSize = [110, 25];
+    var btnFeedbackReport = leftGrp.add("button", undefined, "Feedback-Report");
+    btnFeedbackReport.preferredSize = [110, 25];
     
     var spacer = g.add("statictext", undefined, "");
     spacer.alignment = "fill";
@@ -447,12 +451,15 @@ btnSettings.onClick = function() {
             alert("Translation Memory wurde geleert.");
         }
     }
+    btnFeedbackReport.onClick = function() {
+        createFeedbackReport();
+    }
     btnLog.onClick = function() {
         var f = new File(logPath);
         if (f.exists) { f.execute(); } else { alert("Es wurde noch keine Logdatei erstellt."); }
     };
     btnInfo.onClick = function() {
-        var infoText = "Super Translator Pro v1.2\n";
+        var infoText = SCRIPT_NAME + " v" + SCRIPT_VERSION + "\n";
         infoText += "© " + new Date().getFullYear() + " Andreas Schwarz\n\n";
         infoText += "Ein professionelles Übersetzungstool für InDesign in Verbindung mit der DeepL API.\n\n";
         infoText += "Kernfunktionen:\n";
@@ -1318,6 +1325,35 @@ function syncBDATextChanges(doc, config) {
 
     saveBDASnapshot(doc, currentSnapshot);
     return anyUpdated ? "BDA-Textupdate ausgeführt für " + changeBlocks.length + " geänderte Elemente." : "Keine geänderten Textblöcke oder Bilder gefunden.";
+}
+
+function createFeedbackReport() {
+    var folder = Folder.desktop;
+    if (!folder || !folder.exists) folder = Folder.temp;
+    var fileName = "SuperTranslatorPRO_FeedbackReport_" + (new Date().getTime()) + ".txt";
+    var reportFile = new File(folder.fsName + "/" + fileName);
+    try {
+        reportFile.encoding = "UTF-8";
+        if (reportFile.open("w")) {
+            reportFile.writeln(SCRIPT_NAME + " Feedback Report");
+            reportFile.writeln("Version: " + SCRIPT_VERSION);
+            reportFile.writeln("Datum: " + new Date());
+            reportFile.writeln("OS: " + ($.os || "unbekannt"));
+            try { reportFile.writeln("InDesign-Version: " + app.version); } catch (e) { reportFile.writeln("InDesign-Version: unbekannt"); }
+            try { reportFile.writeln("Dokument: " + (app.activeDocument ? app.activeDocument.name : "Kein Dokument offen")); } catch (e) { reportFile.writeln("Dokument: unbekannt"); }
+            reportFile.writeln("API-Key gesetzt: " + ((apiKey && apiKey !== "") ? "Ja" : "Nein"));
+            reportFile.writeln("CSV-Pfad: " + (csvPath || "(leer)"));
+            reportFile.writeln("TM-Pfad: " + (tmPath || "(leer)"));
+            reportFile.writeln("Formality: " + (formalitySetting || "default"));
+            reportFile.writeln("DNT Styles: " + (dntStyles || "(leer)"));
+            reportFile.writeln("\n--- Bitte hier beschreiben: \n");
+            reportFile.close();
+            alert("Feedback-Report erstellt:\n" + reportFile.fsName);
+            try { reportFile.execute(); } catch (e) {}
+        }
+    } catch (e) {
+        alert("Feedback-Report konnte nicht erstellt werden:\n" + e.message);
+    }
 }
 
 function serializeJSON(obj) {
