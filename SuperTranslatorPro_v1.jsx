@@ -1,7 +1,7 @@
 #targetengine "SuperTranslatorPRO281"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.2 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.3 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.2";
+var SCRIPT_VERSION = "28.3";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -730,6 +730,22 @@ function buildLanguageSpecificMasterName(baseName, langCode) {
     return name + "-" + langLower;
 }
 
+function getMasterSpreadBaseName(masterSpread) {
+    if (!masterSpread || !masterSpread.isValid) return "";
+    try {
+        if (masterSpread.baseName !== undefined && masterSpread.baseName !== null && masterSpread.baseName !== "") {
+            return String(masterSpread.baseName);
+        }
+    } catch (e) {}
+    try {
+        var fullName = String(masterSpread.name);
+        var dashIndex = fullName.indexOf("-");
+        if (dashIndex !== -1 && dashIndex + 1 < fullName.length) return fullName.substring(dashIndex + 1);
+        return fullName;
+    } catch (e2) {}
+    return "";
+}
+
 function makeUniqueMasterSpreadName(doc, desiredName, excludedMaster) {
     var candidate = desiredName;
     var suffix = 2;
@@ -738,7 +754,7 @@ function makeUniqueMasterSpreadName(doc, desiredName, excludedMaster) {
         for (var i = 0; i < doc.masterSpreads.length; i++) {
             var master = doc.masterSpreads[i];
             if (excludedMaster && master === excludedMaster) continue;
-            if (String(master.name) === candidate) {
+            if (getMasterSpreadBaseName(master) === candidate) {
                 exists = true;
                 break;
             }
@@ -751,12 +767,15 @@ function makeUniqueMasterSpreadName(doc, desiredName, excludedMaster) {
 
 function renameMasterSpreadToLanguage(doc, masterSpread, langCode, baseName) {
     if (!masterSpread || !masterSpread.isValid) return "";
-    var desiredName = buildLanguageSpecificMasterName(baseName || masterSpread.name, langCode);
+    var currentBaseName = getMasterSpreadBaseName(masterSpread);
+    var desiredName = buildLanguageSpecificMasterName(baseName || currentBaseName, langCode);
     desiredName = makeUniqueMasterSpreadName(doc, desiredName, masterSpread);
     try {
-        if (String(masterSpread.name) !== desiredName) masterSpread.name = desiredName;
-    } catch (e) {}
-    return desiredName;
+        if (currentBaseName !== desiredName) masterSpread.baseName = desiredName;
+    } catch (e) {
+        try { masterSpread.properties = { baseName: desiredName }; } catch (e2) {}
+    }
+    return String(masterSpread.name);
 }
 
 function findGermanLegacyMasterSpread(doc) {
@@ -778,7 +797,7 @@ function normalizeLegacyMasterNames(doc) {
         var badge = findMasterLanguageBadge(master, null);
         if (!badge || !badge.code) continue;
         var oldName = String(master.name);
-        var newName = renameMasterSpreadToLanguage(doc, master, badge.code, oldName);
+        var newName = renameMasterSpreadToLanguage(doc, master, badge.code, getMasterSpreadBaseName(master));
         if (newName !== "" && newName !== oldName) renamed.push({ oldName: oldName, newName: newName });
     }
     return renamed;
@@ -863,7 +882,7 @@ function replaceMasterLanguageBadgeText(masterSpread, langCode) {
 function createLegacyTargetMasters(doc, germanMaster, langCodes) {
     var created = [];
     var anchor = germanMaster;
-    var sourceName = String(germanMaster.name);
+    var sourceBaseName = getMasterSpreadBaseName(germanMaster);
     for (var i = 0; i < langCodes.length; i++) {
         var code = String(langCodes[i]).toLowerCase();
         if (code === "de") continue;
@@ -884,7 +903,7 @@ function createLegacyTargetMasters(doc, germanMaster, langCodes) {
         if (!duplicated || !duplicated.isValid) throw new Error("Musterseite für " + code.toUpperCase() + " konnte nicht dupliziert werden.");
 
         try { duplicated.move(LocationOptions.AFTER, anchor); } catch (moveErr) {}
-        renameMasterSpreadToLanguage(doc, duplicated, code, sourceName);
+        renameMasterSpreadToLanguage(doc, duplicated, code, sourceBaseName);
         if (!replaceMasterLanguageBadgeText(duplicated, code)) {
             try { if (duplicated.isValid) duplicated.remove(); } catch (cleanupErr) {}
             throw new Error("Sprachkästchen auf der neuen Musterseite für " + code.toUpperCase() + " konnte nicht aktualisiert werden.");
@@ -903,7 +922,7 @@ function prepareLegacyMasterSpreads(doc, allowCreation) {
     if (!germanMaster) {
         throw new Error("Keine deutsche Musterseite erkannt. Erwartet wurde ein Sprachkästchen mit 'de'.");
     }
-    renameMasterSpreadToLanguage(doc, germanMaster, "de", germanMaster.name);
+    renameMasterSpreadToLanguage(doc, germanMaster, "de", getMasterSpreadBaseName(germanMaster));
 
     var langTasks = collectBDALanguageTasks(doc);
     if (langTasks.length === 0 && allowCreation) {
