@@ -1035,14 +1035,43 @@ function findAndReplaceTextInStory(story, findString, replaceString) {
 function replacePageFrameSegmentText(page, frameIndex, oldText, newText) {
     try {
         var frames = page.textFrames.everyItem().getElements();
-        if (frameIndex < frames.length) {
-            var story = getTextFrameStory(frames[frameIndex]);
-            if (story && findAndReplaceTextInStory(story, oldText, newText)) return true;
+        if (frameIndex >= frames.length) return false;
+        var targetFrame = frames[frameIndex];
+        if (!targetFrame.isValid) return false;
+        var story = getTextFrameStory(targetFrame);
+        if (!story) return false;
+        
+        // Nutze Suchen/Ersetzen, um Formatierung zu bewahren
+        app.findTextPreferences.findWhat = oldText;
+        var foundRanges = story.findText();
+        if (!foundRanges || foundRanges.length === 0) {
+            // Fallback: Suche in allen Frames dieser Seite
+            for (var i = 0; i < frames.length; i++) {
+                var fallbackStory = getTextFrameStory(frames[i]);
+                if (fallbackStory) {
+                    app.findTextPreferences.findWhat = oldText;
+                    foundRanges = fallbackStory.findText();
+                    if (foundRanges && foundRanges.length > 0) {
+                        for (var j = 0; j < foundRanges.length; j++) {
+                            try { foundRanges[j].contents = newText; } catch (e) {}
+                        }
+                        return true;
+                    }
+                }
+            }
+            app.findTextPreferences = NothingEnum.nothing;
+            return false;
         }
-        for (var i = 0; i < frames.length; i++) {
-            var frameStory = getTextFrameStory(frames[i]);
-            if (frameStory && findAndReplaceTextInStory(frameStory, oldText, newText)) return true;
+        
+        // Ersetze in den gefundenen Ranges
+        for (var k = 0; k < foundRanges.length; k++) {
+            try { foundRanges[k].contents = newText; } catch (e) {}
         }
+        app.findTextPreferences = NothingEnum.nothing;
+        return true;
+    } catch (e) {
+        try { app.findTextPreferences = NothingEnum.nothing; } catch (e2) {}
+        return false;
         return false;
     } catch (e) {
         return false;
@@ -1094,7 +1123,8 @@ function syncBDATextChanges(doc, config) {
             var currentText = currentFrames[f] || "";
             var previousText = prevSnapshot ? (previousFrames[f] || "") : null;
             if (prevSnapshot === null || currentText !== previousText) {
-                changeBlocks.push({ pageIndex: p, frameIndex: f });
+                var segmentDiff = getChangedTextSegment(previousText, currentText);
+                changeBlocks.push({ pageIndex: p, frameIndex: f, oldText: previousText, newText: currentText, diff: segmentDiff });
             }
         }
     }
@@ -1110,24 +1140,30 @@ function syncBDATextChanges(doc, config) {
         var deepLLang = getDeepLLangCode(langCode);
         for (var i = 0; i < changeBlocks.length; i++) {
             var block = changeBlocks[i];
-            var sourcePage = sourcePages[block.pageIndex];
-            if (!sourcePage) continue;
-            var sourceFrames = sourcePage.textFrames.everyItem().getElements();
-            if (block.frameIndex >= sourceFrames.length) continue;
-            var sourceStory = getTextFrameStory(sourceFrames[block.frameIndex]);
-            if (!sourceStory) continue;
-            var xml = buildTextObjectXML(sourceStory);
-            var translatedXMLs = translateBatchDeepL([xml], deepLLang, 10, 20);
-            if (!translatedXMLs || !translatedXMLs[0]) continue;
-            var translatedXML = translatedXMLs[0];
+            if (!block.diff) continue;
             var targetPage = pageList[block.pageIndex];
             if (!targetPage) continue;
             var targetFrames = targetPage.textFrames.everyItem().getElements();
             if (block.frameIndex >= targetFrames.length) continue;
-            var targetStory = getTextFrameStory(targetFrames[block.frameIndex]);
-            if (!targetStory) continue;
-            applyXMLtoInDesign(targetStory, translatedXML, deepLLang);
-            anyUpdated = true;
+            var targetFrame = targetFrames[block.frameIndex];
+            var oldSegment = block.diff.oldSegment;
+            var newSegment = block.diff.newSegment;
+            if (oldSegment !== "" && oldSegment.length > 1) {
+                var sourcePage = sourcePages[block.pageIndex];
+                var sourceFrames = sourcePage.textFrames.everyItem().getElements();
+                var sourceFrame = sourceFrames[block.frameIndex];
+                var sourceStory = getTextFrameStory(sourceFrame);
+                if (sourceStory) {
+                    var translatedSegments = translateBatchDeepL([newSegment], deepLLang, 10, 20);
+                    if (translatedSegments && translatedSegments[0]) {
+                        var translatedSegment = translatedSegments[0];
+                        translatedSegment = translatedSegment.replace(/^<root>/, "").replace(/<\/root>$/, "");
+                        if (replacePageFrameSegmentText(targetPage, block.frameIndex, oldSegment, translatedSegment)) {
+                            anyUpdated = true;
+                        }
+                    }
+                }
+            }
         }
     }
     saveBDASnapshot(doc, currentSnapshot);
