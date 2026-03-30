@@ -1,7 +1,7 @@
-#targetengine "SuperTranslatorPRO281"
+#targetengine "SuperTranslatorPRO282"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.1 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.2 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.1";
+var SCRIPT_VERSION = "28.2";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -31,6 +31,29 @@ var cancelFlag = false;
 var startTime = 0;
 var germanHighlightState = null;
 var germanFocusState = { activePageKey: null, fittedPageKey: null };
+var LEGACY_BDA_LANGUAGE_OPTIONS = [
+    { code: "EN", label: "Englisch" },
+    { code: "FR", label: "Französisch" },
+    { code: "IT", label: "Italienisch" },
+    { code: "ES", label: "Spanisch" },
+    { code: "CS", label: "Tschechisch" },
+    { code: "HU", label: "Ungarisch" },
+    { code: "BG", label: "Bulgarisch" },
+    { code: "DA", label: "Dänisch" },
+    { code: "EL", label: "Griechisch" },
+    { code: "ET", label: "Estnisch" },
+    { code: "FI", label: "Finnisch" },
+    { code: "LT", label: "Litauisch" },
+    { code: "LV", label: "Lettisch" },
+    { code: "NL", label: "Niederländisch" },
+    { code: "PL", label: "Polnisch" },
+    { code: "PT", label: "Portugiesisch" },
+    { code: "RO", label: "Rumänisch" },
+    { code: "RU", label: "Russisch" },
+    { code: "SK", label: "Slowakisch" },
+    { code: "SL", label: "Slowenisch" },
+    { code: "SV", label: "Schwedisch" }
+];
 
 var logPath = Folder.temp + "/SuperTranslatorPRO_Log.txt";
 
@@ -365,7 +388,7 @@ grpBDASource.indent = 20;
 grpBDASource.add("statictext", undefined, "Originalseiten:");
 var bdaSourceInput = grpBDASource.add("edittext", undefined, "AUTO");
 bdaSourceInput.characters = 8;
-bdaSourceInput.helpTip = "AUTO sucht selbst nach -de- Musterseiten";
+bdaSourceInput.helpTip = "AUTO sucht selbst nach der deutschen Musterseite über das schwarze Sprachkästchen";
 
 var checkTOC = panelBDA.add("checkbox", undefined, "Titelseite (Seite 1): Start-Seitenzahlen aktualisieren");
 checkTOC.indent = 20;
@@ -583,6 +606,303 @@ btnCancel.onClick = function() { myWindow.close(); }
 
 function isGermanMasterName(name) {
     return !!(name && name.match(/[-_]de(?:[-_]|$)/i));
+}
+
+function normalizeLanguageBadgeText(text) {
+    if (text === null || text === undefined) return "";
+    return String(text).replace(/^\s+|\s+$/g, "").replace(/[\r\n\t ]+/g, "").replace(/[^A-Za-z]/g, "").toLowerCase();
+}
+
+function isSupportedLegacyLanguageCode(code) {
+    if (!code) return false;
+    var upper = String(code).toUpperCase();
+    if (upper === "DE") return true;
+    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
+        if (LEGACY_BDA_LANGUAGE_OPTIONS[i].code === upper) return true;
+    }
+    return false;
+}
+
+function isBlackLikeSwatch(swatch) {
+    if (!swatch || !swatch.isValid) return false;
+    try {
+        var swatchName = String(swatch.name).toLowerCase();
+        if (swatchName === "black" || swatchName === "schwarz") return true;
+    } catch (e) {}
+    try {
+        var values = swatch.colorValue;
+        if (values && values.length >= 4 && Number(values[0]) <= 10 && Number(values[1]) <= 10 && Number(values[2]) <= 10 && Number(values[3]) >= 90) {
+            return true;
+        }
+    } catch (e2) {}
+    return false;
+}
+
+function hasBlackBadgeBackground(item) {
+    if (!item || !item.isValid) return false;
+    try {
+        if (item.fillColor && isBlackLikeSwatch(item.fillColor)) return true;
+    } catch (e) {}
+    try {
+        var parent = item.parent;
+        if (parent && parent.isValid && parent.constructor && parent.constructor.name === "Group" && parent.allPageItems) {
+            var siblings = parent.allPageItems;
+            for (var i = 0; i < siblings.length; i++) {
+                var sibling = siblings[i];
+                if (!sibling || !sibling.isValid || sibling === item) continue;
+                try {
+                    if (sibling.fillColor && isBlackLikeSwatch(sibling.fillColor)) return true;
+                } catch (e2) {}
+            }
+        }
+    } catch (e3) {}
+    return false;
+}
+
+function getTextFramesFromContainer(container) {
+    var frames = [];
+    if (!container) return frames;
+    var items = [];
+    try { items = container.allPageItems; } catch (e) { items = []; }
+    for (var i = 0; i < items.length; i++) {
+        if (items[i] && items[i].isValid && items[i].constructor.name === "TextFrame") frames.push(items[i]);
+    }
+    return frames;
+}
+
+function collectMasterLanguageBadges(masterSpread, preferredCode) {
+    var matches = [];
+    if (!masterSpread || !masterSpread.isValid) return matches;
+    var preferred = preferredCode ? String(preferredCode).toLowerCase() : "";
+    for (var p = 0; p < masterSpread.pages.length; p++) {
+        var page = masterSpread.pages[p];
+        var frames = getTextFramesFromContainer(page);
+        for (var f = 0; f < frames.length; f++) {
+            var tf = frames[f];
+            var textObj = null;
+            try { if (tf.texts && tf.texts.length > 0) textObj = tf.texts[0]; } catch (e2) { textObj = null; }
+            if (!textObj || !textObj.isValid) {
+                var story = getTextFrameStory(tf);
+                if (!story) continue;
+                textObj = story;
+            }
+            var code = normalizeLanguageBadgeText(textObj.contents);
+            if (code.length !== 2 || !isSupportedLegacyLanguageCode(code)) continue;
+            if (preferred !== "" && code !== preferred) continue;
+
+            var score = 0;
+            try { if (hasBlackBadgeBackground(tf)) score += 40; } catch (e3) {}
+            try {
+                var bounds = tf.geometricBounds;
+                var pageBounds = page.bounds;
+                var frameCenterX = (bounds[1] + bounds[3]) / 2;
+                var frameCenterY = (bounds[0] + bounds[2]) / 2;
+                var pageCenterX = (pageBounds[1] + pageBounds[3]) / 2;
+                var pageCenterY = (pageBounds[0] + pageBounds[2]) / 2;
+                if (frameCenterX >= pageCenterX) score += 20;
+                if (frameCenterY <= pageCenterY) score += 20;
+                if ((bounds[3] - bounds[1]) <= 120) score += 10;
+                if ((bounds[2] - bounds[0]) <= 60) score += 10;
+            } catch (e4) {}
+            if (code === "de") score += 5;
+            matches.push({ code: code, textObj: textObj, frame: tf, page: page, score: score });
+        }
+    }
+    return matches;
+}
+
+function findMasterLanguageBadge(masterSpread, preferredCode) {
+    var matches = collectMasterLanguageBadges(masterSpread, preferredCode);
+    var best = null;
+    for (var i = 0; i < matches.length; i++) {
+        if (!best || matches[i].score > best.score) best = matches[i];
+    }
+    return best;
+}
+
+function buildLegacyMasterBaseName(langCode) {
+    return String(langCode).toLowerCase() + "-Musterseite";
+}
+
+function makeAlphabeticIndex(index) {
+    var n = index + 1;
+    var result = "";
+    while (n > 0) {
+        var remainder = (n - 1) % 26;
+        result = String.fromCharCode(65 + remainder) + result;
+        n = Math.floor((n - 1) / 26);
+    }
+    return result;
+}
+
+function setMasterSpreadLanguageNaming(masterSpread, prefixLetter, langCode) {
+    if (!masterSpread || !masterSpread.isValid) return "";
+    var baseName = buildLegacyMasterBaseName(langCode);
+    try {
+        masterSpread.baseName = baseName;
+    } catch (e) {
+        try { masterSpread.properties = { baseName: baseName }; } catch (e2) {}
+    }
+    try {
+        masterSpread.namePrefix = prefixLetter;
+    } catch (e3) {
+        try { masterSpread.properties = { namePrefix: prefixLetter }; } catch (e4) {}
+    }
+    return String(masterSpread.name);
+}
+
+function replaceMasterLanguageBadgeText(masterSpread, langCode) {
+    var badges = collectMasterLanguageBadges(masterSpread, "de");
+    if (badges.length === 0) badges = collectMasterLanguageBadges(masterSpread, null);
+    if (badges.length === 0) return false;
+    var changed = 0;
+    var handledIds = {};
+    for (var i = 0; i < badges.length; i++) {
+        var badge = badges[i];
+        if (!badge || !badge.textObj || !badge.textObj.isValid) continue;
+        var textId = null;
+        try { textId = badge.textObj.id; } catch (eId) { textId = null; }
+        if (textId !== null && handledIds[textId]) continue;
+        try {
+            badge.textObj.contents = String(langCode).toLowerCase();
+            changed++;
+            if (textId !== null) handledIds[textId] = true;
+        } catch (e) {}
+    }
+    return changed > 0;
+}
+
+function findGermanLegacyMasterSpread(doc) {
+    for (var i = 0; i < doc.masterSpreads.length; i++) {
+        if (isGermanMasterName(doc.masterSpreads[i].name)) return doc.masterSpreads[i];
+    }
+    for (var j = 0; j < doc.masterSpreads.length; j++) {
+        var badge = findMasterLanguageBadge(doc.masterSpreads[j], "de");
+        if (badge && badge.code === "de") return doc.masterSpreads[j];
+    }
+    return null;
+}
+
+function promptLegacyTargetLanguageSelection() {
+    var dlg = new Window("dialog", "Fehlende Musterseiten erzeugen");
+    dlg.orientation = "column";
+    dlg.alignChildren = ["fill", "top"];
+
+    var info = dlg.add("statictext", undefined, "Es wurden keine zielsprachigen Musterseiten erkannt.\nBitte wähle die Sprachen aus, die automatisch erzeugt werden sollen.", { multiline: true });
+    info.preferredSize.width = 360;
+
+    var listGroup = dlg.add("group");
+    listGroup.orientation = "column";
+    listGroup.alignChildren = ["left", "top"];
+
+    var defaultMap = { en: true, fr: true, it: true, es: true, cs: true, hu: true };
+    var checkboxes = [];
+    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
+        var opt = LEGACY_BDA_LANGUAGE_OPTIONS[i];
+        var cb = listGroup.add("checkbox", undefined, opt.code + " (" + opt.label + ")");
+        cb.value = !!defaultMap[opt.code.toLowerCase()];
+        checkboxes.push({ code: opt.code.toLowerCase(), box: cb });
+    }
+
+    var buttonRow = dlg.add("group");
+    buttonRow.alignment = "right";
+    var btnOk = buttonRow.add("button", undefined, "Erzeugen");
+    var btnCancel = buttonRow.add("button", undefined, "Abbrechen");
+
+    var action = "cancel";
+    btnOk.onClick = function() { action = "ok"; dlg.close(); };
+    btnCancel.onClick = function() { action = "cancel"; dlg.close(); };
+
+    dlg.show();
+    if (action !== "ok") return null;
+
+    var selected = [];
+    for (var j = 0; j < checkboxes.length; j++) {
+        if (checkboxes[j].box.value) selected.push(checkboxes[j].code);
+    }
+    return selected;
+}
+
+function collectLegacyBDALanguageTasks(doc, preferredCodes) {
+    var tasksByCode = {};
+    for (var m = 0; m < doc.masterSpreads.length; m++) {
+        var master = doc.masterSpreads[m];
+        var code = getMasterLang(master.name);
+        if (!code || code === "de" || tasksByCode[code]) continue;
+        tasksByCode[code] = { code: code, deepLCode: getDeepLLangCode(code), master: master };
+    }
+
+    var orderedCodes = [];
+    if (preferredCodes && preferredCodes.length > 0) {
+        for (var i = 0; i < preferredCodes.length; i++) orderedCodes.push(String(preferredCodes[i]).toLowerCase());
+    } else {
+        for (var j = 0; j < LEGACY_BDA_LANGUAGE_OPTIONS.length; j++) orderedCodes.push(LEGACY_BDA_LANGUAGE_OPTIONS[j].code.toLowerCase());
+    }
+
+    var tasks = [];
+    var seen = {};
+    for (var k = 0; k < orderedCodes.length; k++) {
+        var codeKey = orderedCodes[k];
+        if (tasksByCode[codeKey]) {
+            tasks.push(tasksByCode[codeKey]);
+            seen[codeKey] = true;
+        }
+    }
+    for (var extraCode in tasksByCode) {
+        if (tasksByCode.hasOwnProperty(extraCode) && !seen[extraCode]) tasks.push(tasksByCode[extraCode]);
+    }
+    return tasks;
+}
+
+function createLegacyTargetMasters(doc, germanMaster, selectedCodes) {
+    var created = [];
+    var anchor = germanMaster;
+    for (var i = 0; i < selectedCodes.length; i++) {
+        var code = String(selectedCodes[i]).toLowerCase();
+        if (code === "de") continue;
+
+        var duplicated = null;
+        try { duplicated = germanMaster.duplicate(LocationOptions.AFTER, anchor); } catch (dupErr) { duplicated = null; }
+        if (!duplicated || !duplicated.isValid) {
+            try { duplicated = germanMaster.duplicate(); } catch (dupErr2) { duplicated = null; }
+        }
+        if (!duplicated || !duplicated.isValid) throw new Error("Musterseite für " + code.toUpperCase() + " konnte nicht dupliziert werden.");
+
+        try { duplicated.move(LocationOptions.AFTER, anchor); } catch (moveErr) {}
+        setMasterSpreadLanguageNaming(duplicated, makeAlphabeticIndex(i + 2), code);
+        if (!replaceMasterLanguageBadgeText(duplicated, code)) {
+            try { if (duplicated.isValid) duplicated.remove(); } catch (cleanupErr) {}
+            throw new Error("Sprachkästchen auf der neuen Musterseite für " + code.toUpperCase() + " konnte nicht aktualisiert werden.");
+        }
+        created.push(duplicated);
+        anchor = duplicated;
+    }
+    return created;
+}
+
+function prepareLegacyMasterSpreads(doc, allowCreation) {
+    updateProgress(4, "Prüfe Musterseiten...", 4, "Analysiere Dokument...");
+
+    var germanMaster = findGermanLegacyMasterSpread(doc);
+    if (!germanMaster) {
+        throw new Error("Keine deutsche Musterseite erkannt. Erwartet wurde ein schwarzes Kästchen mit 'de'.");
+    }
+
+    setMasterSpreadLanguageNaming(germanMaster, "B", "de");
+    replaceMasterLanguageBadgeText(germanMaster, "de");
+
+    var langTasks = collectLegacyBDALanguageTasks(doc);
+    if (langTasks.length === 0 && allowCreation) {
+        var selectedCodes = promptLegacyTargetLanguageSelection();
+        if (selectedCodes === null) throw new Error("Musterseiten-Erzeugung abgebrochen.");
+        if (selectedCodes.length === 0) throw new Error("Keine Zielsprachen für die automatische Musterseiten-Generierung ausgewählt.");
+
+        updateProgress(7, "Erzeuge fehlende Musterseiten...", 7, "Erzeuge Legacy-Fallback...");
+        createLegacyTargetMasters(doc, germanMaster, selectedCodes);
+        langTasks = collectLegacyBDALanguageTasks(doc, selectedCodes);
+    }
+
+    return { germanMaster: germanMaster, langTasks: langTasks };
 }
 
 function shouldCheckGermanText(text) {
@@ -1528,6 +1848,10 @@ btnTranslate.onClick = function() {
 
 // --- 4. HAUPTSTEUERUNG ---
 function runMainProcess(doc, config) {
+    var preparedLegacy = null;
+    if (config.mode === "BDA") {
+        preparedLegacy = prepareLegacyMasterSpreads(doc, !config.onlyTextUpdate);
+    }
     if (config.mode === "BDA" && config.onlyTextUpdate) {
         updateLanguageMasterVersionLabels(doc);
         syncMasterTextChanges(doc);
@@ -1537,7 +1861,7 @@ function runMainProcess(doc, config) {
     updateLanguageMasterVersionLabels(doc);
     syncMasterTextChanges(doc);
     if (config.mode === "BDA") {
-        return runBDAMode(doc, config);
+        return runBDAMode(doc, config, preparedLegacy);
     } else {
         updateProgress(5, "Lese Textrahmen aus...", 5, "Vorbereitung");
         var targetTextObjArray = [];
@@ -1560,24 +1884,9 @@ function runMainProcess(doc, config) {
 }
 
 // --- 5. BDA AUTOMATIK LOGIK ---
-function runBDAMode(doc, config) {
+function runBDAMode(doc, config, preparedLegacy) {
     updateProgress(5, "Suche Mustervorlagen...", 5, "Analysiere Dokument...");
-    var masterSpreads = doc.masterSpreads;
-    var langTasks = [];
-    
-    for (var m = 0; m < masterSpreads.length; m++) {
-        var mName = masterSpreads[m].name;
-        var match = mName.match(/[-_]([a-z]{2})(?:[-_]|$)/i); 
-        if (match) {
-            var code = match[1].toLowerCase();
-            if (code !== "de") { 
-                var deepLLang = code.toUpperCase();
-                if (deepLLang === "EN") deepLLang = "EN-US";
-                if (deepLLang === "PT") deepLLang = "PT-PT";
-                langTasks.push({ code: code, deepLCode: deepLLang, master: masterSpreads[m] });
-            }
-        }
-    }
+    var langTasks = (preparedLegacy && preparedLegacy.langTasks) ? preparedLegacy.langTasks : collectLegacyBDALanguageTasks(doc);
 
     if (!config.onlyTextUpdate) updateLanguageMasterVersionLabels(doc);
     if (langTasks.length === 0) { throw new Error("Keine anderssprachigen Mustervorlagen (z.B. -en-) gefunden."); }
