@@ -1,7 +1,7 @@
-#targetengine "SuperTranslatorPRO282"
+#targetengine "SuperTranslatorPRO283"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.2 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.3 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.2";
+var SCRIPT_VERSION = "28.3";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -2747,7 +2747,7 @@ function syncMasterTextChanges(doc) {
         if (blocks.length === 0) continue;
         var deepLLang = getDeepLLangCode(langCode);
         var texts = [];
-        for (var b = 0; b < blocks.length; b++) texts.push("<root>" + escapeDeepLXMLText(blocks[b].text) + "</root>");
+        for (var b = 0; b < blocks.length; b++) texts.push("<root>" + protectReferenceBracketMarkers(escapeDeepLXMLText(blocks[b].text)) + "</root>");
         var translated = translateBatchDeepL(texts, deepLLang, 10, 20);
         if (!translated) continue;
         for (var b = 0; b < blocks.length; b++) {
@@ -3058,6 +3058,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 });
             }
 
+            chunk = protectReferenceBracketMarkers(chunk);
             chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
             chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
             if (chunk !== "") {
@@ -3074,7 +3075,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; continue; }
             
             var xml = buildXMLWithGlossary(textTargets[i]);
-            var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
+            var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL|REF)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
             
             if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
                 finalTranslations[i] = ""; 
@@ -3292,6 +3293,38 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
     return translated;
 }
 
+function protectReferenceBracketMarkers(xmlText) {
+    if (xmlText === null || xmlText === undefined || xmlText === "") return xmlText;
+    return String(xmlText).replace(/\[(\d+)\]/g, '<nt>###REF_$1###</nt>');
+}
+
+function restoreReferenceBracketMarkers(text) {
+    if (text === null || text === undefined || text === "") return text;
+    return String(text).replace(/###REF_(\d+)###/g, '[$1]');
+}
+
+function normalizeReferenceBracketSpacing(text) {
+    if (text === null || text === undefined || text === "") return text;
+    var result = String(text);
+    result = result.replace(/\[\s*(\d+)\s*\]/g, '[$1]');
+    result = result.replace(/([A-Za-z0-9À-ÖØ-öø-ÿĀ-ɏΆ-ώЀ-ӿ\)])(?:[ \t\xA0]*)\[(\d+)\]/g, '$1 [$2]');
+    result = result.replace(/\[(\d+)\](?:[ \t\xA0]*)(?=[A-Za-z0-9À-ÖØ-öø-ÿĀ-ɏΆ-ώЀ-ӿ\(])/g, '[$1] ');
+    result = result.replace(/\[(\d+)\](?:[ \t\xA0]+)(?=[\.,;:!\?\)\]\}])/g, '[$1]');
+    result = result.replace(/(^|[\r\n])(?:[ \t\xA0]+)(?=\[\d+\])/g, '$1');
+    return result;
+}
+
+function decodeTranslatedTextContent(textContent) {
+    if (textContent === null || textContent === undefined) return "";
+    var decoded = decodeXMLValue(textContent)
+        .replace(/<pbr\/>/gi, '\r')
+        .replace(/<lbr\/>/gi, '\n')
+        .replace(/<tab\/>/gi, '\t')
+        .replace(/<\/?nt[^>]*>/gi, '');
+    decoded = restoreReferenceBracketMarkers(decoded);
+    return normalizeReferenceBracketSpacing(decoded);
+}
+
 function normalizeTranslatedXML(xml) {
     if (!xml || xml === "") return xml;
     return String(xml).replace(/^\s+|\s+$/g, '')
@@ -3311,7 +3344,8 @@ function decodeDeepLXMLText(xml) {
     xml = xml.replace(/^<root>/, '').replace(/<\/root>$/, '');
     xml = xml.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     xml = xml.replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t');
-    return xml;
+    xml = restoreReferenceBracketMarkers(xml);
+    return normalizeReferenceBracketSpacing(xml);
 }
 
 function escapeXMLAttr(value) {
@@ -3377,6 +3411,7 @@ function buildTextObjectXML(textObj) {
             });
         }
 
+        chunk = protectReferenceBracketMarkers(chunk);
         chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
         chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
         if (chunk !== "") {
@@ -3410,7 +3445,7 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
         var cSty = decodeXMLAttr(getAttr(attrs, "k")); var pAli = decodeXMLAttr(getAttr(attrs, "a")); var lInd = decodeXMLAttr(getAttr(attrs, "li"));
         var fInd = decodeXMLAttr(getAttr(attrs, "fi")); var bLis = decodeXMLAttr(getAttr(attrs, "b"));
         
-        textContent = decodeXMLValue(textContent).replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t').replace(/<\/?nt[^>]*>/gi, '');
+        textContent = decodeTranslatedTextContent(textContent);
         if (textContent.length > 0) {
             var appliedRange = null; var doc = app.activeDocument;
             try {
