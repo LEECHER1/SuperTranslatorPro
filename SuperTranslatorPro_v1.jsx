@@ -248,6 +248,74 @@ function getGlossaryOverrideForTarget(entry, targetUpper, shortTarget) {
     return String(rawValue);
 }
 
+function buildGlossaryRuntime(parsedGlossary, selectedLang) {
+    var runtime = { map: {}, regex: null };
+    if (!parsedGlossary || !selectedLang) return runtime;
+
+    var terms = [];
+    var targetUpper = String(selectedLang).toUpperCase();
+    var shortTarget = targetUpper.substring(0, 2);
+
+    for (var key in parsedGlossary) {
+        if (!parsedGlossary.hasOwnProperty(key)) continue;
+        var glossaryOverride = getGlossaryOverrideForTarget(parsedGlossary[key], targetUpper, shortTarget);
+        if (glossaryOverride !== null) {
+            terms.push(key);
+            runtime.map[key.toLowerCase()] = glossaryOverride;
+        }
+    }
+
+    if (terms.length > 0) {
+        terms.sort(function(a, b) { return b.length - a.length; });
+        for (var t = 0; t < terms.length; t++) {
+            terms[t] = terms[t].replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+        }
+        runtime.regex = new RegExp("(^|[^\\wäöüÄÖÜßéèêáàâíìîóòôúùûñ])(" + terms.join("|") + ")(?=[^\\wäöüÄÖÜßéèêáàâíìîóòôúùûñ]|$)", "gi");
+    }
+
+    return runtime;
+}
+
+function applyGlossaryRuntimeToChunk(chunk, glossaryRuntime) {
+    if (!chunk || !glossaryRuntime || !glossaryRuntime.regex) return chunk;
+
+    return chunk.replace(glossaryRuntime.regex, function(match, prefix, term, offset, string) {
+        if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match;
+
+        var lowerMatch = term.toLowerCase();
+        var mappedVal = glossaryRuntime.map[lowerMatch];
+        var replacement = term;
+        if (mappedVal === "###DNT###") replacement = '<nt>' + term + '</nt>';
+        else if (mappedVal && mappedVal !== "") replacement = '<nt>' + escapeDeepLXMLText(mappedVal) + '</nt>';
+        return prefix + replacement;
+    });
+}
+
+function protectChunkNonTranslatables(chunk) {
+    if (!chunk || chunk === "") return chunk;
+
+    var regexArt = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*|[0-9]{4,})\b/g;
+    chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
+        var before = string.substring(0, offset);
+        var openTags = (before.match(/<nt>/g) || []).length;
+        var closeTags = (before.match(/<\/nt>/g) || []).length;
+        if (openTags > closeTags) return match;
+
+        if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match;
+        return '<nt>' + match + '</nt>';
+    });
+
+    chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
+    return chunk;
+}
+
+function buildPlainTranslationXML(text, glossaryRuntime) {
+    var chunk = escapeDeepLXMLText(text);
+    chunk = applyGlossaryRuntimeToChunk(chunk, glossaryRuntime);
+    chunk = protectChunkNonTranslatables(chunk);
+    return "<root>" + chunk + "</root>";
+}
+
 function getInDesignLanguageName(deepLCode) {
     var map = {
         "EN-US": "Englisch: USA", "EN-GB": "Englisch: Großbritannien", "EN": "Englisch: USA",
@@ -2089,6 +2157,17 @@ function getDocSnapshotKey(doc) {
     return "UNSAVED_" + doc.name;
 }
 
+function getGlossaryVersionToken(path) {
+    if (!path || path === "") return "";
+    try {
+        var f = new File(path);
+        if (!f.exists) return "";
+        return f.fsName + "|" + String(f.modified);
+    } catch (e) {
+        return String(path);
+    }
+}
+
 function loadMasterSnapshot(doc) {
     var file = getMasterSnapshotFile();
     if (!file.exists) return null;
@@ -2714,6 +2793,14 @@ function replaceMasterFrameText(masterSpread, pageIndex, frameIndex, contents) {
 function syncMasterTextChanges(doc) {
     var prevSnapshot = loadMasterSnapshot(doc);
     var currentSnapshot = buildMasterTextSnapshot(doc);
+    var parsedGlossary = loadCSVGlossary(csvPath);
+    var glossaryRuntimeByLang = {};
+    var glossaryVersion = getGlossaryVersionToken(csvPath);
+    var forceGlossaryRefresh = false;
+    if (prevSnapshot) {
+        forceGlossaryRefresh = ((prevSnapshot.__glossaryVersion || "") !== glossaryVersion);
+    }
+    currentSnapshot.__glossaryVersion = glossaryVersion;
     if (!prevSnapshot) {
         saveMasterSnapshot(doc, currentSnapshot);
         return;
@@ -2730,7 +2817,7 @@ function syncMasterTextChanges(doc) {
             for (var f = 0; f < currentFrames.length; f++) {
                 var currentText = currentFrames[f] || "";
                 var previousText = previousFrames[f] || "";
-                if (currentText !== previousText) {
+                if (forceGlossaryRefresh || currentText !== previousText) {
                     var targets = getRelatedTargetMasterSpreads(doc, masterName);
                     for (var t = 0; t < targets.length; t++) {
                         var targetMaster = targets[t];
@@ -2748,8 +2835,10 @@ function syncMasterTextChanges(doc) {
         var blocks = changesByLang[langCode];
         if (blocks.length === 0) continue;
         var deepLLang = getDeepLLangCode(langCode);
+        if (!glossaryRuntimeByLang[deepLLang]) glossaryRuntimeByLang[deepLLang] = buildGlossaryRuntime(parsedGlossary, deepLLang);
+        var glossaryRuntime = glossaryRuntimeByLang[deepLLang];
         var texts = [];
-        for (var b = 0; b < blocks.length; b++) texts.push("<root>" + escapeDeepLXMLText(blocks[b].text) + "</root>");
+        for (var b = 0; b < blocks.length; b++) texts.push(buildPlainTranslationXML(blocks[b].text, glossaryRuntime));
         var translated = translateBatchDeepL(texts, deepLLang, 10, 20);
         if (!translated) continue;
         for (var b = 0; b < blocks.length; b++) {
@@ -2903,25 +2992,9 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
     var parsedGlossary = loadCSVGlossary(csvPath);
 
     if (parsedGlossary) {
-        var terms = [];
-        var targetUpper = selectedLang.toUpperCase();
-        var shortTarget = targetUpper.substring(0,2); 
-
-        for (var key in parsedGlossary) {
-            if (!parsedGlossary.hasOwnProperty(key)) continue;
-            var glossaryOverride = getGlossaryOverrideForTarget(parsedGlossary[key], targetUpper, shortTarget);
-            if (glossaryOverride !== null) {
-                terms.push(key);
-                glossaryMap[key.toLowerCase()] = glossaryOverride;
-            }
-        }
-        if (terms.length > 0) {
-            terms.sort(function(a,b){return b.length - a.length}); 
-            for(var t=0; t<terms.length; t++) {
-                terms[t] = terms[t].replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'); 
-            }
-            glossaryRegex = new RegExp("(^|[^\\wäöüÄÖÜßéèêáàâíìîóòôúùûñ])(" + terms.join("|") + ")(?=[^\\wäöüÄÖÜßéèêáàâíìîóòôúùûñ]|$)", "gi");
-        }
+        var glossaryRuntime = buildGlossaryRuntime(parsedGlossary, selectedLang);
+        glossaryMap = glossaryRuntime.map;
+        glossaryRegex = glossaryRuntime.regex;
     }
 
     var addTarget = function(st) {
@@ -3035,32 +3108,10 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             if (isDNT) {
                 chunk = '<nt>' + chunk + '</nt>';
             } else {
-                if (glossaryRegex) {
-                    chunk = chunk.replace(glossaryRegex, function(match, prefix, term, offset, string) {
-                        if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
-                        
-                        var lowerMatch = term.toLowerCase();
-                        var mappedVal = glossaryMap[lowerMatch];
-                        var replacement = term;
-                        if (mappedVal === "###DNT###") replacement = '<nt>' + term + '</nt>'; 
-                        else if (mappedVal && mappedVal !== "") replacement = '<nt>' + escapeDeepLXMLText(mappedVal) + '</nt>'; 
-                        return prefix + replacement;
-                    });
-                }
-                
-                var regexArt = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*|[0-9]{4,})\b/g;
-                chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
-                    var before = string.substring(0, offset);
-                    var openTags = (before.match(/<nt>/g) || []).length;
-                    var closeTags = (before.match(/<\/nt>/g) || []).length;
-                    if (openTags > closeTags) return match; 
-
-                    if (offset >= 7 && (string.substring(offset - 7, offset) === "###TBL_" || string.substring(offset - 7, offset) === "###IMG_")) return match; 
-                    return '<nt>' + match + '</nt>';
-                });
+                if (glossaryRegex) chunk = applyGlossaryRuntimeToChunk(chunk, { map: glossaryMap, regex: glossaryRegex });
+                chunk = protectChunkNonTranslatables(chunk);
             }
 
-            chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
             chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
             if (chunk !== "") {
                 xmlString += '<t f="' + escapeXMLAttr(fFamily) + '" s="' + escapeXMLAttr(fStyle) + '" z="' + escapeXMLAttr(pSize) + '" p="' + escapeXMLAttr(pStyleNameRaw) + '" l="' + escapeXMLAttr(ldingStr) + '" c="' + escapeXMLAttr(fColor) + '" k="' + escapeXMLAttr(cStyleRaw) + '" a="' + escapeXMLAttr(pAlign) + '" li="' + escapeXMLAttr(lInd) + '" fi="' + escapeXMLAttr(fInd) + '" b="' + escapeXMLAttr(bList) + '">' + chunk + '</t>';
