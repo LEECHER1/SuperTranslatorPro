@@ -9,6 +9,51 @@ var DEEPL_KEY_LABEL = "SuperTranslatorPRO_DeepL_API_Key";
 var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
+function normalizeExistingFilePath(path) {
+    if (!path || path === "") return "";
+    try {
+        var f = new File(path);
+        if (f.exists) return f.fsName;
+    } catch (e) {}
+    return "";
+}
+
+function getFileModifiedTick(path) {
+    if (!path || path === "") return 0;
+    try {
+        var f = new File(path);
+        if (!f.exists) return 0;
+        var modified = f.modified;
+        if (modified && modified.getTime) return modified.getTime();
+        return new Date(modified).getTime() || 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function resolveCSVPath(preferredPath) {
+    var resolved = normalizeExistingFilePath(preferredPath);
+    var candidates = [];
+    try {
+        candidates.push(Folder.desktop.fsName + "/Woerterbuch.csv");
+        candidates.push(Folder.desktop.fsName + "/Wörterbuch.csv");
+    } catch (e) {}
+
+    for (var i = 0; i < candidates.length; i++) {
+        var candidate = normalizeExistingFilePath(candidates[i]);
+        if (!candidate) continue;
+        if (!resolved) {
+            resolved = candidate;
+            continue;
+        }
+        if (getFileModifiedTick(candidate) >= getFileModifiedTick(resolved)) {
+            resolved = candidate;
+        }
+    }
+
+    return resolved || preferredPath || "";
+}
+
 var SCRIPT_NAME = "Super Translator Pro";
 var SCRIPT_VERSION = "28.2";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
@@ -16,7 +61,7 @@ if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
 }
 
-var csvPath = app.extractLabel(CSV_PATH_LABEL) || "";
+var csvPath = resolveCSVPath(app.extractLabel(CSV_PATH_LABEL) || "");
 var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
@@ -219,26 +264,45 @@ function tryReadCSVContent(path, encoding) {
     }
 }
 
+function getCSVDecodeScore(content, rows) {
+    if (!content || !rows || rows.length < 2) return 999999;
+
+    var score = 0;
+    var header = rows[0] || [];
+    if (header.length < 2) score += 10000;
+
+    var header0 = "";
+    try { header0 = sanitizeCSVContent(header[0]).replace(/^\s+|\s+$/g, '').toUpperCase(); } catch (e) {}
+    if (header0 !== "DE") score += 5000;
+
+    var replacementChars = (String(content).match(/\uFFFD/g) || []).length;
+    score += replacementChars * 100;
+
+    var controlChars = (String(content).match(/[\u0001-\u0008\u000B\u000C\u000E-\u001F]/g) || []).length;
+    score += controlChars * 10;
+
+    return score;
+}
+
 function loadCSVGlossary(path) {
+    path = resolveCSVPath(path);
     if (!path || path === "") return null;
     var f = new File(path);
     if (!f.exists) return null;
     var glossary = {};
     try {
-        var content = null;
         var rows = null;
-        var sep = ",";
-        var encodings = ["UTF-8", "UTF-16", "UTF-16LE", "UTF-16BE", ""];
+        var bestScore = 999999;
+        var encodings = ["UTF-8", "CP1252", "Macintosh", "UTF-16", "UTF-16LE", "UTF-16BE", ""];
         for (var encIdx = 0; encIdx < encodings.length; encIdx++) {
             var candidateContent = tryReadCSVContent(path, encodings[encIdx]);
             if (!candidateContent || candidateContent === "") continue;
             var candidateSep = guessCSVSeparator(candidateContent);
             var candidateRows = parseCSVRows(candidateContent, candidateSep);
-            if (candidateRows.length >= 2 && candidateRows[0] && candidateRows[0].length >= 2) {
-                content = candidateContent;
-                sep = candidateSep;
+            var candidateScore = getCSVDecodeScore(candidateContent, candidateRows);
+            if (candidateRows.length >= 2 && candidateRows[0] && candidateRows[0].length >= 2 && candidateScore < bestScore) {
+                bestScore = candidateScore;
                 rows = candidateRows;
-                break;
             }
         }
         if (!rows) return null;
@@ -309,6 +373,14 @@ function buildGlossaryRuntime(parsedGlossary, selectedLang) {
     }
 
     return runtime;
+}
+
+function glossaryAffectsText(text, glossaryRuntime) {
+    if (!text || !glossaryRuntime || !glossaryRuntime.regex) return false;
+    var probe = normalizeGlossaryLookupText(text);
+    if (probe === "") return false;
+    glossaryRuntime.regex.lastIndex = 0;
+    return glossaryRuntime.regex.test(probe);
 }
 
 function applyGlossaryRuntimeToChunk(chunk, glossaryRuntime) {
@@ -2259,6 +2331,7 @@ function getDocSnapshotKey(doc) {
 }
 
 function getGlossaryVersionToken(path) {
+    path = resolveCSVPath(path);
     if (!path || path === "") return "";
     try {
         var f = new File(path);
@@ -3112,12 +3185,13 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
     var tm = loadTM();
     if (!tm[selectedLang]) tm[selectedLang] = {};
     
+    var glossaryRuntime = null;
     var glossaryMap = {};
     var glossaryRegex = null;
     var parsedGlossary = loadCSVGlossary(csvPath);
 
     if (parsedGlossary) {
-        var glossaryRuntime = buildGlossaryRuntime(parsedGlossary, selectedLang);
+        glossaryRuntime = buildGlossaryRuntime(parsedGlossary, selectedLang);
         glossaryMap = glossaryRuntime.map;
         glossaryRegex = glossaryRuntime.regex;
     }
@@ -3253,6 +3327,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
             var sourceContents = "";
             try { sourceContents = String(textTargets[i].contents); } catch (e0) { sourceContents = ""; }
+            var glossaryMatchInText = glossaryAffectsText(sourceContents, glossaryRuntime);
             var exactGlossaryOverride = getExactGlossaryOverrideForText(parsedGlossary, sourceContents, selectedLang);
             if (exactGlossaryOverride !== null) {
                 var exactReplacement = (exactGlossaryOverride === "###DNT###") ? sourceContents : exactGlossaryOverride;
@@ -3266,7 +3341,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             
             if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
                 finalTranslations[i] = ""; 
-            } else if (tm[selectedLang][xml]) {
+            } else if (!glossaryMatchInText && tm[selectedLang][xml]) {
                 finalTranslations[i] = normalizeTranslatedXML(tm[selectedLang][xml]);
                 globalStats.savedChars += textOnlyLength;
             } else {
