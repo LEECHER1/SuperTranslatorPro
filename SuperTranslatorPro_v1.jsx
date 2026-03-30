@@ -1,7 +1,7 @@
-#targetengine "SuperTranslatorPRO284"
+#targetengine "SuperTranslatorPRO285"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.4 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.5 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.4";
+var SCRIPT_VERSION = "28.5";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -3364,6 +3364,30 @@ function normalizeReferenceBracketSpacingAcrossSegments(segments) {
     return segments;
 }
 
+function normalizeReferenceBracketsInTextRange(textRange) {
+    if (!textRange) return;
+    try { if (textRange.isValid === false) return; } catch (e0) {}
+
+    var ops = [
+        { find: "([\\\\l\\\\u\\\\d\\\\)])\\[(\\d+)\\]", change: "$1 [$2]" },
+        { find: "\\[(\\d+)\\]([\\\\l\\\\u\\\\d\\\\(])", change: "[$1] $2" },
+        { find: "\\[(\\d+)\\][ \\t]+([\\.,;:!\\?\\)\\]\\}])", change: "[$1]$2" }
+    ];
+
+    try {
+        for (var i = 0; i < ops.length; i++) {
+            app.findGrepPreferences = NothingEnum.nothing;
+            app.changeGrepPreferences = NothingEnum.nothing;
+            app.findGrepPreferences.findWhat = ops[i].find;
+            app.changeGrepPreferences.changeTo = ops[i].change;
+            try { textRange.changeGrep(); } catch (e1) {}
+        }
+    } finally {
+        try { app.findGrepPreferences = NothingEnum.nothing; } catch (e2) {}
+        try { app.changeGrepPreferences = NothingEnum.nothing; } catch (e3) {}
+    }
+}
+
 function normalizeTranslatedXML(xml) {
     if (!xml || xml === "") return xml;
     return String(xml).replace(/^\s+|\s+$/g, '')
@@ -3464,7 +3488,7 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
     if (!translatedXML || translatedXML === "") return;
     translatedXML = normalizeTranslatedXML(translatedXML)
                                  .replace(/(###(?:IMG|TBL)_\d+###)\s+(?=###(?:IMG|TBL)_\d+###)/g, '$1');
-    var isPartial = false; var textFlow = null; var currentIdx = 0;
+    var isPartial = false; var textFlow = null; var currentIdx = 0; var insertStartIdx = 0;
     try {
         if (targetTextObj.constructor.name === "Story") { isPartial = false; textFlow = targetTextObj; } 
         else if (targetTextObj.parent && targetTextObj.parent.constructor.name === "Cell") {
@@ -3472,8 +3496,8 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
         } else { isPartial = true; textFlow = targetTextObj.parentStory; }
     } catch(e) { isPartial = false; textFlow = targetTextObj; }
 
-    if (isPartial) { try { currentIdx = targetTextObj.insertionPoints.item(0).index; } catch(e){} try { targetTextObj.remove(); } catch(e){} } 
-    else { try { textFlow.contents = ""; } catch(e){} currentIdx = 0; }
+    if (isPartial) { try { currentIdx = targetTextObj.insertionPoints.item(0).index; } catch(e){} insertStartIdx = currentIdx; try { targetTextObj.remove(); } catch(e){} } 
+    else { try { textFlow.contents = ""; } catch(e){} currentIdx = 0; insertStartIdx = 0; }
 
     var regex = /<t([^>]*)>([\s\S]*?)<\/t>/gi;
     var match;
@@ -3545,6 +3569,14 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
             }
         }
     }
+
+    try {
+        if (isPartial && textFlow && textFlow.isValid && currentIdx > insertStartIdx) {
+            normalizeReferenceBracketsInTextRange(textFlow.characters.itemByRange(insertStartIdx, currentIdx - 1));
+        } else if (textFlow && textFlow.isValid) {
+            normalizeReferenceBracketsInTextRange(textFlow);
+        }
+    } catch (normalizeErr) {}
 }
 
 function setupTempImageStorage(doc) {
