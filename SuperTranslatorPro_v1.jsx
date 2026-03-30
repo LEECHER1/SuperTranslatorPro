@@ -316,9 +316,75 @@ function buildPlainTranslationXML(text, glossaryRuntime) {
     return "<root>" + chunk + "</root>";
 }
 
+function normalizeGlossaryLookupText(text) {
+    if (text === null || text === undefined) return "";
+    return String(text)
+        .replace(/[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^\s+|\s+$/g, "");
+}
+
+function getExactGlossaryOverrideForText(parsedGlossary, text, selectedLang) {
+    if (!parsedGlossary) return null;
+
+    var lookup = normalizeGlossaryLookupText(text);
+    if (lookup === "") return null;
+
+    var targetUpper = String(selectedLang).toUpperCase();
+    var shortTarget = targetUpper.substring(0, 2);
+
+    if (parsedGlossary.hasOwnProperty(lookup)) {
+        return getGlossaryOverrideForTarget(parsedGlossary[lookup], targetUpper, shortTarget);
+    }
+
+    var lowerLookup = lookup.toLowerCase();
+    for (var key in parsedGlossary) {
+        if (!parsedGlossary.hasOwnProperty(key)) continue;
+        if (normalizeGlossaryLookupText(key).toLowerCase() !== lowerLookup) continue;
+        return getGlossaryOverrideForTarget(parsedGlossary[key], targetUpper, shortTarget);
+    }
+
+    return null;
+}
+
+function buildStyledPlainTextXML(textObj, replacementText) {
+    var fFamily = "Arial";
+    var fStyle = "Regular";
+    var pSize = "12";
+    var pStyleNameRaw = "";
+    var ldingStr = "AUTO";
+    var fColor = "";
+    var cStyleRaw = "";
+    var pAlign = "";
+    var lInd = "0";
+    var fInd = "0";
+    var bList = "";
+
+    try {
+        var ranges = textObj.textStyleRanges;
+        if (ranges && ranges.length > 0) {
+            var firstRange = ranges[0];
+            try { fFamily = String(firstRange.appliedFont.fontFamily); } catch (e1) {}
+            try { fStyle = String(firstRange.fontStyle); } catch (e2) {}
+            try { pSize = String(firstRange.pointSize); } catch (e3) {}
+            try { pStyleNameRaw = String(firstRange.appliedParagraphStyle.name); } catch (e4) {}
+            try { if (firstRange.leading !== Leading.AUTO) ldingStr = String(firstRange.leading); } catch (e5) {}
+            try { fColor = String(firstRange.fillColor.name); } catch (e6) {}
+            try { cStyleRaw = String(firstRange.appliedCharacterStyle.name); } catch (e7) {}
+            try { pAlign = String(firstRange.justification); } catch (e8) {}
+            try { lInd = String(firstRange.leftIndent); } catch (e9) {}
+            try { fInd = String(firstRange.firstLineIndent); } catch (e10) {}
+            try { bList = String(firstRange.bulletsAndNumberingListType); } catch (e11) {}
+        }
+    } catch (e) {}
+
+    var chunk = escapeDeepLXMLText(replacementText);
+    return '<root><t f="' + escapeXMLAttr(fFamily) + '" s="' + escapeXMLAttr(fStyle) + '" z="' + escapeXMLAttr(pSize) + '" p="' + escapeXMLAttr(pStyleNameRaw) + '" l="' + escapeXMLAttr(ldingStr) + '" c="' + escapeXMLAttr(fColor) + '" k="' + escapeXMLAttr(cStyleRaw) + '" a="' + escapeXMLAttr(pAlign) + '" li="' + escapeXMLAttr(lInd) + '" fi="' + escapeXMLAttr(fInd) + '" b="' + escapeXMLAttr(bList) + '">' + chunk + '</t></root>';
+}
+
 function getInDesignLanguageName(deepLCode) {
     var map = {
-        "EN-US": "Englisch: USA", "EN-GB": "Englisch: Großbritannien", "EN": "Englisch: USA",
+        "EN-US": "Englisch: USA", "EN-GB": "Englisch: Großbritannien", "EN": "Englisch: Großbritannien",
         "FR": "Französisch", "IT": "Italienisch", "ES": "Spanisch",
         "CS": "Tschechisch", "HU": "Ungarisch", "NL": "Niederländisch",
         "PL": "Polnisch", "PT": "Portugiesisch", "PT-PT": "Portugiesisch",
@@ -1882,7 +1948,7 @@ btnTranslate.onClick = function() {
         return;
     }
 
-    if (config.lang === "EN") config.lang = "EN-US"; 
+    if (config.lang === "EN") config.lang = "EN-GB"; 
     if (config.lang === "PT") config.lang = "PT-PT";
 
     createProgressWindow();
@@ -2055,11 +2121,11 @@ function runBDAMode(doc, config, preparedLegacy) {
     try {
         var originalPages = getBDAOriginalPages(doc, config);
         if (originalPages && originalPages.length > 0) {
-            saveBDASnapshot(doc, buildBDAChangeSnapshot(originalPages));
+            saveBDASnapshot(doc, buildBDASnapshotPayload(originalPages));
         }
         var snapshotPages = getBDAOriginalPages(doc, config);
         if (snapshotPages && snapshotPages.length > 0) {
-            saveBDASnapshot(doc, buildBDAChangeSnapshot(snapshotPages));
+            saveBDASnapshot(doc, buildBDASnapshotPayload(snapshotPages));
         }
     } catch (e) {}
 
@@ -2387,6 +2453,24 @@ function buildBDAChangeSnapshot(pages) {
     return snapshot;
 }
 
+function buildBDASnapshotPayload(pages) {
+    return {
+        pages: buildBDAChangeSnapshot(pages),
+        glossaryVersion: getGlossaryVersionToken(csvPath)
+    };
+}
+
+function getBDASnapshotPages(snapshot) {
+    if (!snapshot) return null;
+    if (snapshot instanceof Array) return snapshot;
+    return snapshot.pages || [];
+}
+
+function getBDASnapshotGlossaryVersion(snapshot) {
+    if (!snapshot || snapshot instanceof Array) return "";
+    return snapshot.glossaryVersion || "";
+}
+
 function getBDATargetPagesByLang(doc) {
     var pagesByLang = {};
     for (var i = 0; i < doc.pages.length; i++) {
@@ -2520,9 +2604,15 @@ function syncBDATextChanges(doc, config) {
     if (!sourcePages || sourcePages.length === 0) {
         throw new Error("Keine deutschen Originalseiten zum Vergleich gefunden.");
     }
-    var prevSnapshot = loadBDASnapshot(doc);
-    var currentSnapshot = buildBDAChangeSnapshot(sourcePages);
-    if (!prevSnapshot) {
+    var prevSnapshotData = loadBDASnapshot(doc);
+    var prevSnapshot = getBDASnapshotPages(prevSnapshotData);
+    var currentSnapshot = buildBDASnapshotPayload(sourcePages);
+    var currentSnapshotPages = currentSnapshot.pages;
+    var forceGlossaryRefresh = false;
+    if (prevSnapshotData) {
+        forceGlossaryRefresh = (getBDASnapshotGlossaryVersion(prevSnapshotData) !== currentSnapshot.glossaryVersion);
+    }
+    if (!prevSnapshotData) {
         saveBDASnapshot(doc, currentSnapshot);
         return "BDA-Textupdate: Ausgangszustand gespeichert. Ändere jetzt den deutschen Text und starte erneut.";
     }
@@ -2539,14 +2629,14 @@ function syncBDATextChanges(doc, config) {
     }
 
     var changeBlocks = [];
-    for (var p = 0; p < currentSnapshot.length; p++) {
-        var currentItems = currentSnapshot[p] || [];
+    for (var p = 0; p < currentSnapshotPages.length; p++) {
+        var currentItems = currentSnapshotPages[p] || [];
         var previousItems = prevSnapshot[p] || [];
         var maxItems = Math.max(currentItems.length, previousItems.length);
         for (var i = 0; i < maxItems; i++) {
             var currentSig = currentItems[i] || "";
             var previousSig = previousItems[i] || "";
-            if (currentSig !== previousSig) {
+            if (forceGlossaryRefresh || currentSig !== previousSig) {
                 changeBlocks.push({ pageIndex: p, itemIndex: i });
             }
         }
@@ -2768,7 +2858,7 @@ function getRelatedTargetMasterSpreads(doc, sourceMasterName) {
 
 function getDeepLLangCode(code) {
     var deepLLang = code.toUpperCase();
-    if (deepLLang === "EN") return "EN-US";
+    if (deepLLang === "EN") return "EN-GB";
     if (deepLLang === "PT") return "PT-PT";
     return deepLLang;
 }
@@ -3125,6 +3215,16 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
         for (var i = 0; i < textTargets.length; i++) {
             if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; continue; }
+
+            var sourceContents = "";
+            try { sourceContents = String(textTargets[i].contents); } catch (e0) { sourceContents = ""; }
+            var exactGlossaryOverride = getExactGlossaryOverrideForText(parsedGlossary, sourceContents, selectedLang);
+            if (exactGlossaryOverride !== null) {
+                var exactReplacement = (exactGlossaryOverride === "###DNT###") ? sourceContents : exactGlossaryOverride;
+                finalTranslations[i] = buildStyledPlainTextXML(textTargets[i], exactReplacement);
+                globalStats.savedChars += normalizeGlossaryLookupText(sourceContents).replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length;
+                continue;
+            }
             
             var xml = buildXMLWithGlossary(textTargets[i]);
             var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
