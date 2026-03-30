@@ -1,7 +1,7 @@
-#targetengine "SuperTranslatorPRO283"
+#targetengine "SuperTranslatorPRO284"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.3 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.4 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.3";
+var SCRIPT_VERSION = "28.4";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -3325,6 +3325,45 @@ function decodeTranslatedTextContent(textContent) {
     return normalizeReferenceBracketSpacing(decoded);
 }
 
+function normalizeReferenceBracketSpacingAcrossSegments(segments) {
+    if (!segments || segments.length < 2) return segments;
+
+    var wordTailPattern = /[A-Za-z0-9À-ÖØ-öø-ÿĀ-ɏΆ-ώЀ-ӿ\)]$/;
+    var wordHeadPattern = /^[A-Za-z0-9À-ÖØ-öø-ÿĀ-ɏΆ-ώЀ-ӿ\(]/;
+    var refStartPattern = /^\s*\[\d+\]/;
+    var refEndPattern = /\[\d+\]\s*$/;
+    var punctuationHeadPattern = /^[\.,;:!\?\)\]\}]/;
+    var leadingSpacePattern = /^[ \t\xA0]+/;
+    var trailingSpacePattern = /[ \t\xA0]+$/;
+
+    for (var i = 0; i < segments.length - 1; i++) {
+        var left = segments[i];
+        var right = segments[i + 1];
+        if (!left || !right) continue;
+        if (!left.textContent || !right.textContent) continue;
+
+        if (refStartPattern.test(right.textContent)) {
+            right.textContent = right.textContent.replace(leadingSpacePattern, '');
+            if (wordTailPattern.test(left.textContent)) {
+                left.textContent = left.textContent.replace(trailingSpacePattern, '');
+                right.textContent = " " + right.textContent;
+            }
+        }
+
+        if (refEndPattern.test(left.textContent)) {
+            left.textContent = left.textContent.replace(trailingSpacePattern, '');
+            var trimmedRight = right.textContent.replace(leadingSpacePattern, '');
+            if (punctuationHeadPattern.test(trimmedRight)) {
+                right.textContent = trimmedRight;
+            } else if (wordHeadPattern.test(trimmedRight)) {
+                right.textContent = " " + trimmedRight;
+            }
+        }
+    }
+
+    return segments;
+}
+
 function normalizeTranslatedXML(xml) {
     if (!xml || xml === "") return xml;
     return String(xml).replace(/^\s+|\s+$/g, '')
@@ -3436,16 +3475,38 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
     if (isPartial) { try { currentIdx = targetTextObj.insertionPoints.item(0).index; } catch(e){} try { targetTextObj.remove(); } catch(e){} } 
     else { try { textFlow.contents = ""; } catch(e){} currentIdx = 0; }
 
-    var regex = /<t([^>]*)>([\s\S]*?)<\/t>/gi; var match;
+    var regex = /<t([^>]*)>([\s\S]*?)<\/t>/gi;
+    var match;
+    var segments = [];
     while ((match = regex.exec(translatedXML)) !== null) {
-        var attrs = match[1]; var textContent = match[2];
+        var attrs = match[1];
+        var textContent = match[2];
         var getAttr = function(str, name) { var m = new RegExp(name + '="([^"]*)"').exec(str); return m ? m[1] : ""; };
-        var fFam = decodeXMLAttr(getAttr(attrs, "f")); var fSty = decodeXMLAttr(getAttr(attrs, "s")); var fSiz = parseFloat(decodeXMLAttr(getAttr(attrs, "z")));
-        var pSty = decodeXMLAttr(getAttr(attrs, "p")); var lead = decodeXMLAttr(getAttr(attrs, "l")); var fCol = decodeXMLAttr(getAttr(attrs, "c"));
-        var cSty = decodeXMLAttr(getAttr(attrs, "k")); var pAli = decodeXMLAttr(getAttr(attrs, "a")); var lInd = decodeXMLAttr(getAttr(attrs, "li"));
-        var fInd = decodeXMLAttr(getAttr(attrs, "fi")); var bLis = decodeXMLAttr(getAttr(attrs, "b"));
-        
-        textContent = decodeTranslatedTextContent(textContent);
+        segments.push({
+            fFam: decodeXMLAttr(getAttr(attrs, "f")),
+            fSty: decodeXMLAttr(getAttr(attrs, "s")),
+            fSiz: parseFloat(decodeXMLAttr(getAttr(attrs, "z"))),
+            pSty: decodeXMLAttr(getAttr(attrs, "p")),
+            lead: decodeXMLAttr(getAttr(attrs, "l")),
+            fCol: decodeXMLAttr(getAttr(attrs, "c")),
+            cSty: decodeXMLAttr(getAttr(attrs, "k")),
+            pAli: decodeXMLAttr(getAttr(attrs, "a")),
+            lInd: decodeXMLAttr(getAttr(attrs, "li")),
+            fInd: decodeXMLAttr(getAttr(attrs, "fi")),
+            bLis: decodeXMLAttr(getAttr(attrs, "b")),
+            textContent: decodeTranslatedTextContent(textContent)
+        });
+    }
+
+    normalizeReferenceBracketSpacingAcrossSegments(segments);
+
+    for (var seg = 0; seg < segments.length; seg++) {
+        var segment = segments[seg];
+        var fFam = segment.fFam; var fSty = segment.fSty; var fSiz = segment.fSiz;
+        var pSty = segment.pSty; var lead = segment.lead; var fCol = segment.fCol;
+        var cSty = segment.cSty; var pAli = segment.pAli; var lInd = segment.lInd;
+        var fInd = segment.fInd; var bLis = segment.bLis;
+        var textContent = segment.textContent;
         if (textContent.length > 0) {
             var appliedRange = null; var doc = app.activeDocument;
             try {
