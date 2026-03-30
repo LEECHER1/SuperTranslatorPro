@@ -141,6 +141,7 @@ function guessCSVSeparator(content) {
 
     var commaCount = 0;
     var semicolonCount = 0;
+    var tabCount = 0;
     inQuotes = false;
     for (var j = 0; j < firstRow.length; j++) {
         var rowChar = firstRow.charAt(j);
@@ -153,8 +154,10 @@ function guessCSVSeparator(content) {
         } else if (!inQuotes) {
             if (rowChar === ';') semicolonCount++;
             else if (rowChar === ',') commaCount++;
+            else if (rowChar === '\t') tabCount++;
         }
     }
+    if (tabCount > semicolonCount && tabCount > commaCount) return '\t';
     return semicolonCount > commaCount ? ';' : ',';
 }
 
@@ -194,36 +197,68 @@ function parseCSVRows(content, separator) {
     return rows;
 }
 
+function sanitizeCSVContent(content) {
+    if (content === null || content === undefined) return "";
+    return String(content)
+        .replace(/^\uFEFF/, '')
+        .replace(/\u0000/g, '');
+}
+
+function tryReadCSVContent(path, encoding) {
+    var f = new File(path);
+    if (!f.exists) return null;
+    try {
+        if (encoding && encoding !== "") f.encoding = encoding;
+        f.open('r');
+        var content = f.read();
+        f.close();
+        return sanitizeCSVContent(content);
+    } catch (e) {
+        try { if (f.opened) f.close(); } catch (closeErr) {}
+        return null;
+    }
+}
+
 function loadCSVGlossary(path) {
     if (!path || path === "") return null;
     var f = new File(path);
     if (!f.exists) return null;
     var glossary = {};
     try {
-        f.encoding = "UTF-8";
-        f.open('r');
-        var content = f.read();
-        f.close();
-        content = content.replace(/^\uFEFF/, '');
-        var sep = guessCSVSeparator(content);
-        var rows = parseCSVRows(content, sep);
+        var content = null;
+        var rows = null;
+        var sep = ",";
+        var encodings = ["UTF-8", "UTF-16", "UTF-16LE", "UTF-16BE", ""];
+        for (var encIdx = 0; encIdx < encodings.length; encIdx++) {
+            var candidateContent = tryReadCSVContent(path, encodings[encIdx]);
+            if (!candidateContent || candidateContent === "") continue;
+            var candidateSep = guessCSVSeparator(candidateContent);
+            var candidateRows = parseCSVRows(candidateContent, candidateSep);
+            if (candidateRows.length >= 2 && candidateRows[0] && candidateRows[0].length >= 2) {
+                content = candidateContent;
+                sep = candidateSep;
+                rows = candidateRows;
+                break;
+            }
+        }
+        if (!rows) return null;
         if (rows.length < 2) return null;
 
         var headers = rows[0];
         for (var h = 0; h < headers.length; h++) {
-            headers[h] = String(headers[h]).replace(/^\s+|\s+$/g, '').toUpperCase();
+            headers[h] = sanitizeCSVContent(headers[h]).replace(/^\s+|\s+$/g, '').toUpperCase();
         }
 
         for (var i = 1; i < rows.length; i++) {
             var cols = rows[i];
             if (!cols || cols.length === 0) continue;
-            var original = String(cols[0]).replace(/^\s+|\s+$/g, '');
+            var original = sanitizeCSVContent(cols[0]).replace(/^\s+|\s+$/g, '');
             if (original === "") continue;
 
             var translations = {};
             for (var j = 1; j < cols.length; j++) {
                 if (j < headers.length) {
-                    var val = String(cols[j]).replace(/^\s+|\s+$/g, '');
+                    var val = sanitizeCSVContent(cols[j]).replace(/^\s+|\s+$/g, '');
                     if (val !== "") translations[headers[j]] = val;
                 }
             }
