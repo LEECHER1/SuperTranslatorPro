@@ -3305,23 +3305,24 @@ function normalizeReferenceSpacing(textScope) {
     var changed = false;
     var referenceTextCharPattern = "([\\u\\l\\d])";
     var referenceMarkerPattern = "(\\[[0-9]+\\]|\\([0-9]+\\))";
+    var inlineWhitespacePattern = "[ \\t]";
     try {
         app.findGrepPreferences = NothingEnum.nothing;
         app.changeGrepPreferences = NothingEnum.nothing;
 
-        app.findGrepPreferences.findWhat = referenceTextCharPattern + "\\s*" + referenceMarkerPattern;
+        app.findGrepPreferences.findWhat = referenceTextCharPattern + inlineWhitespacePattern + "*" + referenceMarkerPattern;
         app.changeGrepPreferences.changeTo = "$1 $2";
         changed = !!(textScope.changeGrep() || []).length || changed;
 
         app.findGrepPreferences = NothingEnum.nothing;
         app.changeGrepPreferences = NothingEnum.nothing;
-        app.findGrepPreferences.findWhat = referenceMarkerPattern + "\\s+([\\.,;:!\\?])";
+        app.findGrepPreferences.findWhat = referenceMarkerPattern + inlineWhitespacePattern + "+([\\.,;:!\\?])";
         app.changeGrepPreferences.changeTo = "$1$2";
         changed = !!(textScope.changeGrep() || []).length || changed;
 
         app.findGrepPreferences = NothingEnum.nothing;
         app.changeGrepPreferences = NothingEnum.nothing;
-        app.findGrepPreferences.findWhat = referenceMarkerPattern + "\\s*" + referenceTextCharPattern;
+        app.findGrepPreferences.findWhat = referenceMarkerPattern + inlineWhitespacePattern + "*" + referenceTextCharPattern;
         app.changeGrepPreferences.changeTo = "$1 $2";
         changed = !!(textScope.changeGrep() || []).length || changed;
     } catch (e) {
