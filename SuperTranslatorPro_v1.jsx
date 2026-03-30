@@ -1,7 +1,7 @@
-#targetengine "SuperTranslatorPRO285"
+#targetengine "SuperTranslatorPRO282"
 
 // ==============================================
-// SUPER ÜBERSETZER PRO - VERSION 28.5 (API-KEY ENTFERNT)
+// SUPER ÜBERSETZER PRO - VERSION 28.2 (API-KEY ENTFERNT)
 // ==============================================
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
@@ -10,7 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 
 var SCRIPT_NAME = "Super Translator Pro";
-var SCRIPT_VERSION = "28.5";
+var SCRIPT_VERSION = "28.2";
 var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
@@ -2747,7 +2747,7 @@ function syncMasterTextChanges(doc) {
         if (blocks.length === 0) continue;
         var deepLLang = getDeepLLangCode(langCode);
         var texts = [];
-        for (var b = 0; b < blocks.length; b++) texts.push("<root>" + protectReferenceBracketMarkers(escapeDeepLXMLText(blocks[b].text)) + "</root>");
+        for (var b = 0; b < blocks.length; b++) texts.push("<root>" + escapeDeepLXMLText(blocks[b].text) + "</root>");
         var translated = translateBatchDeepL(texts, deepLLang, 10, 20);
         if (!translated) continue;
         for (var b = 0; b < blocks.length; b++) {
@@ -3058,7 +3058,6 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 });
             }
 
-            chunk = protectReferenceBracketMarkers(chunk);
             chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
             chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
             if (chunk !== "") {
@@ -3075,7 +3074,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; continue; }
             
             var xml = buildXMLWithGlossary(textTargets[i]);
-            var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL|REF)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
+            var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
             
             if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
                 finalTranslations[i] = ""; 
@@ -3293,101 +3292,6 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
     return translated;
 }
 
-function protectReferenceBracketMarkers(xmlText) {
-    if (xmlText === null || xmlText === undefined || xmlText === "") return xmlText;
-    return String(xmlText).replace(/\[(\d+)\]/g, '<nt>###REF_$1###</nt>');
-}
-
-function restoreReferenceBracketMarkers(text) {
-    if (text === null || text === undefined || text === "") return text;
-    return String(text).replace(/###REF_(\d+)###/g, '[$1]');
-}
-
-function normalizeReferenceBracketSpacing(text) {
-    if (text === null || text === undefined || text === "") return text;
-    var result = String(text);
-    result = result.replace(/\[\s*(\d+)\s*\]/g, '[$1]');
-    result = result.replace(/([A-Za-z0-9À-ÖØ-öø-ÿĀ-ɏΆ-ώЀ-ӿ\)])(?:[ \t\xA0]*)\[(\d+)\]/g, '$1 [$2]');
-    result = result.replace(/\[(\d+)\](?:[ \t\xA0]*)(?=[A-Za-z0-9À-ÖØ-öø-ÿĀ-ɏΆ-ώЀ-ӿ\(])/g, '[$1] ');
-    result = result.replace(/\[(\d+)\](?:[ \t\xA0]+)(?=[\.,;:!\?\)\]\}])/g, '[$1]');
-    result = result.replace(/(^|[\r\n])(?:[ \t\xA0]+)(?=\[\d+\])/g, '$1');
-    return result;
-}
-
-function decodeTranslatedTextContent(textContent) {
-    if (textContent === null || textContent === undefined) return "";
-    var decoded = decodeXMLValue(textContent)
-        .replace(/<pbr\/>/gi, '\r')
-        .replace(/<lbr\/>/gi, '\n')
-        .replace(/<tab\/>/gi, '\t')
-        .replace(/<\/?nt[^>]*>/gi, '');
-    decoded = restoreReferenceBracketMarkers(decoded);
-    return normalizeReferenceBracketSpacing(decoded);
-}
-
-function normalizeReferenceBracketSpacingAcrossSegments(segments) {
-    if (!segments || segments.length < 2) return segments;
-
-    var wordTailPattern = /[A-Za-z0-9À-ÖØ-öø-ÿĀ-ɏΆ-ώЀ-ӿ\)]$/;
-    var wordHeadPattern = /^[A-Za-z0-9À-ÖØ-öø-ÿĀ-ɏΆ-ώЀ-ӿ\(]/;
-    var refStartPattern = /^\s*\[\d+\]/;
-    var refEndPattern = /\[\d+\]\s*$/;
-    var punctuationHeadPattern = /^[\.,;:!\?\)\]\}]/;
-    var leadingSpacePattern = /^[ \t\xA0]+/;
-    var trailingSpacePattern = /[ \t\xA0]+$/;
-
-    for (var i = 0; i < segments.length - 1; i++) {
-        var left = segments[i];
-        var right = segments[i + 1];
-        if (!left || !right) continue;
-        if (!left.textContent || !right.textContent) continue;
-
-        if (refStartPattern.test(right.textContent)) {
-            right.textContent = right.textContent.replace(leadingSpacePattern, '');
-            if (wordTailPattern.test(left.textContent)) {
-                left.textContent = left.textContent.replace(trailingSpacePattern, '');
-                right.textContent = " " + right.textContent;
-            }
-        }
-
-        if (refEndPattern.test(left.textContent)) {
-            left.textContent = left.textContent.replace(trailingSpacePattern, '');
-            var trimmedRight = right.textContent.replace(leadingSpacePattern, '');
-            if (punctuationHeadPattern.test(trimmedRight)) {
-                right.textContent = trimmedRight;
-            } else if (wordHeadPattern.test(trimmedRight)) {
-                right.textContent = " " + trimmedRight;
-            }
-        }
-    }
-
-    return segments;
-}
-
-function normalizeReferenceBracketsInTextRange(textRange) {
-    if (!textRange) return;
-    try { if (textRange.isValid === false) return; } catch (e0) {}
-
-    var ops = [
-        { find: "([\\\\l\\\\u\\\\d\\\\)])\\[(\\d+)\\]", change: "$1 [$2]" },
-        { find: "\\[(\\d+)\\]([\\\\l\\\\u\\\\d\\\\(])", change: "[$1] $2" },
-        { find: "\\[(\\d+)\\][ \\t]+([\\.,;:!\\?\\)\\]\\}])", change: "[$1]$2" }
-    ];
-
-    try {
-        for (var i = 0; i < ops.length; i++) {
-            app.findGrepPreferences = NothingEnum.nothing;
-            app.changeGrepPreferences = NothingEnum.nothing;
-            app.findGrepPreferences.findWhat = ops[i].find;
-            app.changeGrepPreferences.changeTo = ops[i].change;
-            try { textRange.changeGrep(); } catch (e1) {}
-        }
-    } finally {
-        try { app.findGrepPreferences = NothingEnum.nothing; } catch (e2) {}
-        try { app.changeGrepPreferences = NothingEnum.nothing; } catch (e3) {}
-    }
-}
-
 function normalizeTranslatedXML(xml) {
     if (!xml || xml === "") return xml;
     return String(xml).replace(/^\s+|\s+$/g, '')
@@ -3407,8 +3311,7 @@ function decodeDeepLXMLText(xml) {
     xml = xml.replace(/^<root>/, '').replace(/<\/root>$/, '');
     xml = xml.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     xml = xml.replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t');
-    xml = restoreReferenceBracketMarkers(xml);
-    return normalizeReferenceBracketSpacing(xml);
+    return xml;
 }
 
 function escapeXMLAttr(value) {
@@ -3474,7 +3377,6 @@ function buildTextObjectXML(textObj) {
             });
         }
 
-        chunk = protectReferenceBracketMarkers(chunk);
         chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
         chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
         if (chunk !== "") {
@@ -3488,7 +3390,7 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
     if (!translatedXML || translatedXML === "") return;
     translatedXML = normalizeTranslatedXML(translatedXML)
                                  .replace(/(###(?:IMG|TBL)_\d+###)\s+(?=###(?:IMG|TBL)_\d+###)/g, '$1');
-    var isPartial = false; var textFlow = null; var currentIdx = 0; var insertStartIdx = 0;
+    var isPartial = false; var textFlow = null; var currentIdx = 0;
     try {
         if (targetTextObj.constructor.name === "Story") { isPartial = false; textFlow = targetTextObj; } 
         else if (targetTextObj.parent && targetTextObj.parent.constructor.name === "Cell") {
@@ -3496,41 +3398,19 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
         } else { isPartial = true; textFlow = targetTextObj.parentStory; }
     } catch(e) { isPartial = false; textFlow = targetTextObj; }
 
-    if (isPartial) { try { currentIdx = targetTextObj.insertionPoints.item(0).index; } catch(e){} insertStartIdx = currentIdx; try { targetTextObj.remove(); } catch(e){} } 
-    else { try { textFlow.contents = ""; } catch(e){} currentIdx = 0; insertStartIdx = 0; }
+    if (isPartial) { try { currentIdx = targetTextObj.insertionPoints.item(0).index; } catch(e){} try { targetTextObj.remove(); } catch(e){} } 
+    else { try { textFlow.contents = ""; } catch(e){} currentIdx = 0; }
 
-    var regex = /<t([^>]*)>([\s\S]*?)<\/t>/gi;
-    var match;
-    var segments = [];
+    var regex = /<t([^>]*)>([\s\S]*?)<\/t>/gi; var match;
     while ((match = regex.exec(translatedXML)) !== null) {
-        var attrs = match[1];
-        var textContent = match[2];
+        var attrs = match[1]; var textContent = match[2];
         var getAttr = function(str, name) { var m = new RegExp(name + '="([^"]*)"').exec(str); return m ? m[1] : ""; };
-        segments.push({
-            fFam: decodeXMLAttr(getAttr(attrs, "f")),
-            fSty: decodeXMLAttr(getAttr(attrs, "s")),
-            fSiz: parseFloat(decodeXMLAttr(getAttr(attrs, "z"))),
-            pSty: decodeXMLAttr(getAttr(attrs, "p")),
-            lead: decodeXMLAttr(getAttr(attrs, "l")),
-            fCol: decodeXMLAttr(getAttr(attrs, "c")),
-            cSty: decodeXMLAttr(getAttr(attrs, "k")),
-            pAli: decodeXMLAttr(getAttr(attrs, "a")),
-            lInd: decodeXMLAttr(getAttr(attrs, "li")),
-            fInd: decodeXMLAttr(getAttr(attrs, "fi")),
-            bLis: decodeXMLAttr(getAttr(attrs, "b")),
-            textContent: decodeTranslatedTextContent(textContent)
-        });
-    }
-
-    normalizeReferenceBracketSpacingAcrossSegments(segments);
-
-    for (var seg = 0; seg < segments.length; seg++) {
-        var segment = segments[seg];
-        var fFam = segment.fFam; var fSty = segment.fSty; var fSiz = segment.fSiz;
-        var pSty = segment.pSty; var lead = segment.lead; var fCol = segment.fCol;
-        var cSty = segment.cSty; var pAli = segment.pAli; var lInd = segment.lInd;
-        var fInd = segment.fInd; var bLis = segment.bLis;
-        var textContent = segment.textContent;
+        var fFam = decodeXMLAttr(getAttr(attrs, "f")); var fSty = decodeXMLAttr(getAttr(attrs, "s")); var fSiz = parseFloat(decodeXMLAttr(getAttr(attrs, "z")));
+        var pSty = decodeXMLAttr(getAttr(attrs, "p")); var lead = decodeXMLAttr(getAttr(attrs, "l")); var fCol = decodeXMLAttr(getAttr(attrs, "c"));
+        var cSty = decodeXMLAttr(getAttr(attrs, "k")); var pAli = decodeXMLAttr(getAttr(attrs, "a")); var lInd = decodeXMLAttr(getAttr(attrs, "li"));
+        var fInd = decodeXMLAttr(getAttr(attrs, "fi")); var bLis = decodeXMLAttr(getAttr(attrs, "b"));
+        
+        textContent = decodeXMLValue(textContent).replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t').replace(/<\/?nt[^>]*>/gi, '');
         if (textContent.length > 0) {
             var appliedRange = null; var doc = app.activeDocument;
             try {
@@ -3569,14 +3449,6 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
             }
         }
     }
-
-    try {
-        if (isPartial && textFlow && textFlow.isValid && currentIdx > insertStartIdx) {
-            normalizeReferenceBracketsInTextRange(textFlow.characters.itemByRange(insertStartIdx, currentIdx - 1));
-        } else if (textFlow && textFlow.isValid) {
-            normalizeReferenceBracketsInTextRange(textFlow);
-        }
-    } catch (normalizeErr) {}
 }
 
 function setupTempImageStorage(doc) {
