@@ -2335,6 +2335,7 @@ function replacePageFrameText(page, frameIndex, contents) {
         if ((!story || !story.isValid) && tf.texts && tf.texts.length > 0) story = tf.texts[0];
         if (!story || !story.isValid) return false;
         story.contents = contents;
+        if (story.characters && story.characters.length > 0) normalizeReferenceSpacing(story);
         return true;
     } catch (e) { return false; }
 }
@@ -2705,6 +2706,7 @@ function replaceMasterFrameText(masterSpread, pageIndex, frameIndex, contents) {
         if ((!story || !story.isValid) && tf.texts && tf.texts.length > 0) story = tf.texts[0];
         if (!story || !story.isValid) return false;
         story.contents = contents;
+        if (story.characters && story.characters.length > 0) normalizeReferenceSpacing(story);
         return true;
     } catch (e) { return false; }
 }
@@ -3298,6 +3300,39 @@ function normalizeTranslatedXML(xml) {
                       .replace(/>\s+</g, '><');
 }
 
+function normalizeReferenceSpacing(textScope) {
+    if (!textScope || !textScope.isValid) return false;
+    var changed = false;
+    var referenceTextCharPattern = "([\\u\\l\\d])";
+    var referenceMarkerPattern = "(\\[[0-9]+\\]|\\([0-9]+\\))";
+    try {
+        app.findGrepPreferences = NothingEnum.nothing;
+        app.changeGrepPreferences = NothingEnum.nothing;
+
+        app.findGrepPreferences.findWhat = referenceTextCharPattern + "\\s*" + referenceMarkerPattern;
+        app.changeGrepPreferences.changeTo = "$1 $2";
+        changed = !!(textScope.changeGrep() || []).length || changed;
+
+        app.findGrepPreferences = NothingEnum.nothing;
+        app.changeGrepPreferences = NothingEnum.nothing;
+        app.findGrepPreferences.findWhat = referenceMarkerPattern + "\\s+([\\.,;:!\\?])";
+        app.changeGrepPreferences.changeTo = "$1$2";
+        changed = !!(textScope.changeGrep() || []).length || changed;
+
+        app.findGrepPreferences = NothingEnum.nothing;
+        app.changeGrepPreferences = NothingEnum.nothing;
+        app.findGrepPreferences.findWhat = referenceMarkerPattern + "\\s*" + referenceTextCharPattern;
+        app.changeGrepPreferences.changeTo = "$1 $2";
+        changed = !!(textScope.changeGrep() || []).length || changed;
+    } catch (e) {
+        return changed;
+    } finally {
+        try { app.findGrepPreferences = NothingEnum.nothing; } catch (e2) {}
+        try { app.changeGrepPreferences = NothingEnum.nothing; } catch (e3) {}
+    }
+    return changed;
+}
+
 function escapeDeepLXMLText(text) {
     if (text === null || text === undefined) return "";
     var result = String(text);
@@ -3391,6 +3426,7 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
     translatedXML = normalizeTranslatedXML(translatedXML)
                                  .replace(/(###(?:IMG|TBL)_\d+###)\s+(?=###(?:IMG|TBL)_\d+###)/g, '$1');
     var isPartial = false; var textFlow = null; var currentIdx = 0;
+    var normalizeStartIndex = 0;
     try {
         if (targetTextObj.constructor.name === "Story") { isPartial = false; textFlow = targetTextObj; } 
         else if (targetTextObj.parent && targetTextObj.parent.constructor.name === "Cell") {
@@ -3398,7 +3434,11 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
         } else { isPartial = true; textFlow = targetTextObj.parentStory; }
     } catch(e) { isPartial = false; textFlow = targetTextObj; }
 
-    if (isPartial) { try { currentIdx = targetTextObj.insertionPoints.item(0).index; } catch(e){} try { targetTextObj.remove(); } catch(e){} } 
+    if (isPartial) {
+        try { currentIdx = targetTextObj.insertionPoints.item(0).index; } catch(e){}
+        normalizeStartIndex = currentIdx;
+        try { targetTextObj.remove(); } catch(e){}
+    }
     else { try { textFlow.contents = ""; } catch(e){} currentIdx = 0; }
 
     var regex = /<t([^>]*)>([\s\S]*?)<\/t>/gi; var match;
@@ -3448,6 +3488,22 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
                 } catch(e) {}
             }
         }
+    }
+
+    if (textFlow && textFlow.isValid) {
+        try {
+            if (isPartial) {
+                var normalizeEndIndex = currentIdx - 1;
+                if (normalizeEndIndex >= normalizeStartIndex) {
+                    var scopeStartIndex = Math.max(0, normalizeStartIndex - 1);
+                    var scopeEndIndex = Math.min(textFlow.characters.length - 1, normalizeEndIndex + 1);
+                    var insertedRange = textFlow.characters.itemByRange(scopeStartIndex, scopeEndIndex);
+                    normalizeReferenceSpacing(insertedRange);
+                }
+            } else {
+                normalizeReferenceSpacing(textFlow);
+            }
+        } catch (e5) {}
     }
 }
 
