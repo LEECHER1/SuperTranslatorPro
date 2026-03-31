@@ -682,8 +682,8 @@ function buildGlossaryRuntime(parsedGlossary, selectedLang) {
 
     if (terms.length > 0) {
         terms.sort(function(a, b) { return b.length - a.length; });
-        for (var t = 0; t < terms.length; t++) {
-            terms[t] = terms[t].replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+        for (var termIndex = 0; termIndex < terms.length; termIndex++) {
+            terms[termIndex] = terms[termIndex].replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
         }
         runtime.regex = new RegExp("(^|[^\\wäöüÄÖÜßéèêáàâíìîóòôúùûñ])(" + terms.join("|") + ")(?=[^\\wäöüÄÖÜßéèêáàâíìîóòôúùûñ]|$)", "gi");
     }
@@ -3418,8 +3418,8 @@ function syncMasterTextChanges(doc) {
                 var previousText = previousFrames[f] || "";
                 if (forceGlossaryRefresh || currentText !== previousText) {
                     var targets = getRelatedTargetMasterSpreads(doc, masterName);
-                    for (var t = 0; t < targets.length; t++) {
-                        var targetMaster = targets[t];
+                    for (var targetIndex = 0; targetIndex < targets.length; targetIndex++) {
+                        var targetMaster = targets[targetIndex];
                         var lang = getMasterLang(targetMaster.name);
                         if (!lang) continue;
                         if (!changesByLang[lang]) changesByLang[lang] = [];
@@ -3459,8 +3459,8 @@ function updateTOCForLanguage(doc, langCode, newStartPage) {
                 items.push({ type: "frame", obj: allPI[i] });
                 if (allPI[i].tables.length > 0) {
                     var tbs = allPI[i].tables;
-                    for (var t = 0; t < tbs.length; t++) {
-                        var cls = tbs[t].cells;
+                    for (var tableIndex = 0; tableIndex < tbs.length; tableIndex++) {
+                        var cls = tbs[tableIndex].cells;
                         for (var c = 0; c < cls.length; c++) {
                             items.push({ type: "cell", obj: cls[c] });
                         }
@@ -3630,8 +3630,8 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             
             if (currentText.tables && currentText.tables.length > 0) {
                 var tables = currentText.tables.everyItem().getElements();
-                for (var t = tables.length - 1; t >= 0; t--) {
-                    var tbl = tables[t]; var tblId = ++tableCounter; 
+                for (var tableReverseIndex = tables.length - 1; tableReverseIndex >= 0; tableReverseIndex--) {
+                    var tbl = tables[tableReverseIndex]; var tblId = ++tableCounter; 
                     var marker = "###TBL_" + tblId + "###";
                     var tmpFrame = storageEnv.page.textFrames.add({itemLayer: storageEnv.layer, geometricBounds: [0,-100, 50, -50]});
                     
