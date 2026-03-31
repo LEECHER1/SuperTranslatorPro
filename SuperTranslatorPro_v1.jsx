@@ -1632,23 +1632,13 @@ checkAutoBDAHyperlinks.indent = 20;
 checkAutoBDAHyperlinks.value = autoBDAHyperlinksSetting;
 checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
 
-var grpBDAHyperlinkSymbols = panelBDA.add("group");
-grpBDAHyperlinkSymbols.indent = 40;
-grpBDAHyperlinkSymbols.add("statictext", undefined, t("auto_hyperlink_symbols"));
-var bdaHyperlinkSymbolsInput = grpBDAHyperlinkSymbols.add("edittext", undefined, refSymbolsSetting);
-bdaHyperlinkSymbolsInput.characters = 12;
-bdaHyperlinkSymbolsInput.helpTip = t("reference_symbols");
-
 var cbOnlyTextUpdate = panelBDA.add("checkbox", undefined, t("only_text_update"));
 cbOnlyTextUpdate.indent = 20;
 cbOnlyTextUpdate.value = false;
 cbOnlyTextUpdate.enabled = false;
 
 function updateBDAHyperlinkControls(enabled) {
-    var inputEnabled = !!enabled && !!checkAutoBDAHyperlinks.value;
     checkAutoBDAHyperlinks.enabled = !!enabled;
-    grpBDAHyperlinkSymbols.enabled = inputEnabled;
-    bdaHyperlinkSymbolsInput.enabled = inputEnabled;
 }
 
 // START-ZUSTAND FESTLEGEN
@@ -1914,6 +1904,10 @@ btnSettings.onClick = function() {
     setWin.add("panel", undefined, "");
     var autoSettingsLabel = setWin.add("statictext", undefined, t("auto_settings"));
     autoSettingsLabel.graphics.font = ScriptUI.newFont(autoSettingsLabel.graphics.font.family, "BOLD", autoSettingsLabel.graphics.font.size);
+    setWin.add("statictext", undefined, t("auto_hyperlink_symbols"));
+    var autoHyperlinkSymbolsInput = setWin.add("edittext", undefined, refSymbolsSetting);
+    autoHyperlinkSymbolsInput.characters = 20;
+    autoHyperlinkSymbolsInput.helpTip = t("reference_symbols");
     setWin.add("statictext", undefined, t("back_page_tracker_label"));
     var backPageTrackerInput = setWin.add("edittext", undefined, backPageTrackerSetting);
     backPageTrackerInput.characters = 40;
@@ -1947,10 +1941,12 @@ btnSettings.onClick = function() {
         csvPath = csvInput.text;
         csvPathSettingRaw = csvPath;
         tmPath = tmInput.text;
+        refSymbolsSetting = normalizeRefSymbols(autoHyperlinkSymbolsInput.text);
         backPageTrackerSetting = normalizeBackPageTrackerSetting(backPageTrackerInput.text);
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(CSV_PATH_LABEL, csvPath); 
         app.insertLabel(TM_PATH_LABEL, tmPath); 
+        app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
         app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
         
         var selForm = "default";
@@ -3359,7 +3355,7 @@ btnTranslate.onClick = function() {
         lang: dropdownLang.selection.text.substring(0, 2),
         onlyTextUpdate: cbOnlyTextUpdate ? cbOnlyTextUpdate.value : false,
         autoReferenceLinks: checkAutoBDAHyperlinks ? checkAutoBDAHyperlinks.value : false,
-        autoReferenceSymbols: bdaHyperlinkSymbolsInput ? bdaHyperlinkSymbolsInput.text : refSymbolsSetting,
+        autoReferenceSymbols: refSymbolsSetting,
         backPageTracker: backPageTrackerSetting
     };
 
