@@ -736,6 +736,13 @@ function tryReadCSVContent(path, encoding) {
     }
 }
 
+function countSuspiciousCSVDecodeChars(content) {
+    if (!content) return 0;
+    // Typical mojibake artifacts when legacy CSVs are read with the wrong code page.
+    // We keep the list intentionally small so legitimate accented text is not penalized.
+    return (String(content).match(/[ƒ‡ˆŠ‹ŒŽ˜™š›žŸ]/g) || []).length;
+}
+
 function getCSVDecodeScore(content, rows) {
     if (!content || !rows || rows.length < 2) return 999999;
 
@@ -752,6 +759,9 @@ function getCSVDecodeScore(content, rows) {
 
     var controlChars = (String(content).match(/[\u0001-\u0008\u000B\u000C\u000E-\u001F]/g) || []).length;
     score += controlChars * 10;
+
+    var suspiciousDecodeChars = countSuspiciousCSVDecodeChars(content);
+    score += suspiciousDecodeChars * 25;
 
     return score;
 }
