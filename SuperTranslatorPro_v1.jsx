@@ -996,10 +996,14 @@ function applyGlossaryRuntimeToChunk(chunk, glossaryRuntime) {
     });
 }
 
+function getTechnicalTokenRegex() {
+    return /\b([A-Z]+[0-9]+[A-Z0-9]*(?:[\*xX\/-][0-9]+[A-Z0-9]*)*|[0-9]+[A-Z]+[A-Z0-9]*(?:[\*xX\/-][0-9]+[A-Z0-9]*)*|[0-9]{4,})\b/g;
+}
+
 function protectChunkNonTranslatables(chunk) {
     if (!chunk || chunk === "") return chunk;
 
-    var regexArt = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*|[0-9]{4,})\b/g;
+    var regexArt = getTechnicalTokenRegex();
     chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
         var before = string.substring(0, offset);
         var openTags = (before.match(/<nt>/g) || []).length;
@@ -3417,7 +3421,7 @@ function replacePageFrameText(page, frameIndex, contents) {
         if ((!story || !story.isValid) && tf.texts && tf.texts.length > 0) story = tf.texts[0];
         if (!story || !story.isValid) return false;
         story.contents = contents;
-        if (story.characters && story.characters.length > 0) normalizeReferenceSpacing(story);
+        if (story.characters && story.characters.length > 0) normalizePostTranslationSpacing(story);
         return true;
     } catch (e) { return false; }
 }
@@ -3795,7 +3799,7 @@ function replaceMasterFrameText(masterSpread, pageIndex, frameIndex, contents) {
         if ((!story || !story.isValid) && tf.texts && tf.texts.length > 0) story = tf.texts[0];
         if (!story || !story.isValid) return false;
         story.contents = contents;
-        if (story.characters && story.characters.length > 0) normalizeReferenceSpacing(story);
+        if (story.characters && story.characters.length > 0) normalizePostTranslationSpacing(story);
         return true;
     } catch (e) { return false; }
 }
@@ -4373,6 +4377,37 @@ function normalizeTranslatedXML(xml) {
                       .replace(/>\s+</g, '><');
 }
 
+function normalizeTechnicalTokenSpacingInString(text) {
+    if (text === null || text === undefined || text === "") return text;
+    return String(text).replace(/([a-z\u00DF-\u00F6\u00F8-\u00FF])((?:[A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*)(?:[\*xX\/-][0-9]+[A-Z0-9]*)+)/g, "$1 $2");
+}
+
+function normalizeTechnicalTokenSpacing(textScope) {
+    if (!textScope || !textScope.isValid) return false;
+    var changed = false;
+    try {
+        app.findGrepPreferences = NothingEnum.nothing;
+        app.changeGrepPreferences = NothingEnum.nothing;
+
+        app.findGrepPreferences.findWhat = "([\\l])((?:[A-Z]+\\d+[A-Z0-9]*|\\d+[A-Z]+[A-Z0-9]*)(?:[\\*xX/\\-]\\d+[A-Z0-9]*)+)";
+        app.changeGrepPreferences.changeTo = "$1 $2";
+        changed = !!(textScope.changeGrep() || []).length || changed;
+    } catch (e) {
+        return changed;
+    } finally {
+        try { app.findGrepPreferences = NothingEnum.nothing; } catch (e2) {}
+        try { app.changeGrepPreferences = NothingEnum.nothing; } catch (e3) {}
+    }
+    return changed;
+}
+
+function normalizePostTranslationSpacing(textScope, symbols) {
+    var changed = false;
+    changed = normalizeTechnicalTokenSpacing(textScope) || changed;
+    changed = normalizeReferenceSpacing(textScope, symbols) || changed;
+    return changed;
+}
+
 function normalizeReferenceSpacing(textScope, symbols) {
     if (!textScope || !textScope.isValid) return false;
     var changed = false;
@@ -4809,7 +4844,7 @@ function decodeDeepLXMLText(xml) {
     xml = xml.replace(/^<root>/, '').replace(/<\/root>$/, '');
     xml = xml.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     xml = xml.replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t');
-    return xml;
+    return normalizeTechnicalTokenSpacingInString(xml);
 }
 
 function escapeXMLAttr(value) {
@@ -4864,7 +4899,7 @@ function buildTextObjectXML(textObj) {
         }
 
         if (!isDNT) {
-            var regexArt = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*|[0-9]{4,})\b/g;
+            var regexArt = getTechnicalTokenRegex();
             chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
                 var before = string.substring(0, offset);
                 var openTags = (before.match(/<nt>/g) || []).length;
@@ -4914,6 +4949,7 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode) {
         var fInd = decodeXMLAttr(getAttr(attrs, "fi")); var bLis = decodeXMLAttr(getAttr(attrs, "b"));
         
         textContent = decodeXMLValue(textContent).replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t').replace(/<\/?nt[^>]*>/gi, '');
+        textContent = normalizeTechnicalTokenSpacingInString(textContent);
         if (textContent.length > 0) {
             var appliedRange = null; var doc = app.activeDocument;
             try {
@@ -4960,10 +4996,10 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode) {
                     var scopeStartIndex = Math.max(0, normalizeStartIndex - 1);
                     var scopeEndIndex = Math.min(textFlow.characters.length - 1, normalizeEndIndex + 1);
                     var insertedRange = textFlow.characters.itemByRange(scopeStartIndex, scopeEndIndex);
-                    normalizeReferenceSpacing(insertedRange);
+                    normalizePostTranslationSpacing(insertedRange);
                 }
             } else {
-                normalizeReferenceSpacing(textFlow);
+                normalizePostTranslationSpacing(textFlow);
             }
         } catch (e5) {}
     }
