@@ -78,7 +78,8 @@ var UI_STRINGS = {
     legacy_creation_cancelled: { de: "Musterseiten-Erzeugung abgebrochen.", en: "Master-page creation cancelled." },
     legacy_no_languages_selected: { de: "Keine Zielsprachen für die automatische Musterseiten-Generierung ausgewählt.", en: "No target languages selected for automatic master-page creation." },
     hyperlink_settings_button: { de: "Hyperlinks", en: "Hyperlinks" },
-    hyperlink_settings_help: { de: "Verlinkt Referenzen auf die hinterlegte Sprachseite und erstellt Web-Hyperlinks im Dokument.", en: "Links references to the configured language page and creates web hyperlinks in the document." },
+    hyperlink_settings_help: { de: "Öffnet den Hyperlinks-Dialog für Referenzen und Web-URLs.", en: "Opens the hyperlink dialog for references and web URLs." },
+    hyperlink_dialog_title: { de: "Hyperlinks", en: "Hyperlinks" },
     hyperlink_group_title: { de: "Hyperlinks", en: "Hyperlinks" },
     hyperlink_language: { de: "Sprache:", en: "Language:" },
     hyperlink_target_page: { de: "Zielseite:", en: "Target page:" },
@@ -86,9 +87,9 @@ var UI_STRINGS = {
     hyperlink_remove_mapping: { de: "Zuordnung entfernen", en: "Remove mapping" },
     hyperlink_saved_mappings: { de: "Gespeicherte Zuordnungen:", en: "Saved mappings:" },
     hyperlink_no_mappings_saved: { de: "Keine Sprach-Zielseiten gespeichert.", en: "No language page mappings saved." },
+    hyperlink_execute: { de: "Verlinken", en: "Link" },
     link_working: { de: "Referenz-Hyperlinks werden erstellt...", en: "Creating reference hyperlinks..." },
-    link_summary: { de: "Hyperlinks aktualisiert.\n\nSprache: {language}\nZielseite: {page}\nSymbole: {symbols}\nReferenz-Links erstellt: {links}\nWeb-Links erstellt: {urlLinks}\nBereits verknüpft/übersprungen: {skipped}", en: "Hyperlinks updated.\n\nLanguage: {language}\nTarget page: {page}\nSymbols: {symbols}\nReference links created: {links}\nWeb links created: {urlLinks}\nAlready linked/skipped: {skipped}" },
-    link_missing_mapping: { de: "Für die Sprache {language} ist keine Zielseite in den Einstellungen hinterlegt.", en: "No target page is stored in the settings for language {language}." },
+    link_summary: { de: "Hyperlinks aktualisiert.\n\nSymbole: {symbols}\nZielseiten:\n{mappingSummary}\nReferenz-Links erstellt/aktualisiert: {links}\nWeb-Links erstellt: {urlLinks}\nÜbersprungen: {skipped}", en: "Hyperlinks updated.\n\nSymbols: {symbols}\nTarget pages:\n{mappingSummary}\nReference links created/updated: {links}\nWeb links created: {urlLinks}\nSkipped: {skipped}" },
     link_invalid_page: { de: "Die Zielseite '{page}' für {language} wurde im Dokument nicht gefunden.", en: "The target page '{page}' for {language} was not found in the document." },
     link_no_matches: { de: "Es wurden weder Referenzen mit den definierten Symbolen noch Web-URLs im Dokument gefunden.", en: "Neither references using the configured symbols nor web URLs were found in the document." },
     hyperlink_page_required: { de: "Bitte trage eine Zielseite für {language} ein.", en: "Please enter a target page for {language}." },
@@ -395,6 +396,83 @@ function formatHyperlinkPageMappings(pageMappings) {
     }
     if (lines.length === 0) return t("hyperlink_no_mappings_saved");
     return lines.join("\r");
+}
+
+function getTextObjectParentPage(textObj) {
+    if (!textObj || !textObj.isValid) return null;
+    try {
+        var parentFrames = textObj.parentTextFrames;
+        if (parentFrames && parentFrames.length > 0) {
+            for (var i = 0; i < parentFrames.length; i++) {
+                if (parentFrames[i] && parentFrames[i].isValid && parentFrames[i].parentPage && parentFrames[i].parentPage.isValid) {
+                    return parentFrames[i].parentPage;
+                }
+            }
+        }
+    } catch (e) {}
+    try {
+        var story = textObj.parentStory;
+        if (story && story.isValid && story.textContainers && story.textContainers.length > 0) {
+            for (var j = 0; j < story.textContainers.length; j++) {
+                var container = story.textContainers[j];
+                if (container && container.isValid && container.parentPage && container.parentPage.isValid) {
+                    return container.parentPage;
+                }
+            }
+        }
+    } catch (e2) {}
+    return null;
+}
+
+function findPageLanguageBadgeCode(page) {
+    if (!page || !page.isValid) return "";
+    var frames = getTextFramesFromContainer(page);
+    var best = null;
+    for (var i = 0; i < frames.length; i++) {
+        var tf = frames[i];
+        var textObj = null;
+        try { if (tf.texts && tf.texts.length > 0) textObj = tf.texts[0]; } catch (e) { textObj = null; }
+        if (!textObj || !textObj.isValid) {
+            var story = getTextFrameStory(tf);
+            if (!story) continue;
+            textObj = story;
+        }
+        var code = normalizeLanguageBadgeText(textObj.contents);
+        if (code.length !== 2 || !isSupportedLegacyLanguageCode(code)) continue;
+        var score = 0;
+        try { if (hasBlackBadgeBackground(tf)) score += 40; } catch (e2) {}
+        try {
+            var bounds = tf.geometricBounds;
+            var pageBounds = page.bounds;
+            var frameCenterX = (bounds[1] + bounds[3]) / 2;
+            var frameCenterY = (bounds[0] + bounds[2]) / 2;
+            var pageCenterX = (pageBounds[1] + pageBounds[3]) / 2;
+            var pageCenterY = (pageBounds[0] + pageBounds[2]) / 2;
+            if (frameCenterX >= pageCenterX) score += 20;
+            if (frameCenterY <= pageCenterY) score += 20;
+        } catch (e3) {}
+        if (!best || score > best.score) best = { code: code, score: score };
+    }
+    return best ? String(best.code).toUpperCase() : "";
+}
+
+function getPageLanguageCode(page) {
+    if (!page || !page.isValid) return "";
+    try {
+        if (page.appliedMaster && page.appliedMaster.isValid) {
+            var masterLang = getMasterLang(page.appliedMaster.name);
+            if (masterLang) return String(masterLang).toUpperCase();
+        }
+    } catch (e) {}
+    var pageBadgeCode = findPageLanguageBadgeCode(page);
+    if (pageBadgeCode) return pageBadgeCode;
+    try {
+        if (page.appliedMaster && page.appliedMaster.isValid) {
+            var masterBadge = findMasterLanguageBadge(page.appliedMaster, null);
+            if (masterBadge && masterBadge.code) return String(masterBadge.code).toUpperCase();
+        }
+    } catch (e2) {}
+    return "";
 }
 
 function buildFormalityOptions() {
@@ -1167,23 +1245,111 @@ btnSpellCheck.onClick = function() {
     }
 };
 
+function showHyperlinkDialog() {
+    var dlg = new Window("dialog", t("hyperlink_dialog_title"));
+    dlg.orientation = "column";
+    dlg.alignChildren = ["fill", "top"];
+
+    dlg.add("statictext", undefined, t("reference_symbols"));
+    var refSymbolsInput = dlg.add("edittext", undefined, refSymbolsSetting);
+    refSymbolsInput.characters = 20;
+
+    var hyperlinkMappingsDraft = normalizeHyperlinkPageMappings(hyperlinkPageMappings);
+    var hyperlinkPanel = dlg.add("panel", undefined, t("hyperlink_group_title"));
+    hyperlinkPanel.orientation = "column";
+    hyperlinkPanel.alignChildren = ["fill", "top"];
+    hyperlinkPanel.margins = 12;
+
+    var hyperlinkLangGroup = hyperlinkPanel.add("group");
+    hyperlinkLangGroup.add("statictext", undefined, t("hyperlink_language"));
+    var hyperlinkLangDropdown = hyperlinkLangGroup.add("dropdownlist", undefined, buildHyperlinkLanguageList());
+    hyperlinkLangDropdown.selection = 0;
+
+    var hyperlinkPageGroup = hyperlinkPanel.add("group");
+    hyperlinkPageGroup.add("statictext", undefined, t("hyperlink_target_page"));
+    var hyperlinkPageInput = hyperlinkPageGroup.add("edittext", undefined, "");
+    hyperlinkPageInput.characters = 10;
+
+    var hyperlinkButtonGroup = hyperlinkPanel.add("group");
+    var btnSaveHyperlinkMapping = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_save_mapping"));
+    var btnRemoveHyperlinkMapping = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_remove_mapping"));
+
+    hyperlinkPanel.add("statictext", undefined, t("hyperlink_saved_mappings"));
+    var hyperlinkMappingsView = hyperlinkPanel.add("edittext", undefined, "", { multiline: true, readonly: true, scrolling: true });
+    hyperlinkMappingsView.preferredSize = [320, 90];
+
+    var refreshHyperlinkMappingsView = function() {
+        hyperlinkMappingsView.text = formatHyperlinkPageMappings(hyperlinkMappingsDraft);
+    };
+
+    var syncHyperlinkMappingInputs = function() {
+        var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
+        hyperlinkPageInput.text = (selectedCode && hyperlinkMappingsDraft.hasOwnProperty(selectedCode)) ? hyperlinkMappingsDraft[selectedCode] : "";
+    };
+
+    hyperlinkLangDropdown.onChange = syncHyperlinkMappingInputs;
+
+    btnSaveHyperlinkMapping.onClick = function() {
+        var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
+        var pageValue = String(hyperlinkPageInput.text || "").replace(/^\s+|\s+$/g, "");
+        if (!selectedCode) return;
+        if (pageValue === "") {
+            alert(t("hyperlink_page_required", { language: selectedCode }));
+            return;
+        }
+        hyperlinkMappingsDraft[selectedCode] = pageValue;
+        refreshHyperlinkMappingsView();
+    };
+
+    btnRemoveHyperlinkMapping.onClick = function() {
+        var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
+        if (!selectedCode) return;
+        if (hyperlinkMappingsDraft.hasOwnProperty(selectedCode)) delete hyperlinkMappingsDraft[selectedCode];
+        syncHyperlinkMappingInputs();
+        refreshHyperlinkMappingsView();
+    };
+
+    refreshHyperlinkMappingsView();
+    syncHyperlinkMappingInputs();
+
+    var buttonRow = dlg.add("group");
+    buttonRow.alignment = "right";
+    var btnRun = buttonRow.add("button", undefined, t("hyperlink_execute"));
+    var btnClose = buttonRow.add("button", undefined, t("cancel"));
+
+    btnRun.onClick = function() {
+        var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
+        var pageValue = String(hyperlinkPageInput.text || "").replace(/^\s+|\s+$/g, "");
+        if (selectedCode && pageValue !== "") {
+            hyperlinkMappingsDraft[selectedCode] = pageValue;
+        }
+        refSymbolsSetting = normalizeRefSymbols(refSymbolsInput.text);
+        hyperlinkPageMappings = normalizeHyperlinkPageMappings(hyperlinkMappingsDraft);
+        app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
+        app.insertLabel(HYPERLINK_PAGE_MAP_LABEL, serializeJSON(hyperlinkPageMappings));
+        dlg.close(1);
+    };
+
+    btnClose.onClick = function() { dlg.close(0); };
+    if (dlg.show() !== 1) return null;
+    return {
+        symbols: refSymbolsSetting,
+        pageMappings: hyperlinkPageMappings
+    };
+}
+
 btnLinkReferences.onClick = function() {
     var doc = null;
     try { doc = app.activeDocument; } catch (e) { alert(t("no_document_open")); return; }
-    var selectedLang = "";
-    try { selectedLang = extractLanguageCodeFromOption(dropdownLang.selection ? dropdownLang.selection.text : ""); } catch (langErr) { selectedLang = ""; }
-    if (!selectedLang) {
-        alert(t("validation_invalid_lang"));
-        return;
-    }
+    var hyperlinkConfig = showHyperlinkDialog();
+    if (!hyperlinkConfig) return;
     try {
         app.doScript(
             function() {
-                var result = linkPackageReferences(doc, refSymbolsSetting, selectedLang, hyperlinkPageMappings);
+                var result = linkPackageReferences(doc, hyperlinkConfig.symbols, hyperlinkConfig.pageMappings);
                 alert(t("link_summary", {
-                    language: result.language,
-                    page: result.page,
                     symbols: result.symbols,
+                    mappingSummary: result.mappingSummary,
                     links: result.links,
                     urlLinks: result.urlLinks,
                     skipped: result.skipped
@@ -1257,77 +1423,6 @@ btnSettings.onClick = function() {
         }
     };
 
-    setWin.add("statictext", undefined, t("reference_symbols"));
-    var refSymbolsInput = setWin.add("edittext", undefined, refSymbolsSetting);
-    refSymbolsInput.characters = 20;
-    
-    var hyperlinkMappingsDraft = normalizeHyperlinkPageMappings(hyperlinkPageMappings);
-    var hyperlinkPanel = setWin.add("panel", undefined, t("hyperlink_group_title"));
-    hyperlinkPanel.orientation = "column";
-    hyperlinkPanel.alignChildren = ["fill", "top"];
-    hyperlinkPanel.margins = 12;
-
-    var hyperlinkLangGroup = hyperlinkPanel.add("group");
-    hyperlinkLangGroup.add("statictext", undefined, t("hyperlink_language"));
-    var hyperlinkLangDropdown = hyperlinkLangGroup.add("dropdownlist", undefined, buildHyperlinkLanguageList());
-    hyperlinkLangDropdown.selection = 0;
-    var currentManualLang = extractLanguageCodeFromOption(dropdownLang.selection ? dropdownLang.selection.text : "");
-    if (currentManualLang) {
-        for (var hyperlinkLangIndex = 0; hyperlinkLangIndex < hyperlinkLangDropdown.items.length; hyperlinkLangIndex++) {
-            if (extractLanguageCodeFromOption(hyperlinkLangDropdown.items[hyperlinkLangIndex].text) === currentManualLang) {
-                hyperlinkLangDropdown.selection = hyperlinkLangIndex;
-                break;
-            }
-        }
-    }
-
-    var hyperlinkPageGroup = hyperlinkPanel.add("group");
-    hyperlinkPageGroup.add("statictext", undefined, t("hyperlink_target_page"));
-    var hyperlinkPageInput = hyperlinkPageGroup.add("edittext", undefined, "");
-    hyperlinkPageInput.characters = 10;
-
-    var hyperlinkButtonGroup = hyperlinkPanel.add("group");
-    var btnSaveHyperlinkMapping = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_save_mapping"));
-    var btnRemoveHyperlinkMapping = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_remove_mapping"));
-
-    hyperlinkPanel.add("statictext", undefined, t("hyperlink_saved_mappings"));
-    var hyperlinkMappingsView = hyperlinkPanel.add("edittext", undefined, "", { multiline: true, readonly: true, scrolling: true });
-    hyperlinkMappingsView.preferredSize = [320, 80];
-
-    var refreshHyperlinkMappingsView = function() {
-        hyperlinkMappingsView.text = formatHyperlinkPageMappings(hyperlinkMappingsDraft);
-    };
-
-    var syncHyperlinkMappingInputs = function() {
-        var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
-        hyperlinkPageInput.text = (selectedCode && hyperlinkMappingsDraft.hasOwnProperty(selectedCode)) ? hyperlinkMappingsDraft[selectedCode] : "";
-    };
-
-    hyperlinkLangDropdown.onChange = syncHyperlinkMappingInputs;
-
-    btnSaveHyperlinkMapping.onClick = function() {
-        var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
-        var pageValue = String(hyperlinkPageInput.text || "").replace(/^\s+|\s+$/g, "");
-        if (!selectedCode) return;
-        if (pageValue === "") {
-            alert(t("hyperlink_page_required", { language: selectedCode }));
-            return;
-        }
-        hyperlinkMappingsDraft[selectedCode] = pageValue;
-        refreshHyperlinkMappingsView();
-    };
-
-    btnRemoveHyperlinkMapping.onClick = function() {
-        var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
-        if (!selectedCode) return;
-        if (hyperlinkMappingsDraft.hasOwnProperty(selectedCode)) delete hyperlinkMappingsDraft[selectedCode];
-        syncHyperlinkMappingInputs();
-        refreshHyperlinkMappingsView();
-    };
-
-    refreshHyperlinkMappingsView();
-    syncHyperlinkMappingInputs();
-    
     var g = setWin.add("group");
     g.alignment = "fill";
     g.alignChildren = ["fill", "center"];
@@ -1355,18 +1450,9 @@ btnSettings.onClick = function() {
         apiKey = keyInput.text;
         csvPath = csvInput.text;
         tmPath = tmInput.text;
-        refSymbolsSetting = normalizeRefSymbols(refSymbolsInput.text);
-        var pendingHyperlinkCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
-        var pendingHyperlinkPage = String(hyperlinkPageInput.text || "").replace(/^\s+|\s+$/g, "");
-        if (pendingHyperlinkCode && pendingHyperlinkPage !== "") {
-            hyperlinkMappingsDraft[pendingHyperlinkCode] = pendingHyperlinkPage;
-        }
-        hyperlinkPageMappings = normalizeHyperlinkPageMappings(hyperlinkMappingsDraft);
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(CSV_PATH_LABEL, csvPath); 
         app.insertLabel(TM_PATH_LABEL, tmPath); 
-        app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
-        app.insertLabel(HYPERLINK_PAGE_MAP_LABEL, serializeJSON(hyperlinkPageMappings));
         
         var selForm = "default";
         if (formDrop.selection.index === 1) selForm = "more"; else if (formDrop.selection.index === 2) selForm = "less";
@@ -4176,28 +4262,6 @@ function isSameStoryRange(a, b) {
     return a.storyId === b.storyId && a.start === b.start && a.end === b.end;
 }
 
-function findExistingHyperlinkForText(doc, textObj) {
-    var targetRange = getStoryRangeSignature(textObj);
-    if (!targetRange) return null;
-    try {
-        var hyperlinks = doc.hyperlinks.everyItem().getElements();
-        for (var i = 0; i < hyperlinks.length; i++) {
-            var hyperlink = hyperlinks[i];
-            if (!hyperlink || !hyperlink.isValid || !hyperlink.source || !hyperlink.source.isValid) continue;
-            if (hyperlink.source.constructor.name !== "HyperlinkTextSource") continue;
-            var sourceText = null;
-            try { sourceText = hyperlink.source.sourceText; } catch (e) { sourceText = null; }
-            var sourceRange = getStoryRangeSignature(sourceText);
-            if (isSameStoryRange(targetRange, sourceRange)) return hyperlink;
-        }
-    } catch (e2) {}
-    return null;
-}
-
-function hasExistingHyperlinkForText(doc, textObj) {
-    return !!findExistingHyperlinkForText(doc, textObj);
-}
-
 function sanitizeHyperlinkName(value) {
     var safe = String(value || "").replace(/[^A-Za-z0-9]+/g, "_");
     if (safe.length > 40) safe = safe.substring(0, 40);
@@ -4255,21 +4319,76 @@ function normalizeURLDestination(urlText) {
     return url;
 }
 
-function getOrCreateURLDestination(doc, urlText) {
-    var normalizedUrl = normalizeURLDestination(urlText);
+function buildStoryRangeKey(rangeSignature) {
+    if (!rangeSignature) return "";
+    return String(rangeSignature.storyId) + ":" + String(rangeSignature.start) + ":" + String(rangeSignature.end);
+}
+
+function getTextObjectRangeKey(textObj) {
+    return buildStoryRangeKey(getStoryRangeSignature(textObj));
+}
+
+function buildExistingHyperlinkSourceMap(doc) {
+    var map = {};
+    try {
+        var hyperlinks = doc.hyperlinks.everyItem().getElements();
+        for (var i = 0; i < hyperlinks.length; i++) {
+            var hyperlink = hyperlinks[i];
+            if (!hyperlink || !hyperlink.isValid || !hyperlink.source || !hyperlink.source.isValid) continue;
+            if (hyperlink.source.constructor.name !== "HyperlinkTextSource") continue;
+            var sourceText = null;
+            try { sourceText = hyperlink.source.sourceText; } catch (e) { sourceText = null; }
+            var key = getTextObjectRangeKey(sourceText);
+            if (key !== "") map[key] = hyperlink;
+        }
+    } catch (e2) {}
+    return map;
+}
+
+function isManagedReferenceHyperlink(hyperlink) {
+    if (!hyperlink || !hyperlink.isValid) return false;
+    var name = "";
+    try { name = String(hyperlink.name || ""); } catch (e) { name = ""; }
+    return name.indexOf("STP_REF_LINK_") === 0;
+}
+
+function isManagedUrlHyperlink(hyperlink) {
+    if (!hyperlink || !hyperlink.isValid) return false;
+    var name = "";
+    try { name = String(hyperlink.name || ""); } catch (e) { name = ""; }
+    return name.indexOf("STP_URL_LINK_") === 0;
+}
+
+function removeManagedHyperlink(hyperlink) {
+    if (!hyperlink || !hyperlink.isValid) return;
+    var source = null;
+    try { source = hyperlink.source; } catch (e) { source = null; }
+    try { hyperlink.remove(); } catch (e2) {}
+    try { if (source && source.isValid) source.remove(); } catch (e3) {}
+}
+
+function buildURLDestinationCache(doc) {
+    var cache = {};
     try {
         var destinations = doc.hyperlinkURLDestinations.everyItem().getElements();
         for (var i = 0; i < destinations.length; i++) {
             var destination = destinations[i];
             if (!destination || !destination.isValid) continue;
             try {
-                if (String(destination.destinationURL) === normalizedUrl) return destination;
+                cache[String(destination.destinationURL)] = destination;
             } catch (e) {}
         }
     } catch (e2) {}
+    return cache;
+}
+
+function getOrCreateURLDestination(doc, urlText, destinationCache) {
+    var normalizedUrl = normalizeURLDestination(urlText);
+    if (destinationCache && destinationCache[normalizedUrl] && destinationCache[normalizedUrl].isValid) return destinationCache[normalizedUrl];
 
     var newDestination = doc.hyperlinkURLDestinations.add(normalizedUrl);
     try { newDestination.name = "STP_URL_DEST_" + sanitizeHyperlinkName(normalizedUrl); } catch (nameErr) {}
+    if (destinationCache) destinationCache[normalizedUrl] = newDestination;
     return newDestination;
 }
 
@@ -4296,9 +4415,10 @@ function collectUrlMatchesForStory(story) {
     return matches;
 }
 
-function linkDocumentUrls(doc) {
+function linkDocumentUrls(doc, existingHyperlinksBySource, destinationCache) {
     var linksCreated = 0;
     var skipped = 0;
+    var found = 0;
     var stories = [];
     try { stories = doc.stories.everyItem().getElements(); } catch (e) { stories = []; }
 
@@ -4307,21 +4427,29 @@ function linkDocumentUrls(doc) {
         var storyMatches = collectUrlMatchesForStory(story);
         for (var j = 0; j < storyMatches.length; j++) {
             var urlMatch = storyMatches[j];
+            found++;
             try {
                 var urlText = story.characters.itemByRange(urlMatch.start, urlMatch.end);
                 if (!urlText || !urlText.isValid) {
                     skipped++;
                     continue;
                 }
-                if (hasExistingHyperlinkForText(doc, urlText)) {
+                var sourceKey = getTextObjectRangeKey(urlText);
+                var existingHyperlink = sourceKey !== "" ? existingHyperlinksBySource[sourceKey] : null;
+                if (existingHyperlink && existingHyperlink.isValid) {
+                    if (isManagedUrlHyperlink(existingHyperlink)) {
+                        skipped++;
+                        continue;
+                    }
                     skipped++;
                     continue;
                 }
 
                 var source = doc.hyperlinkTextSources.add(urlText);
-                var destination = getOrCreateURLDestination(doc, urlMatch.text);
+                var destination = getOrCreateURLDestination(doc, urlMatch.text, destinationCache);
                 var hyperlink = doc.hyperlinks.add(source, destination);
                 try { hyperlink.name = "STP_URL_LINK_" + i + "_" + j; } catch (nameErr) {}
+                if (sourceKey !== "") existingHyperlinksBySource[sourceKey] = hyperlink;
                 linksCreated++;
             } catch (linkErr) {
                 skipped++;
@@ -4329,22 +4457,30 @@ function linkDocumentUrls(doc) {
         }
     }
 
-    return { links: linksCreated, skipped: skipped };
+    return { links: linksCreated, skipped: skipped, found: found };
 }
 
-function linkPackageReferences(doc, symbols, languageCode, pageMappings) {
-    if (!doc || !doc.isValid) throw new Error(t("no_document_open"));
-
-    var langCode = String(languageCode || "").replace(/^\s+|\s+$/g, "").toUpperCase();
-    var mappings = normalizeHyperlinkPageMappings(pageMappings || hyperlinkPageMappings);
-    var pageValue = mappings[langCode];
-    if (!pageValue) throw new Error(t("link_missing_mapping", { language: langCode }));
-
+function getReferencePageDestinationForLanguage(doc, langCode, pageMappings, destinationCache) {
+    if (destinationCache.hasOwnProperty(langCode)) return destinationCache[langCode];
+    var pageValue = pageMappings[langCode];
+    if (!pageValue) {
+        destinationCache[langCode] = null;
+        return null;
+    }
     var targetPage = resolvePageBySetting(doc, pageValue);
     if (!targetPage || !targetPage.isValid) throw new Error(t("link_invalid_page", { language: langCode, page: pageValue }));
+    destinationCache[langCode] = getOrCreatePageDestination(doc, targetPage, langCode, pageValue);
+    return destinationCache[langCode];
+}
 
+function linkPackageReferences(doc, symbols, pageMappings) {
+    if (!doc || !doc.isValid) throw new Error(t("no_document_open"));
+
+    var mappings = normalizeHyperlinkPageMappings(pageMappings || hyperlinkPageMappings);
     var normalizedSymbols = normalizeRefSymbols(symbols || refSymbolsSetting);
-    var pageDestination = getOrCreatePageDestination(doc, targetPage, langCode, pageValue);
+    var existingHyperlinksBySource = buildExistingHyperlinkSourceMap(doc);
+    var pageDestinationCache = {};
+    var urlDestinationCache = buildURLDestinationCache(doc);
     var matchedReferences = [];
     try {
         app.findGrepPreferences = NothingEnum.nothing;
@@ -4364,7 +4500,43 @@ function linkPackageReferences(doc, symbols, languageCode, pageMappings) {
             skipped++;
             continue;
         }
-        if (hasExistingHyperlinkForText(doc, refText)) {
+        var sourceKey = getTextObjectRangeKey(refText);
+        if (sourceKey === "") {
+            skipped++;
+            continue;
+        }
+        var existingHyperlink = existingHyperlinksBySource[sourceKey];
+        var parentPage = getTextObjectParentPage(refText);
+        var langCode = getPageLanguageCode(parentPage);
+        if (!langCode) {
+            if (existingHyperlink && existingHyperlink.isValid && isManagedReferenceHyperlink(existingHyperlink)) {
+                removeManagedHyperlink(existingHyperlink);
+                delete existingHyperlinksBySource[sourceKey];
+            }
+            skipped++;
+            continue;
+        }
+        var pageDestination = getReferencePageDestinationForLanguage(doc, langCode, mappings, pageDestinationCache);
+        if (!pageDestination || !pageDestination.isValid) {
+            if (existingHyperlink && existingHyperlink.isValid && isManagedReferenceHyperlink(existingHyperlink)) {
+                removeManagedHyperlink(existingHyperlink);
+                delete existingHyperlinksBySource[sourceKey];
+            }
+            skipped++;
+            continue;
+        }
+        if (existingHyperlink && existingHyperlink.isValid) {
+            if (isManagedReferenceHyperlink(existingHyperlink)) {
+                try {
+                    existingHyperlink.destination = pageDestination;
+                    try { existingHyperlink.name = "STP_REF_LINK_" + langCode + "_" + i; } catch (renameErr) {}
+                    linksCreated++;
+                    continue;
+                } catch (updateErr) {
+                    skipped++;
+                    continue;
+                }
+            }
             skipped++;
             continue;
         }
@@ -4372,24 +4544,24 @@ function linkPackageReferences(doc, symbols, languageCode, pageMappings) {
             var source = doc.hyperlinkTextSources.add(refText);
             var hyperlink = doc.hyperlinks.add(source, pageDestination);
             try { hyperlink.name = "STP_REF_LINK_" + langCode + "_" + i; } catch (nameErr) {}
+            existingHyperlinksBySource[sourceKey] = hyperlink;
             linksCreated++;
         } catch (linkErr) {
             skipped++;
         }
     }
 
-    var urlResult = linkDocumentUrls(doc);
-    if (linksCreated === 0 && urlResult.links === 0 && matchedReferences.length === 0) {
+    var urlResult = linkDocumentUrls(doc, existingHyperlinksBySource, urlDestinationCache);
+    if (matchedReferences.length === 0 && urlResult.found === 0) {
         throw new Error(t("link_no_matches"));
     }
 
     return {
-        language: langCode,
-        page: pageValue,
         symbols: normalizedSymbols,
         links: linksCreated,
         urlLinks: urlResult.links,
-        skipped: skipped + urlResult.skipped
+        skipped: skipped + urlResult.skipped,
+        mappingSummary: formatHyperlinkPageMappings(mappings)
     };
 }
 
