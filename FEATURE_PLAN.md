@@ -1,10 +1,10 @@
 # SuperTranslatorPro Checkliste
 
-> Diese Datei ist deine zentrale Aufgabenliste für die nächsten Features. Du kannst jederzeit Punkte abhaken, Kommentare ergänzen oder neue Aufgaben einfügen.
+> Diese Datei ist die zentrale Aufgabenliste für die nächsten Features. Punkte können jederzeit abgehakt, ergänzt oder verschoben werden.
 
 ## Aktueller Status
-- **Version:** 28.1
-- **Datum:** 29. März 2026
+- **Version:** 28.2
+- **Datum:** 31. März 2026
 - **Status:** Aktive Entwicklung
 
 ---
@@ -15,6 +15,8 @@
 - [ ] Automatische Musterseiten-Generierung (Legacy-Fallback)
 - [ ] Andere LLMs (ChatGPT / Gemini / Claude)
 - [ ] Migration auf UXP
+- [ ] UI/UX Optimierung
+- [ ] Verlinken (Linking Features)
 
 ---
 
@@ -76,27 +78,47 @@
 
 ---
 
+## 6. UI/UX Optimierung
+- [ ] Dynamische Anpassung der Skript-Sprache an `app.locale` (DE/EN)
+
+**Notizen:**
+- 
+
+---
+
+## 7. Verlinken (Linking Features)
+- [x] System für Referenz-Symbole in Einstellungen integriert (Standard `[]`)
+- [x] Button "Hyperlinks Einstellungen" im Manuellen Modus implementiert
+- [ ] Zukunft: Automatische Erkennung und Verlinkung von Web-URLs
+- [ ] Zukunft: Querverweise für Seitenzahlen automatisieren
+
+**Notizen:**
+- Basis für weitere Linking-Features wie Cross-References, URL-Erkennung und Paket-Referenzen
+
+---
+
 ## Prioritäten
-1. Rechtschreibprüfung
-2. Intelligente Copyfitting-Logik
-3. Automatische Musterseiten-Generierung
-4. Andere LLMs
-5. UXP-Migration
+1. UI/UX Optimierung
+2. Verlinken (Linking Features)
+3. Intelligente Copyfitting-Logik
+4. Automatische Musterseiten-Generierung
+5. Andere LLMs
+6. Migration auf UXP
 
 ---
 
 ## Offene ToDo-Punkte
-- [ ] Rechtschreibprüfung UI + Master-Scan bauen
-- [ ] Helper für `spellingErrors` implementieren
+- [ ] Dynamische DE/EN-Lokalisierung in allen UI-Dialogen finalisieren und testen
 - [ ] `applySmartCopyfit(textFrame)` mit Tracking/Scale/Frame bauen
 - [ ] Overflow-Fix in `executeTranslation` ersetzen
-- [ ] `runBDAMode` Legacy-Fallback für fehlende Masters einbauen
+- [ ] `runBDAMode` Legacy-Fallback für fehlende Masters produktiv absichern
 - [ ] Provider-Abstraktion für andere LLMs definieren
+- [ ] Automatische Erkennung und Verlinkung von Web-URLs ergänzen
+- [ ] Seitenzahlen-Querverweise automatisieren
 - [ ] UXP-Refactoring-Plan erstellen
 
 ---
 
 ## Änderungslog
+- 31. März 2026: UI/UX-Optimierung und Verlinken als neue Hauptpunkte ergänzt
 - 29. März 2026: Checkliste erstellt und als `FEATURE_PLAN.md` abgelegt
-- 
-

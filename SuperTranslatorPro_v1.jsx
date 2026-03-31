@@ -8,6 +8,321 @@
 var DEEPL_KEY_LABEL = "SuperTranslatorPRO_DeepL_API_Key";
 var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
+var REF_SYMBOLS_LABEL = "SuperTranslatorPRO_RefSymbols";
+
+function detectUILanguage() {
+    var localeText = "";
+    try { localeText = String(app.locale || ""); } catch (e) { localeText = ""; }
+    localeText = localeText.replace(/^\s+|\s+$/g, "").toLowerCase();
+    if (localeText.indexOf("de") === 0) return "de";
+    if (localeText.indexOf("german") !== -1 || localeText.indexOf("deutsch") !== -1) return "de";
+    return "en";
+}
+
+var UI_LANG = detectUILanguage();
+var UI_IS_GERMAN = (UI_LANG === "de");
+var UI_STRINGS = {
+    main_title: { de: "Was soll übersetzt werden?", en: "What should be translated?" },
+    settings_button: { de: "⚙️ Einstellungen", en: "⚙️ Settings" },
+    settings_help: { de: "Einstellungen, Wörterbuch & API-Key", en: "Settings, glossary & API key" },
+    manual_mode: { de: "Manueller Modus", en: "Manual Mode" },
+    selection_mode: { de: "Aktuelle Auswahl (Rahmen/Texte/Tabellen)", en: "Current selection (frames/texts/tables)" },
+    pages_mode: { de: "Bestimmte Seiten übersetzen:", en: "Translate specific pages:" },
+    pages_help: { de: "Z.B. 1, 3, 5-8", en: "E.g. 1, 3, 5-8" },
+    target_language_manual: { de: "Zielsprache (Für Manuelle Auswahl / Einzelne Seiten)", en: "Target language (for manual selection / selected pages)" },
+    lang_group_favorites: { de: "--- FAVORITEN ---", en: "--- FAVORITES ---" },
+    lang_group_other_eu: { de: "--- SONSTIGE EU SPRACHEN ---", en: "--- OTHER EU LANGUAGES ---" },
+    auto_mode: { de: "Voll Automatik Modus", en: "Full Automatic Mode" },
+    auto_settings: { de: "Einstellungen (Automatik Modus)", en: "Settings (Automatic Mode)" },
+    original_pages: { de: "Originalseiten:", en: "Source pages:" },
+    auto_source_help: { de: "AUTO sucht selbst nach der deutschen Musterseite über das schwarze Sprachkästchen", en: "AUTO detects the German master via the black language badge" },
+    toc_checkbox: { de: "Titelseite (Seite 1): Start-Seitenzahlen aktualisieren", en: "Title page (page 1): update start page numbers" },
+    only_text_update: { de: "Nur bei Textupdate", en: "Text update only" },
+    translate_start: { de: "Übersetzung starten", en: "Start Translation" },
+    spellcheck_button: { de: "Deutsch prüfen", en: "Check German" },
+    spellcheck_help: { de: "Prüft deutsche Texte auf -de-Masterseiten und deren Dokumentseiten.", en: "Checks German text on -de masters and the document pages based on them." },
+    close_button: { de: "Schließen", en: "Close" },
+    no_document_open: { de: "Kein Dokument offen!", en: "No document is open." },
+    spellcheck_error: { de: "Fehler bei der Rechtschreibprüfung:\n{message}", en: "Spell-check error:\n{message}" },
+    settings_title: { de: "⚙️ Einstellungen", en: "⚙️ Settings" },
+    log_file: { de: "📄 Logdatei", en: "📄 Log File" },
+    info: { de: "ℹ️ Info", en: "ℹ️ Info" },
+    deepl_api_key: { de: "DeepL Pro API-Key:", en: "DeepL Pro API key:" },
+    glossary_path: { de: "Netzwerk-Wörterbuch (CSV Pfad):", en: "Network glossary (CSV path):" },
+    browse: { de: "Durchsuchen...", en: "Browse..." },
+    glossary_select: { de: "Bitte wähle die Wörterbuch CSV-Datei aus", en: "Please choose the glossary CSV file" },
+    formality: { de: "Anrede-Form (für unterstützte Sprachen):", en: "Formality (for supported languages):" },
+    formality_default: { de: "Standard (DeepL entscheidet)", en: "Default (DeepL decides)" },
+    formality_formal: { de: "Formell (Sie)", en: "Formal" },
+    formality_informal: { de: "Informell (Du)", en: "Informal" },
+    ignored_styles: { de: "Ignorierte Absatz-/Zeichenformate (DNT, kommagetrennt):", en: "Ignored paragraph/character styles (DNT, comma-separated):" },
+    memory_path: { de: "Netzwerk-Memory (JSON Pfad):", en: "Network memory (JSON path):" },
+    memory_select: { de: "Bitte wähle die Memory JSON-Datei aus", en: "Please choose the memory JSON file" },
+    memory_save_new: { de: "Speicherort für neues Memory wählen", en: "Choose a location for a new memory file" },
+    reference_symbols: { de: "Referenz-Symbole (z. B. [], (), {}):", en: "Reference symbols (e.g. [], (), {}):" },
+    clear_memory: { de: "Memory leeren", en: "Clear Memory" },
+    feedback_report: { de: "Feedback-Report", en: "Feedback Report" },
+    save: { de: "Speichern", en: "Save" },
+    cancel: { de: "Abbrechen", en: "Cancel" },
+    settings_saved: { de: "Einstellungen erfolgreich gespeichert!", en: "Settings saved successfully." },
+    clear_memory_confirm: { de: "Bist du sicher? Das aktuell ausgewählte Memory wird geleert.", en: "Are you sure? The currently selected memory file will be cleared." },
+    clear_memory_done: { de: "Translation Memory wurde geleert.", en: "Translation memory has been cleared." },
+    no_log_file: { de: "Es wurde noch keine Logdatei erstellt.", en: "No log file has been created yet." },
+    about_title: { de: "Über Super Translator Pro", en: "About Super Translator Pro" },
+    memory_write_warning: { de: "Memory-Warnung: Datei konnte nicht geschrieben werden.", en: "Memory warning: the file could not be written." },
+    legacy_missing_title: { de: "Fehlende Musterseiten erzeugen", en: "Create Missing Master Pages" },
+    legacy_missing_info: { de: "Es wurden keine zielsprachigen Musterseiten erkannt.\nBitte wähle die Sprachen aus, die automatisch erzeugt werden sollen.", en: "No target-language master pages were detected.\nPlease choose the languages that should be created automatically." },
+    legacy_create: { de: "Erzeugen", en: "Create" },
+    legacy_no_german_master: { de: "Keine deutsche Musterseite erkannt. Erwartet wurde ein schwarzes Kästchen mit 'de'.", en: "No German master page detected. Expected a black badge with 'de'." },
+    legacy_creation_cancelled: { de: "Musterseiten-Erzeugung abgebrochen.", en: "Master-page creation cancelled." },
+    legacy_no_languages_selected: { de: "Keine Zielsprachen für die automatische Musterseiten-Generierung ausgewählt.", en: "No target languages selected for automatic master-page creation." },
+    hyperlink_settings_button: { de: "🔗 Hyperlinks Einstellungen", en: "🔗 Hyperlink Settings" },
+    hyperlink_settings_help: { de: "Sucht Referenzen in den definierten Symbolen und verlinkt sie mit dem Abschnitt 'Lieferumfang'.", en: "Finds references in the configured symbols and links them to the 'Lieferumfang' section." },
+    link_working: { de: "Referenz-Hyperlinks werden erstellt...", en: "Creating reference hyperlinks..." },
+    link_summary: { de: "Hyperlinks aktualisiert.\n\nBereich: {section}\nSymbole: {symbols}\nZiele: {anchors}\nLinks erstellt: {links}\nBereits verknüpft/übersprungen: {skipped}", en: "Hyperlinks updated.\n\nSection: {section}\nSymbols: {symbols}\nDestinations: {anchors}\nLinks created: {links}\nAlready linked/skipped: {skipped}" },
+    link_no_section: { de: "Kein Abschnitt 'Lieferumfang' gefunden. Es konnten keine Textanker erstellt werden.", en: "No 'Lieferumfang' section was found. No text destinations could be created." },
+    link_no_destinations: { de: "Im Abschnitt 'Lieferumfang' wurden keine nummerierten Einträge gefunden.", en: "No numbered entries were found in the 'Lieferumfang' section." },
+    link_no_matches: { de: "Es wurden keine Referenzen mit den definierten Symbolen gefunden.", en: "No references using the configured symbols were found." },
+    link_error: { de: "Hyperlink-Verarbeitung fehlgeschlagen:\n{message}", en: "Hyperlink processing failed:\n{message}" },
+    german_frame_dialog_title: { de: "Suchen/Ersetzen Deutsch {current}/{total}", en: "Find/Replace German {current}/{total}" },
+    german_frame_hint_count: { de: "{count} konkrete Hinweis(e) in diesem Textrahmen", en: "{count} specific suggestion(s) in this text frame" },
+    german_findings: { de: "Auffälligkeiten:", en: "Findings:" },
+    german_current_hit: { de: "Aktueller Treffer", en: "Current Match" },
+    german_hint: { de: "Hinweis:", en: "Hint:" },
+    german_keep: { de: "Behalten", en: "Keep" },
+    german_apply: { de: "Übernehmen", en: "Apply" },
+    german_finish: { de: "Beenden", en: "Finish" },
+    german_replace_failed: { de: "Die Stelle konnte nicht übernommen werden:\n{location}", en: "This location could not be applied:\n{location}" },
+    german_dialog_title: { de: "Deutsch korrigieren {current}/{total}", en: "Correct German {current}/{total}" },
+    german_match: { de: "Treffer: {text}", en: "Match: {text}" },
+    german_context: { de: "Kontext:", en: "Context:" },
+    german_find_label: { de: "Suchen nach:", en: "Find:" },
+    german_replace_label: { de: "Ersetzen durch:", en: "Replace with:" },
+    languagetool_temp_file_error: { de: "Temporäre Anfrage-Datei konnte nicht erstellt werden.", en: "Temporary request file could not be created." },
+    languagetool_call_failed: { de: "LanguageTool-Aufruf fehlgeschlagen.", en: "LanguageTool call failed." },
+    languagetool_no_response: { de: "Keine Antwort von LanguageTool erhalten.", en: "No response received from LanguageTool." },
+    languagetool_parse_error: { de: "Antwort von LanguageTool konnte nicht gelesen werden.", en: "The LanguageTool response could not be read." },
+    languagetool_hint: { de: "LanguageTool-Hinweis", en: "LanguageTool hint" },
+    languagetool_correction: { de: "LanguageTool-Korrektur", en: "LanguageTool correction" },
+    german_skip: { de: "Überspringen", en: "Skip" },
+    german_replace: { de: "Ersetzen", en: "Replace" },
+    german_auto_replace_failed: { de: "Die Stelle konnte nicht automatisch ersetzt werden:\n{summary}", en: "This location could not be replaced automatically:\n{summary}" },
+    german_no_targets: { de: "Keine Texte auf Dokumentseiten mit deutscher Musterseite gefunden.", en: "No text was found on document pages based on the German master." },
+    german_progress_title: { de: "Deutsche Rechtschreibprüfung", en: "German Spell Check" },
+    german_prepare_check: { de: "Bereite Prüfung vor...", en: "Preparing check..." },
+    german_check_progress: { de: "Prüfe Dokumentseiten mit deutscher Musterseite: Text {current} von {total}...", en: "Checking document pages based on the German master: text {current} of {total}..." },
+    german_check_ok: { de: "Korrekturprüfung für Dokumentseiten mit deutscher Musterseite abgeschlossen. Keine Änderungen vorgeschlagen.", en: "Correction check for document pages based on the German master completed. No changes suggested." },
+    german_check_notice_skipped: { de: "\n\nHinweis: {count} Textblöcke konnten nicht geprüft werden.", en: "\n\nNote: {count} text block(s) could not be checked." },
+    german_dialog_done: { de: "Korrekturdialog beendet.\nErsetzt: {replaced}\nÜbersprungen: {skipped}", en: "Correction dialog finished.\nReplaced: {replaced}\nSkipped: {skipped}" },
+    german_dialog_done_stopped: { de: "\nVorzeitig beendet.", en: "\nStopped early." },
+    progress_title: { de: "Übersetzung läuft...", en: "Translation in Progress..." },
+    progress_current_step: { de: "Aktueller Schritt:", en: "Current step:" },
+    progress_preparing: { de: "Vorbereitung...", en: "Preparing..." },
+    progress_overall: { de: "Gesamter Vorgang:", en: "Overall progress:" },
+    progress_complete_pct: { de: "{pct}% abgeschlossen", en: "{pct}% completed" },
+    progress_eta_calc: { de: "Restzeit: Berechne...", en: "Remaining time: calculating..." },
+    progress_cancel: { de: "Abbrechen", en: "Cancel" },
+    progress_close: { de: "Schließen", en: "Close" },
+    progress_cancel_requested: { de: "Abbruch angefordert... bitte warten.", en: "Cancel requested... please wait." },
+    progress_cancelling: { de: "Wird abgebrochen...", en: "Cancelling..." },
+    progress_eta: { de: "Restzeit: ca. {mins} Min. {secs} Sek.", en: "Remaining time: about {mins} min {secs} sec." },
+    progress_done: { de: "Verarbeitung abgeschlossen.", en: "Processing completed." },
+    progress_success: { de: "✅ Erfolgreich abgeschlossen!", en: "✅ Completed successfully!" },
+    progress_duration: { de: "Dauer: {mins} Min. {secs} Sek. | API gespart: {saved} Z. | Rahmen gefixt: {frames}", en: "Duration: {mins} min {secs} sec | API saved: {saved} chars | Frames fixed: {frames}" },
+    validation_invalid_lang: { de: "Bitte wähle eine gültige Zielsprache aus, keine Trennlinie.", en: "Please select a valid target language, not a separator." },
+    validation_select_something: { de: "Bitte markiere zuerst etwas im Dokument.", en: "Please select something in the document first." },
+    validation_enter_pages: { de: "Bitte Seitenzahlen eintragen.", en: "Please enter page numbers." },
+    validation_enter_pages_or_auto: { de: "Bitte gib die Seiten an oder nutze AUTO.", en: "Please enter pages or use AUTO." },
+    validation_enter_api_key: { de: "Bitte trage zuerst deinen DeepL API-Key in den Einstellungen (⚙️) ein.", en: "Please enter your DeepL API key in the settings (⚙️) first." },
+    process_cancelled: { de: "⚠️ Vorgang abgebrochen!\n\nTipp: Drücke jetzt Cmd+Z (Rückgängig), um alle bisherigen Änderungen in einem Rutsch zu verwerfen.", en: "⚠️ Process cancelled.\n\nTip: press Cmd+Z (Undo) now to revert all changes made so far in one step." },
+    process_error: { de: "Ein Fehler ist aufgetreten:\n{message}", en: "An error occurred:\n{message}" },
+    undo_translation: { de: "Super Übersetzer: {mode}", en: "Super Translator: {mode}" },
+    all_translations_done: { de: "Alle Übersetzungen fehlerfrei beendet.", en: "All translations completed successfully." },
+    read_textframes: { de: "Lese Textrahmen aus...", en: "Reading text frames..." },
+    preparation: { de: "Vorbereitung", en: "Preparation" },
+    result_selection_pages: { de: "Markierung/Seiten in {lang} übersetzt.", en: "Selection/pages translated to {lang}." },
+    bda_check_masters: { de: "Prüfe Musterseiten...", en: "Checking master pages..." },
+    bda_analyze_doc: { de: "Analysiere Dokument...", en: "Analyzing document..." },
+    bda_create_missing: { de: "Erzeuge fehlende Musterseiten...", en: "Creating missing master pages..." },
+    bda_create_legacy: { de: "Erzeuge Legacy-Fallback...", en: "Creating legacy fallback..." },
+    bda_search_templates: { de: "Suche Mustervorlagen...", en: "Searching master templates..." },
+    bda_no_templates: { de: "Keine anderssprachigen Mustervorlagen (z.B. -en-) gefunden.", en: "No non-German master templates found (for example -en-)." },
+    bda_no_original_pages: { de: "Keine deutschen Originalseiten gefunden.", en: "No German source pages found." },
+    bda_finished: { de: "BDA-Automatik beendet für {count} Sprachen.\n", en: "BDA automatic mode finished for {count} languages.\n" },
+    bda_update_cover: { de: "Aktualisiere Titelseite für DE...", en: "Updating title page for DE..." },
+    bda_adjust_toc: { de: "Passe TOC an...", en: "Updating TOC..." },
+    bda_create_doc_lang: { de: "Erstelle Dokument für: {lang}...", en: "Creating document for: {lang}..." },
+    bda_language_progress: { de: "Sprache {current} von {total}: {lang}", en: "Language {current} of {total}: {lang}" },
+    bda_save_backup: { de: "Speichere temporäres Backup...", en: "Saving temporary backup..." },
+    bda_save_progress: { de: "Sichere Fortschritt...", en: "Saving progress..." },
+    bda_move_back_page: { de: "Verschiebe Original-Rückseite ans Ende...", en: "Moving original back page to the end..." },
+    bda_cleanup_pages: { de: "Räume Seiten auf...", en: "Cleaning up pages..." },
+    bda_cleanup_backups: { de: "Räume temporäre Backups auf...", en: "Cleaning up temporary backups..." },
+    bda_almost_done: { de: "Fast fertig...", en: "Almost done..." },
+    sync_no_source_pages: { de: "Keine deutschen Originalseiten zum Vergleich gefunden.", en: "No German source pages were found for comparison." },
+    sync_state_saved: { de: "BDA-Textupdate: Ausgangszustand gespeichert. Ändere jetzt den deutschen Text und starte erneut.", en: "BDA text update: initial state saved. Change the German text and start again." },
+    sync_no_target_pages: { de: "Keine Zielseiten in anderen Sprachen gefunden.", en: "No target pages in other languages were found." },
+    sync_no_changes: { de: "Keine geänderten Textblöcke oder Bilder gefunden.", en: "No changed text blocks or images were found." },
+    sync_translate_changed: { de: "Übersetze geänderte Inhalte in {lang}...", en: "Translating changed content into {lang}..." },
+    sync_updated: { de: "BDA-Textupdate ausgeführt für {count} geänderte Elemente.", en: "BDA text update executed for {count} changed item(s)." },
+    feedback_created: { de: "Feedback-Report erstellt:\n{path}", en: "Feedback report created:\n{path}" },
+    feedback_failed: { de: "Feedback-Report konnte nicht erstellt werden:\n{message}", en: "Feedback report could not be created:\n{message}" },
+    deepl_unknown_response: { de: "Unbekannte Antwort von DeepL.", en: "Unknown response from DeepL." },
+    deepl_request_blocks: { de: "DeepL Anfrage: Sende Blöcke {start} bis {end} von {total}...", en: "DeepL request: sending blocks {start} to {end} of {total}..." },
+    deepl_request_text_blocks: { de: "DeepL Anfrage: Sende Textblöcke {start} bis {end} von {total}...", en: "DeepL request: sending text blocks {start} to {end} of {total}..." },
+    deepl_parse_error: { de: "DeepL-Antwort konnte nicht gelesen werden.", en: "The DeepL response could not be read." },
+    deepl_error_prefix: { de: "DeepL-Fehler: {message}", en: "DeepL error: {message}" },
+    deepl_incomplete: { de: "DeepL lieferte unvollständige Ergebnisse zurück.", en: "DeepL returned incomplete results." },
+    deepl_connection_error: { de: "DeepL-Verbindungsfehler: {message}", en: "DeepL connection error: {message}" },
+    deepl_windows_plain_not_implemented: { de: "DeepL Plain Batch ist unter Windows nicht implementiert.", en: "DeepL plain batch is not implemented on Windows." },
+    applying_formatting: { de: "Wende Formatierungen an...", en: "Applying formatting..." },
+    restoring_tables_images: { de: "Stelle Tabellen und Bilder wieder her...", en: "Restoring tables and images..." },
+    checking_overflow: { de: "Prüfe auf Textübersatz (Auto-Fit)...", en: "Checking for overset text (auto-fit)..." }
+};
+
+function t(key, params) {
+    var entry = UI_STRINGS[key];
+    var text = entry ? (entry[UI_LANG] || entry.en || entry.de || key) : key;
+    if (!params) return text;
+    for (var name in params) {
+        if (!params.hasOwnProperty(name)) continue;
+        text = text.replace(new RegExp("\\{" + name + "\\}", "g"), String(params[name]));
+    }
+    return text;
+}
+
+function buildAboutText() {
+    var infoText = SCRIPT_NAME + " v" + SCRIPT_VERSION + "\n";
+    infoText += "© " + new Date().getFullYear() + " Andreas Schwarz\n\n";
+    if (UI_IS_GERMAN) {
+        infoText += "Ein professionelles Übersetzungstool für InDesign in Verbindung mit der DeepL API.\n\n";
+        infoText += "Kernfunktionen:\n";
+        infoText += "• Nahtloser Erhalt von Textformatierungen, Tabellen und verankerten Bildern\n";
+        infoText += "• Integriertes Translation Memory (JSON) zur API-Kostenersparnis\n";
+        infoText += "• Netzwerk-Glossar (CSV) für den Schutz von Fachbegriffen\n";
+        infoText += "• Formelle/Informelle Anrede & DNT-Format Ignorierung\n";
+        infoText += "• Cross-Platform (macOS & Windows) API-Anbindung\n";
+        infoText += "• Intelligente Auto-Fit Korrektur gegen Textrahmen-Übersatz";
+    } else {
+        infoText += "A professional translation tool for InDesign powered by the DeepL API.\n\n";
+        infoText += "Core features:\n";
+        infoText += "• Preserves text formatting, tables, and anchored images\n";
+        infoText += "• Integrated translation memory (JSON) to reduce API costs\n";
+        infoText += "• Network glossary (CSV) to protect terminology\n";
+        infoText += "• Formal/informal tone and DNT style exclusions\n";
+        infoText += "• Cross-platform API integration (macOS & Windows)\n";
+        infoText += "• Smart auto-fit correction for overset text frames";
+    }
+    return infoText;
+}
+
+function normalizeRefSymbols(symbols) {
+    var raw = (symbols === null || symbols === undefined) ? "" : String(symbols);
+    raw = raw.replace(/^\s+|\s+$/g, "");
+    if (raw === "") raw = "[]";
+
+    var compact = raw.replace(/\s+/g, "");
+    var tokens = [];
+    if (/[;,|]/.test(compact)) {
+        tokens = compact.split(/[;,|]+/);
+    } else if (compact.length >= 2 && compact.length % 2 === 0) {
+        for (var i = 0; i < compact.length; i += 2) tokens.push(compact.substr(i, 2));
+    } else {
+        tokens = [compact];
+    }
+
+    var normalized = [];
+    var seen = {};
+    for (var j = 0; j < tokens.length; j++) {
+        var token = tokens[j];
+        if (!token || token.length < 2) continue;
+        var openChar = token.charAt(0);
+        var closeChar = token.charAt(token.length - 1);
+        var pair = openChar + closeChar;
+        if (!seen[pair]) {
+            normalized.push(pair);
+            seen[pair] = true;
+        }
+    }
+    if (normalized.length === 0) normalized.push("[]");
+    return normalized.join(", ");
+}
+
+function getReferenceSymbolPairs(symbols) {
+    var normalized = normalizeRefSymbols(symbols);
+    var parts = normalized.split(/\s*,\s*/);
+    var pairs = [];
+    for (var i = 0; i < parts.length; i++) {
+        if (!parts[i] || parts[i].length < 2) continue;
+        pairs.push({ token: parts[i], open: parts[i].charAt(0), close: parts[i].charAt(parts[i].length - 1) });
+    }
+    if (pairs.length === 0) pairs.push({ token: "[]", open: "[", close: "]" });
+    return pairs;
+}
+
+function escapeGrepLiteral(text) {
+    return String(text).replace(/([\\\^\$\.\|\?\*\+\(\)\[\]\{\}\-])/g, "\\$1");
+}
+
+function buildReferenceMarkerPattern(symbols) {
+    var pairs = getReferenceSymbolPairs(symbols);
+    var patterns = [];
+    for (var i = 0; i < pairs.length; i++) {
+        patterns.push(escapeGrepLiteral(pairs[i].open) + "\\s*\\d+\\s*" + escapeGrepLiteral(pairs[i].close));
+    }
+    if (patterns.length === 0) return "(\\[[0-9]+\\])";
+    return "(" + patterns.join("|") + ")";
+}
+
+function extractReferenceNumber(text) {
+    var match = String(text || "").match(/\d+/);
+    if (!match) return "";
+    return String(parseInt(match[0], 10));
+}
+
+function getLocalizedLanguageName(code) {
+    var upper = String(code || "").toUpperCase();
+    if (upper === "DE") return UI_IS_GERMAN ? "Deutsch" : "German";
+    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
+        if (LEGACY_BDA_LANGUAGE_OPTIONS[i].code === upper) {
+            return UI_IS_GERMAN ? LEGACY_BDA_LANGUAGE_OPTIONS[i].labelDe : LEGACY_BDA_LANGUAGE_OPTIONS[i].labelEn;
+        }
+    }
+    return upper;
+}
+
+function buildManualLanguageList() {
+    return [
+        t("lang_group_favorites"),
+        "EN (" + getLocalizedLanguageName("EN") + ")",
+        "FR (" + getLocalizedLanguageName("FR") + ")",
+        "IT (" + getLocalizedLanguageName("IT") + ")",
+        "ES (" + getLocalizedLanguageName("ES") + ")",
+        "CS (" + getLocalizedLanguageName("CS") + ")",
+        "HU (" + getLocalizedLanguageName("HU") + ")",
+        "DE (" + getLocalizedLanguageName("DE") + ")",
+        t("lang_group_other_eu"),
+        "BG (" + getLocalizedLanguageName("BG") + ")",
+        "DA (" + getLocalizedLanguageName("DA") + ")",
+        "EL (" + getLocalizedLanguageName("EL") + ")",
+        "ET (" + getLocalizedLanguageName("ET") + ")",
+        "FI (" + getLocalizedLanguageName("FI") + ")",
+        "LT (" + getLocalizedLanguageName("LT") + ")",
+        "LV (" + getLocalizedLanguageName("LV") + ")",
+        "NL (" + getLocalizedLanguageName("NL") + ")",
+        "PL (" + getLocalizedLanguageName("PL") + ")",
+        "PT (" + getLocalizedLanguageName("PT") + ")",
+        "RO (" + getLocalizedLanguageName("RO") + ")",
+        "RU (" + getLocalizedLanguageName("RU") + ")",
+        "SK (" + getLocalizedLanguageName("SK") + ")",
+        "SL (" + getLocalizedLanguageName("SL") + ")",
+        "SV (" + getLocalizedLanguageName("SV") + ")"
+    ];
+}
+
+function buildFormalityOptions() {
+    return [t("formality_default"), t("formality_formal"), t("formality_informal")];
+}
 
 function normalizeExistingFilePath(path) {
     if (!path || path === "") return "";
@@ -63,6 +378,7 @@ if (!apiKey || apiKey === "") {
 
 var csvPath = resolveCSVPath(app.extractLabel(CSV_PATH_LABEL) || "");
 var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
+var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
 var DNT_LABEL = "SuperTranslatorPRO_DNT_Styles";
@@ -77,27 +393,27 @@ var startTime = 0;
 var germanHighlightState = null;
 var germanFocusState = { activePageKey: null, fittedPageKey: null };
 var LEGACY_BDA_LANGUAGE_OPTIONS = [
-    { code: "EN", label: "Englisch" },
-    { code: "FR", label: "Französisch" },
-    { code: "IT", label: "Italienisch" },
-    { code: "ES", label: "Spanisch" },
-    { code: "CS", label: "Tschechisch" },
-    { code: "HU", label: "Ungarisch" },
-    { code: "BG", label: "Bulgarisch" },
-    { code: "DA", label: "Dänisch" },
-    { code: "EL", label: "Griechisch" },
-    { code: "ET", label: "Estnisch" },
-    { code: "FI", label: "Finnisch" },
-    { code: "LT", label: "Litauisch" },
-    { code: "LV", label: "Lettisch" },
-    { code: "NL", label: "Niederländisch" },
-    { code: "PL", label: "Polnisch" },
-    { code: "PT", label: "Portugiesisch" },
-    { code: "RO", label: "Rumänisch" },
-    { code: "RU", label: "Russisch" },
-    { code: "SK", label: "Slowakisch" },
-    { code: "SL", label: "Slowenisch" },
-    { code: "SV", label: "Schwedisch" }
+    { code: "EN", labelDe: "Englisch", labelEn: "English" },
+    { code: "FR", labelDe: "Französisch", labelEn: "French" },
+    { code: "IT", labelDe: "Italienisch", labelEn: "Italian" },
+    { code: "ES", labelDe: "Spanisch", labelEn: "Spanish" },
+    { code: "CS", labelDe: "Tschechisch", labelEn: "Czech" },
+    { code: "HU", labelDe: "Ungarisch", labelEn: "Hungarian" },
+    { code: "BG", labelDe: "Bulgarisch", labelEn: "Bulgarian" },
+    { code: "DA", labelDe: "Dänisch", labelEn: "Danish" },
+    { code: "EL", labelDe: "Griechisch", labelEn: "Greek" },
+    { code: "ET", labelDe: "Estnisch", labelEn: "Estonian" },
+    { code: "FI", labelDe: "Finnisch", labelEn: "Finnish" },
+    { code: "LT", labelDe: "Litauisch", labelEn: "Lithuanian" },
+    { code: "LV", labelDe: "Lettisch", labelEn: "Latvian" },
+    { code: "NL", labelDe: "Niederländisch", labelEn: "Dutch" },
+    { code: "PL", labelDe: "Polnisch", labelEn: "Polish" },
+    { code: "PT", labelDe: "Portugiesisch", labelEn: "Portuguese" },
+    { code: "RO", labelDe: "Rumänisch", labelEn: "Romanian" },
+    { code: "RU", labelDe: "Russisch", labelEn: "Russian" },
+    { code: "SK", labelDe: "Slowakisch", labelEn: "Slovak" },
+    { code: "SL", labelDe: "Slowenisch", labelEn: "Slovenian" },
+    { code: "SV", labelDe: "Schwedisch", labelEn: "Swedish" }
 ];
 
 var logPath = Folder.temp + "/SuperTranslatorPRO_Log.txt";
@@ -161,7 +477,7 @@ function saveTM(tmObj) {
         if (f.open('w')) {
             var success = f.write(str);
             f.close();
-            if (!success) alert("Memory-Warnung: Datei konnte nicht geschrieben werden.");
+            if (!success) alert(t("memory_write_warning"));
         }
     } catch(e) {}
 }
@@ -489,18 +805,75 @@ function buildStyledPlainTextXML(textObj, replacementText) {
     return '<root><t f="' + escapeXMLAttr(fFamily) + '" s="' + escapeXMLAttr(fStyle) + '" z="' + escapeXMLAttr(pSize) + '" p="' + escapeXMLAttr(pStyleNameRaw) + '" l="' + escapeXMLAttr(ldingStr) + '" c="' + escapeXMLAttr(fColor) + '" k="' + escapeXMLAttr(cStyleRaw) + '" a="' + escapeXMLAttr(pAlign) + '" li="' + escapeXMLAttr(lInd) + '" fi="' + escapeXMLAttr(fInd) + '" b="' + escapeXMLAttr(bList) + '">' + chunk + '</t></root>';
 }
 
-function getInDesignLanguageName(deepLCode) {
+function getInDesignLanguageCandidates(deepLCode) {
     var map = {
-        "EN-US": "Englisch: USA", "EN-GB": "Englisch: Großbritannien", "EN": "Englisch: Großbritannien",
-        "FR": "Französisch", "IT": "Italienisch", "ES": "Spanisch",
-        "CS": "Tschechisch", "HU": "Ungarisch", "NL": "Niederländisch",
-        "PL": "Polnisch", "PT": "Portugiesisch", "PT-PT": "Portugiesisch",
-        "RO": "Rumänisch", "RU": "Russisch", "SK": "Slowakisch",
-        "SL": "Slowenisch", "SV": "Schwedisch", "DA": "Dänisch",
-        "FI": "Finnisch", "EL": "Griechisch", "BG": "Bulgarisch",
-        "ET": "Estnisch", "LT": "Litauisch", "LV": "Lettisch"
+        "EN-US": ["Englisch: USA", "English: USA", "English: US"],
+        "EN-GB": ["Englisch: Großbritannien", "English: UK", "English: Great Britain"],
+        "EN": ["Englisch: Großbritannien", "English: UK", "English: Great Britain"],
+        "FR": ["Französisch", "French"],
+        "IT": ["Italienisch", "Italian"],
+        "ES": ["Spanisch", "Spanish"],
+        "CS": ["Tschechisch", "Czech"],
+        "HU": ["Ungarisch", "Hungarian"],
+        "NL": ["Niederländisch", "Dutch"],
+        "PL": ["Polnisch", "Polish"],
+        "PT": ["Portugiesisch", "Portuguese"],
+        "PT-PT": ["Portugiesisch", "Portuguese"],
+        "RO": ["Rumänisch", "Romanian"],
+        "RU": ["Russisch", "Russian"],
+        "SK": ["Slowakisch", "Slovak"],
+        "SL": ["Slowenisch", "Slovenian"],
+        "SV": ["Schwedisch", "Swedish"],
+        "DA": ["Dänisch", "Danish"],
+        "FI": ["Finnisch", "Finnish"],
+        "EL": ["Griechisch", "Greek"],
+        "BG": ["Bulgarisch", "Bulgarian"],
+        "ET": ["Estnisch", "Estonian"],
+        "LT": ["Litauisch", "Lithuanian"],
+        "LV": ["Lettisch", "Latvian"]
     };
-    return map[deepLCode.toUpperCase()] || "";
+    return map[String(deepLCode || "").toUpperCase()] || [];
+}
+
+function getInDesignLanguageName(deepLCode) {
+    var candidates = getInDesignLanguageCandidates(deepLCode);
+    return candidates.length > 0 ? candidates[0] : "";
+}
+
+function normalizeLanguageLookupKey(name) {
+    return String(name || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
+function resolveInDesignLanguageObject(doc, deepLCode) {
+    var candidates = getInDesignLanguageCandidates(deepLCode);
+    if (candidates.length === 0) return null;
+
+    var collections = [];
+    try { collections.push(doc.languagesWithVendors); } catch (e) {}
+    try { collections.push(app.languagesWithVendors); } catch (e2) {}
+
+    for (var c = 0; c < collections.length; c++) {
+        var coll = collections[c];
+        if (!coll) continue;
+        for (var i = 0; i < candidates.length; i++) {
+            try {
+                var exact = coll.itemByName(candidates[i]);
+                if (exact && exact.isValid) return exact;
+            } catch (exactErr) {}
+        }
+        var wanted = {};
+        for (var j = 0; j < candidates.length; j++) wanted[normalizeLanguageLookupKey(candidates[j])] = true;
+        try {
+            for (var k = 0; k < coll.length; k++) {
+                var lang = coll[k];
+                if (!lang || !lang.isValid) continue;
+                var langName = "";
+                try { langName = String(lang.name); } catch (nameErr) { langName = ""; }
+                if (wanted[normalizeLanguageLookupKey(langName)]) return lang;
+            }
+        } catch (scanErr) {}
+    }
+    return null;
 }
 
 function getCurrentArticleVersionLabel() {
@@ -576,12 +949,12 @@ var headerGroup = myWindow.add("group");
 headerGroup.orientation = "row";
 headerGroup.alignChildren = ["left", "center"];
 
-var mainTitle = headerGroup.add("statictext", undefined, "Was soll übersetzt werden?");
+var mainTitle = headerGroup.add("statictext", undefined, t("main_title"));
 mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 16);
 mainTitle.preferredSize.width = 300; 
 
-var btnSettings = headerGroup.add("button", undefined, "⚙️ Einstellungen"); 
-btnSettings.helpTip = "Einstellungen, Wörterbuch & API-Key";
+var btnSettings = headerGroup.add("button", undefined, t("settings_button")); 
+btnSettings.helpTip = t("settings_help");
 
 // --- PANEL 1: MANUELLER MODUS ---
 var panelManual = myWindow.add("panel", undefined, ""); 
@@ -589,26 +962,27 @@ panelManual.orientation = "column";
 panelManual.alignChildren = "left";
 panelManual.margins = 15;
 
-var lblManual = panelManual.add("statictext", undefined, "Manueller Modus");
+var lblManual = panelManual.add("statictext", undefined, t("manual_mode"));
 lblManual.graphics.font = ScriptUI.newFont(lblManual.graphics.font.family, "BOLD", lblManual.graphics.font.size);
 
-var radioSelection = panelManual.add("radiobutton", undefined, "Aktuelle Auswahl (Rahmen/Texte/Tabellen)");
-var radioPages = panelManual.add("radiobutton", undefined, "Bestimmte Seiten übersetzen:");
+var radioSelection = panelManual.add("radiobutton", undefined, t("selection_mode"));
+var radioPages = panelManual.add("radiobutton", undefined, t("pages_mode"));
 
 var editPages = panelManual.add("edittext", undefined, "");
 editPages.characters = 12; 
-editPages.helpTip = "Z.B. 1, 3, 5-8";
+editPages.helpTip = t("pages_help");
 editPages.indent = 20;
 
 panelManual.add("statictext", undefined, ""); 
 
-var lblLang = panelManual.add("statictext", undefined, "Zielsprache (Für Manuelle Auswahl / Einzelne Seiten)");
-var langList = [
-    "--- FAVORITEN ---", "EN (Englisch)", "FR (Französisch)", "IT (Italienisch)", "ES (Spanisch)", "CS (Tschechisch)", "HU (Ungarisch)", "DE (Deutsch)",
-    "--- SONSTIGE EU SPRACHEN ---", "BG (Bulgarisch)", "DA (Dänisch)", "EL (Griechisch)", "ET (Estnisch)", "FI (Finnisch)", "LT (Litauisch)", "LV (Lettisch)", "NL (Niederländisch)", "PL (Polnisch)", "PT (Portugiesisch)", "RO (Rumänisch)", "RU (Russisch)", "SK (Slowakisch)", "SL (Slowenisch)", "SV (Schwedisch)"
-];
+var lblLang = panelManual.add("statictext", undefined, t("target_language_manual"));
+var langList = buildManualLanguageList();
 var dropdownLang = panelManual.add("dropdownlist", undefined, langList);
 dropdownLang.selection = 1; 
+
+panelManual.add("statictext", undefined, "");
+var btnLinkReferences = panelManual.add("button", undefined, t("hyperlink_settings_button"));
+btnLinkReferences.helpTip = t("hyperlink_settings_help");
 
 // --- PANEL 2: AUTOMATIK MODUS ---
 var panelBDA = myWindow.add("panel", undefined, ""); 
@@ -616,26 +990,26 @@ panelBDA.orientation = "column";
 panelBDA.alignChildren = "left";
 panelBDA.margins = 15;
 
-var radioBDA = panelBDA.add("radiobutton", undefined, "Voll Automatik Modus");
+var radioBDA = panelBDA.add("radiobutton", undefined, t("auto_mode"));
 radioBDA.graphics.font = ScriptUI.newFont(radioBDA.graphics.font.family, "BOLD", radioBDA.graphics.font.size);
 
 panelBDA.add("statictext", undefined, ""); 
 
-var lblBDA = panelBDA.add("statictext", undefined, "Einstellungen (Automatik Modus)");
+var lblBDA = panelBDA.add("statictext", undefined, t("auto_settings"));
 lblBDA.graphics.font = ScriptUI.newFont(lblBDA.graphics.font.family, "BOLD", lblBDA.graphics.font.size);
 
 var grpBDASource = panelBDA.add("group");
 grpBDASource.indent = 20;
-grpBDASource.add("statictext", undefined, "Originalseiten:");
+grpBDASource.add("statictext", undefined, t("original_pages"));
 var bdaSourceInput = grpBDASource.add("edittext", undefined, "AUTO");
 bdaSourceInput.characters = 8;
-bdaSourceInput.helpTip = "AUTO sucht selbst nach der deutschen Musterseite über das schwarze Sprachkästchen";
+bdaSourceInput.helpTip = t("auto_source_help");
 
-var checkTOC = panelBDA.add("checkbox", undefined, "Titelseite (Seite 1): Start-Seitenzahlen aktualisieren");
+var checkTOC = panelBDA.add("checkbox", undefined, t("toc_checkbox"));
 checkTOC.indent = 20;
 checkTOC.value = true;
 
-var cbOnlyTextUpdate = panelBDA.add("checkbox", undefined, "Nur bei Textupdate");
+var cbOnlyTextUpdate = panelBDA.add("checkbox", undefined, t("only_text_update"));
 cbOnlyTextUpdate.indent = 20;
 cbOnlyTextUpdate.value = false;
 cbOnlyTextUpdate.enabled = false;
@@ -700,78 +1074,107 @@ bdaSourceInput.onActivate = function() {
 // --- BUTTONS UNTEN ---
 var groupButtons = myWindow.add("group"); 
 groupButtons.alignment = "center";
-var btnTranslate = groupButtons.add("button", undefined, "Übersetzung starten");
-var btnSpellCheck = groupButtons.add("button", undefined, "Deutsch prüfen");
-btnSpellCheck.helpTip = "Prüft deutsche Texte auf -de-Masterseiten und deren Dokumentseiten.";
-var btnCancel = groupButtons.add("button", undefined, "Schließen");
+var btnTranslate = groupButtons.add("button", undefined, t("translate_start"));
+var btnSpellCheck = groupButtons.add("button", undefined, t("spellcheck_button"));
+btnSpellCheck.helpTip = t("spellcheck_help");
+var btnCancel = groupButtons.add("button", undefined, t("close_button"));
 
 btnSpellCheck.onClick = function() {
     var doc = null;
-    try { doc = app.activeDocument; } catch (e) { alert("Kein Dokument offen!"); return; }
+    try { doc = app.activeDocument; } catch (e) { alert(t("no_document_open")); return; }
     try {
         runMasterSpellingCheck(doc);
     } catch (e) {
-        alert("Fehler bei der Rechtschreibprüfung:\n" + e.message);
+        alert(t("spellcheck_error", { message: e.message }));
+    }
+};
+
+btnLinkReferences.onClick = function() {
+    var doc = null;
+    try { doc = app.activeDocument; } catch (e) { alert(t("no_document_open")); return; }
+    try {
+        app.doScript(
+            function() {
+                var result = linkPackageReferences(doc, refSymbolsSetting);
+                alert(t("link_summary", {
+                    section: result.sectionTitle,
+                    symbols: result.symbols,
+                    anchors: result.destinations,
+                    links: result.links,
+                    skipped: result.skipped
+                }));
+            },
+            ScriptLanguage.JAVASCRIPT,
+            undefined,
+            UndoModes.ENTIRE_SCRIPT,
+            t("hyperlink_settings_button")
+        );
+    } catch (e2) {
+        alert(t("link_error", { message: e2.message || e2 }));
     }
 };
 
 // --- EINSTELLUNGEN FENSTER ---
 btnSettings.onClick = function() {
-    var setWin = new Window("dialog", "⚙️ Einstellungen");
+    var setWin = new Window("dialog", t("settings_title"));
     setWin.orientation = "column";
     setWin.alignChildren = ["fill", "top"];
     
     var topGrp = setWin.add("group");
     topGrp.alignment = "fill";
     topGrp.alignChildren = ["right", "center"];
-    var btnLog = topGrp.add("button", undefined, "📄 Logdatei");
+    var btnLog = topGrp.add("button", undefined, t("log_file"));
     btnLog.preferredSize = [90, 25];
-    var btnInfo = topGrp.add("button", undefined, "ℹ️ Info");
+    var btnInfo = topGrp.add("button", undefined, t("info"));
     btnInfo.preferredSize = [80, 25];
     
-    setWin.add("statictext", undefined, "DeepL Pro API-Key:");
+    setWin.add("statictext", undefined, t("deepl_api_key"));
     var keyInput = setWin.add("edittext", undefined, apiKey);
     keyInput.characters = 40;
     
     setWin.add("panel", undefined, ""); 
     
-    setWin.add("statictext", undefined, "Netzwerk-Wörterbuch (CSV Pfad):");
+    setWin.add("statictext", undefined, t("glossary_path"));
     var grpCSV = setWin.add("group");
     var csvInput = grpCSV.add("edittext", undefined, csvPath);
     csvInput.characters = 30;
-    var btnBrowse = grpCSV.add("button", undefined, "Durchsuchen...");
+    var btnBrowse = grpCSV.add("button", undefined, t("browse"));
     
     btnBrowse.onClick = function() {
-        var f = File.openDialog("Bitte wähle die Wörterbuch CSV-Datei aus", "*.csv");
+        var f = File.openDialog(t("glossary_select"), "*.csv");
         if (f) csvInput.text = f.fsName;
     };
 
     setWin.add("panel", undefined, "");
-    setWin.add("statictext", undefined, "Anrede-Form (für unterstützte Sprachen):");
-    var formDrop = setWin.add("dropdownlist", undefined, ["Standard (DeepL entscheidet)", "Formell (Sie)", "Informell (Du)"]);
+    setWin.add("statictext", undefined, t("formality"));
+    var formDrop = setWin.add("dropdownlist", undefined, buildFormalityOptions());
     if (formalitySetting === "more") formDrop.selection = 1; else if (formalitySetting === "less") formDrop.selection = 2; else formDrop.selection = 0;
     
-    setWin.add("statictext", undefined, "Ignorierte Absatz-/Zeichenformate (DNT, kommagetrennt):");
+    setWin.add("statictext", undefined, t("ignored_styles"));
     var dntInput = setWin.add("edittext", undefined, dntStyles);
     dntInput.characters = 40;
 
     setWin.add("panel", undefined, ""); 
 
-    setWin.add("statictext", undefined, "Netzwerk-Memory (JSON Pfad):");
+    setWin.add("statictext", undefined, t("memory_path"));
     var grpTM = setWin.add("group");
     var tmInput = grpTM.add("edittext", undefined, tmPath);
     tmInput.characters = 30;
-    var btnBrowseTM = grpTM.add("button", undefined, "Durchsuchen...");
+    var btnBrowseTM = grpTM.add("button", undefined, t("browse"));
     
     btnBrowseTM.onClick = function() {
-        var f = File.openDialog("Bitte wähle die Memory JSON-Datei aus", "*.json");
+        var f = File.openDialog(t("memory_select"), "*.json");
         if (f) {
             tmInput.text = f.fsName;
         } else {
-            var saveF = File.saveDialog("Speicherort für neues Memory wählen", "*.json");
+            var saveF = File.saveDialog(t("memory_save_new"), "*.json");
             if (saveF) tmInput.text = saveF.fsName;
         }
     };
+
+    setWin.add("statictext", undefined, t("reference_symbols"));
+    var refSymbolsInput = setWin.add("edittext", undefined, refSymbolsSetting);
+    refSymbolsInput.characters = 20;
     
     var g = setWin.add("group");
     g.alignment = "fill";
@@ -780,9 +1183,9 @@ btnSettings.onClick = function() {
     
     var leftGrp = g.add("group");
     leftGrp.alignment = "left";
-    var btnClearTM = leftGrp.add("button", undefined, "Memory leeren");
+    var btnClearTM = leftGrp.add("button", undefined, t("clear_memory"));
     btnClearTM.preferredSize = [110, 25];
-    var btnFeedbackReport = leftGrp.add("button", undefined, "Feedback-Report");
+    var btnFeedbackReport = leftGrp.add("button", undefined, t("feedback_report"));
     btnFeedbackReport.preferredSize = [110, 25];
     
     var spacer = g.add("statictext", undefined, "");
@@ -791,32 +1194,34 @@ btnSettings.onClick = function() {
     var rightGrp = g.add("group");
     rightGrp.alignment = ["fill", "center"];
     rightGrp.alignChildren = ["right", "center"];
-    var btnSave = rightGrp.add("button", undefined, "Speichern");
+    var btnSave = rightGrp.add("button", undefined, t("save"));
     var btnSpacer = rightGrp.add("statictext", undefined, "");
     btnSpacer.alignment = "fill";
-    var btnCancelSet = rightGrp.add("button", undefined, "Abbrechen");
+    var btnCancelSet = rightGrp.add("button", undefined, t("cancel"));
     
     btnSave.onClick = function() {
         apiKey = keyInput.text;
         csvPath = csvInput.text;
         tmPath = tmInput.text;
+        refSymbolsSetting = normalizeRefSymbols(refSymbolsInput.text);
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(CSV_PATH_LABEL, csvPath); 
         app.insertLabel(TM_PATH_LABEL, tmPath); 
+        app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
         
         var selForm = "default";
         if (formDrop.selection.index === 1) selForm = "more"; else if (formDrop.selection.index === 2) selForm = "less";
         app.insertLabel(FORMALITY_LABEL, selForm); formalitySetting = selForm;
         app.insertLabel(DNT_LABEL, dntInput.text); dntStyles = dntInput.text;
         
-        alert("Einstellungen erfolgreich gespeichert!");
+        alert(t("settings_saved"));
         setWin.close();
     };
     btnClearTM.onClick = function() {
-        if(confirm("Bist du sicher? Das aktuell ausgewählte Memory wird geleert.")) {
+        if(confirm(t("clear_memory_confirm"))) {
             var f = getTMFile();
             if (f.exists) f.remove();
-            alert("Translation Memory wurde geleert.");
+            alert(t("clear_memory_done"));
         }
     }
     btnFeedbackReport.onClick = function() {
@@ -824,20 +1229,10 @@ btnSettings.onClick = function() {
     }
     btnLog.onClick = function() {
         var f = new File(logPath);
-        if (f.exists) { f.execute(); } else { alert("Es wurde noch keine Logdatei erstellt."); }
+        if (f.exists) { f.execute(); } else { alert(t("no_log_file")); }
     };
     btnInfo.onClick = function() {
-        var infoText = SCRIPT_NAME + " v" + SCRIPT_VERSION + "\n";
-        infoText += "© " + new Date().getFullYear() + " Andreas Schwarz\n\n";
-        infoText += "Ein professionelles Übersetzungstool für InDesign in Verbindung mit der DeepL API.\n\n";
-        infoText += "Kernfunktionen:\n";
-        infoText += "• Nahtloser Erhalt von Textformatierungen, Tabellen und verankerten Bildern\n";
-        infoText += "• Integriertes Translation Memory (JSON) zur API-Kostenersparnis\n";
-        infoText += "• Netzwerk-Glossar (CSV) für den Schutz von Fachbegriffen\n";
-        infoText += "• Formelle/Informelle Anrede & DNT-Format Ignorierung\n";
-        infoText += "• Cross-Platform (macOS & Windows) API-Anbindung\n";
-        infoText += "• Intelligente Auto-Fit Korrektur gegen Textrahmen-Übersatz";
-        alert(infoText, "Über Super Translator Pro");
+        alert(buildAboutText(), t("about_title"));
     };
     btnCancelSet.onClick = function() { setWin.close(); };
     setWin.show();
@@ -1025,11 +1420,11 @@ function findGermanLegacyMasterSpread(doc) {
 }
 
 function promptLegacyTargetLanguageSelection() {
-    var dlg = new Window("dialog", "Fehlende Musterseiten erzeugen");
+    var dlg = new Window("dialog", t("legacy_missing_title"));
     dlg.orientation = "column";
     dlg.alignChildren = ["fill", "top"];
 
-    var info = dlg.add("statictext", undefined, "Es wurden keine zielsprachigen Musterseiten erkannt.\nBitte wähle die Sprachen aus, die automatisch erzeugt werden sollen.", { multiline: true });
+    var info = dlg.add("statictext", undefined, t("legacy_missing_info"), { multiline: true });
     info.preferredSize.width = 360;
 
     var listGroup = dlg.add("group");
@@ -1040,15 +1435,15 @@ function promptLegacyTargetLanguageSelection() {
     var checkboxes = [];
     for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
         var opt = LEGACY_BDA_LANGUAGE_OPTIONS[i];
-        var cb = listGroup.add("checkbox", undefined, opt.code + " (" + opt.label + ")");
+        var cb = listGroup.add("checkbox", undefined, opt.code + " (" + getLocalizedLanguageName(opt.code) + ")");
         cb.value = !!defaultMap[opt.code.toLowerCase()];
         checkboxes.push({ code: opt.code.toLowerCase(), box: cb });
     }
 
     var buttonRow = dlg.add("group");
     buttonRow.alignment = "right";
-    var btnOk = buttonRow.add("button", undefined, "Erzeugen");
-    var btnCancel = buttonRow.add("button", undefined, "Abbrechen");
+    var btnOk = buttonRow.add("button", undefined, t("legacy_create"));
+    var btnCancel = buttonRow.add("button", undefined, t("cancel"));
 
     var action = "cancel";
     btnOk.onClick = function() { action = "ok"; dlg.close(); };
@@ -1107,13 +1502,13 @@ function createLegacyTargetMasters(doc, germanMaster, selectedCodes) {
         if (!duplicated || !duplicated.isValid) {
             try { duplicated = germanMaster.duplicate(); } catch (dupErr2) { duplicated = null; }
         }
-        if (!duplicated || !duplicated.isValid) throw new Error("Musterseite für " + code.toUpperCase() + " konnte nicht dupliziert werden.");
+        if (!duplicated || !duplicated.isValid) throw new Error((UI_IS_GERMAN ? "Musterseite für " : "Master page for ") + code.toUpperCase() + (UI_IS_GERMAN ? " konnte nicht dupliziert werden." : " could not be duplicated."));
 
         try { duplicated.move(LocationOptions.AFTER, anchor); } catch (moveErr) {}
         setMasterSpreadLanguageNaming(duplicated, makeAlphabeticIndex(i + 2), code);
         if (!replaceMasterLanguageBadgeText(duplicated, code)) {
             try { if (duplicated.isValid) duplicated.remove(); } catch (cleanupErr) {}
-            throw new Error("Sprachkästchen auf der neuen Musterseite für " + code.toUpperCase() + " konnte nicht aktualisiert werden.");
+            throw new Error((UI_IS_GERMAN ? "Sprachkästchen auf der neuen Musterseite für " : "Language badge on the new master page for ") + code.toUpperCase() + (UI_IS_GERMAN ? " konnte nicht aktualisiert werden." : " could not be updated."));
         }
         created.push(duplicated);
         anchor = duplicated;
@@ -1122,11 +1517,11 @@ function createLegacyTargetMasters(doc, germanMaster, selectedCodes) {
 }
 
 function prepareLegacyMasterSpreads(doc, allowCreation) {
-    updateProgress(4, "Prüfe Musterseiten...", 4, "Analysiere Dokument...");
+    updateProgress(4, t("bda_check_masters"), 4, t("bda_analyze_doc"));
 
     var germanMaster = findGermanLegacyMasterSpread(doc);
     if (!germanMaster) {
-        throw new Error("Keine deutsche Musterseite erkannt. Erwartet wurde ein schwarzes Kästchen mit 'de'.");
+        throw new Error(t("legacy_no_german_master"));
     }
 
     setMasterSpreadLanguageNaming(germanMaster, "B", "de");
@@ -1135,10 +1530,10 @@ function prepareLegacyMasterSpreads(doc, allowCreation) {
     var langTasks = collectLegacyBDALanguageTasks(doc);
     if (langTasks.length === 0 && allowCreation) {
         var selectedCodes = promptLegacyTargetLanguageSelection();
-        if (selectedCodes === null) throw new Error("Musterseiten-Erzeugung abgebrochen.");
-        if (selectedCodes.length === 0) throw new Error("Keine Zielsprachen für die automatische Musterseiten-Generierung ausgewählt.");
+        if (selectedCodes === null) throw new Error(t("legacy_creation_cancelled"));
+        if (selectedCodes.length === 0) throw new Error(t("legacy_no_languages_selected"));
 
-        updateProgress(7, "Erzeuge fehlende Musterseiten...", 7, "Erzeuge Legacy-Fallback...");
+        updateProgress(7, t("bda_create_missing"), 7, t("bda_create_legacy"));
         createLegacyTargetMasters(doc, germanMaster, selectedCodes);
         langTasks = collectLegacyBDALanguageTasks(doc, selectedCodes);
     }
@@ -1305,7 +1700,7 @@ function runLanguageToolGermanFrameCheck(text) {
 
     payloadFile.encoding = "UTF-8";
     if (!payloadFile.open("w")) {
-        return { ok: false, error: "Temporäre Anfrage-Datei konnte nicht erstellt werden." };
+        return { ok: false, error: t("languagetool_temp_file_error") };
     }
     payloadFile.write(payload);
     payloadFile.close();
@@ -1327,20 +1722,20 @@ function runLanguageToolGermanFrameCheck(text) {
             }
         }
     } catch (e) {
-        return { ok: false, error: e.message || "LanguageTool-Aufruf fehlgeschlagen." };
+        return { ok: false, error: e.message || t("languagetool_call_failed") };
     } finally {
         try { if (payloadFile.exists) payloadFile.remove(); } catch (e2) {}
         try { if (outFile.exists) outFile.remove(); } catch (e3) {}
     }
 
     if (!resultStr || resultStr === "") {
-        return { ok: false, error: "Keine Antwort von LanguageTool erhalten." };
+        return { ok: false, error: t("languagetool_no_response") };
     }
 
     try {
         return { ok: true, data: eval("(" + resultStr + ")") };
     } catch (e4) {
-        return { ok: false, error: "Antwort von LanguageTool konnte nicht gelesen werden." };
+        return { ok: false, error: t("languagetool_parse_error") };
     }
 }
 
@@ -1380,7 +1775,7 @@ function buildLanguageToolEdits(originalText, matches) {
             length: matchObj.length,
             replacement: matchObj.replacements[0].value,
             issueText: issueText,
-            message: matchObj.message || "LanguageTool-Hinweis",
+            message: matchObj.message || t("languagetool_hint"),
             contextParts: buildGermanContextParts(originalText, matchObj.offset, matchObj.length)
         });
     }
@@ -1410,7 +1805,7 @@ function buildGermanFrameCorrection(item, matches) {
         frame: item.frame,
         location: item.location,
         originalText: originalText,
-        message: "LanguageTool-Korrektur",
+        message: t("languagetool_correction"),
         issueCount: edits.length,
         edits: edits
     };
@@ -1603,15 +1998,15 @@ function openGermanFrameCorrectionDialog(corrections) {
                 break;
             }
 
-            var dlg = new Window("dialog", "Suchen/Ersetzen Deutsch " + (i + 1) + "/" + corrections.length);
+            var dlg = new Window("dialog", t("german_frame_dialog_title", { current: (i + 1), total: corrections.length }));
             dlg.orientation = "column";
             dlg.alignChildren = "fill";
 
             dlg.add("statictext", undefined, correction.location);
-            var summaryText = dlg.add("statictext", undefined, correction.issueCount + " konkrete Hinweis(e) in diesem Textrahmen");
+            var summaryText = dlg.add("statictext", undefined, t("german_frame_hint_count", { count: correction.issueCount }));
             summaryText.preferredSize.width = 440;
 
-            dlg.add("statictext", undefined, "Auffälligkeiten:");
+            dlg.add("statictext", undefined, t("german_findings"));
             var issueList = dlg.add("listbox", undefined, [], { multiselect: false });
             issueList.preferredSize = [440, 120];
             for (var issueIndex = 0; issueIndex < correction.edits.length; issueIndex++) {
@@ -1619,11 +2014,11 @@ function openGermanFrameCorrectionDialog(corrections) {
                 issueList.add("item", (issueIndex + 1) + ". " + makeGermanTextVisible(issue.issueText) + " -> " + makeGermanTextVisible(issue.replacement));
             }
 
-            var detailPanel = dlg.add("panel", undefined, "Aktueller Treffer");
+            var detailPanel = dlg.add("panel", undefined, t("german_current_hit"));
             detailPanel.orientation = "column";
             detailPanel.alignChildren = "fill";
 
-            detailPanel.add("statictext", undefined, "Hinweis:");
+            detailPanel.add("statictext", undefined, t("german_hint"));
             var messageBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
             messageBox.preferredSize = [440, 70];
 
@@ -1643,9 +2038,9 @@ function openGermanFrameCorrectionDialog(corrections) {
 
             var btnGroup = dlg.add("group");
             btnGroup.alignment = "right";
-            var btnSkip = btnGroup.add("button", undefined, "Behalten");
-            var btnReplace = btnGroup.add("button", undefined, "Übernehmen");
-            var btnStop = btnGroup.add("button", undefined, "Beenden");
+            var btnSkip = btnGroup.add("button", undefined, t("german_keep"));
+            var btnReplace = btnGroup.add("button", undefined, t("german_apply"));
+            var btnStop = btnGroup.add("button", undefined, t("german_finish"));
 
             var action = "skip";
             btnSkip.onClick = function() {
@@ -1685,7 +2080,7 @@ function openGermanFrameCorrectionDialog(corrections) {
                 replacedCount++;
                 correction = refreshGermanFrameCorrection(correction);
             } else {
-                alert("Die Stelle konnte nicht übernommen werden:\n" + correction.location);
+                alert(t("german_replace_failed", { location: correction.location }));
                 skippedCount++;
                 correction.edits.splice(selectedEditIndex, 1);
                 correction.issueCount = correction.edits.length;
@@ -1819,33 +2214,33 @@ function openGermanCorrectionDialog(findings) {
         focusGermanFinding(finding);
         refreshGermanFinding(finding);
 
-        var dlg = new Window("dialog", "Deutsch korrigieren " + (i + 1) + "/" + findings.length);
+        var dlg = new Window("dialog", t("german_dialog_title", { current: (i + 1), total: findings.length }));
         dlg.orientation = "column";
         dlg.alignChildren = "fill";
 
         dlg.add("statictext", undefined, finding.location);
         var msgText = dlg.add("statictext", undefined, finding.message);
         msgText.preferredSize.width = 420;
-        var matchText = dlg.add("statictext", undefined, "Treffer: " + makeGermanTextVisible(finding.issueText));
+        var matchText = dlg.add("statictext", undefined, t("german_match", { text: makeGermanTextVisible(finding.issueText) }));
         matchText.preferredSize.width = 420;
 
-        dlg.add("statictext", undefined, "Kontext:");
+        dlg.add("statictext", undefined, t("german_context"));
         var ctxInput = dlg.add("edittext", undefined, buildGermanFindingContext(finding), { multiline: true, readonly: true });
         ctxInput.preferredSize = [420, 90];
 
-        dlg.add("statictext", undefined, "Suchen nach:");
+        dlg.add("statictext", undefined, t("german_find_label"));
         var findInput = dlg.add("edittext", undefined, finding.issueText);
         findInput.preferredSize.width = 420;
 
-        dlg.add("statictext", undefined, "Ersetzen durch:");
+        dlg.add("statictext", undefined, t("german_replace_label"));
         var replaceInput = dlg.add("edittext", undefined, finding.replacement);
         replaceInput.preferredSize.width = 420;
 
         var btnGroup = dlg.add("group");
         btnGroup.alignment = "right";
-        var btnSkip = btnGroup.add("button", undefined, "Überspringen");
-        var btnReplace = btnGroup.add("button", undefined, "Ersetzen");
-        var btnStop = btnGroup.add("button", undefined, "Beenden");
+        var btnSkip = btnGroup.add("button", undefined, t("german_skip"));
+        var btnReplace = btnGroup.add("button", undefined, t("german_replace"));
+        var btnStop = btnGroup.add("button", undefined, t("german_finish"));
 
         var action = "skip";
         btnSkip.onClick = function() {
@@ -1876,7 +2271,7 @@ function openGermanCorrectionDialog(findings) {
         if (replaceGermanFinding(finding, replacementText)) {
             replacedCount++;
         } else {
-            alert("Die Stelle konnte nicht automatisch ersetzt werden:\n" + buildLanguageToolFindingSummary(finding));
+            alert(t("german_auto_replace_failed", { summary: buildLanguageToolFindingSummary(finding) }));
             skippedCount++;
         }
     }
@@ -1887,14 +2282,14 @@ function openGermanCorrectionDialog(findings) {
 function runMasterSpellingCheck(doc) {
     var targets = collectGermanSpellTargets(doc);
     if (targets.length === 0) {
-        alert("Keine Texte auf Dokumentseiten mit deutscher Musterseite gefunden.");
+        alert(t("german_no_targets"));
         return;
     }
 
-    var progressWin = new Window("palette", "Deutsche Rechtschreibprüfung");
+    var progressWin = new Window("palette", t("german_progress_title"));
     progressWin.orientation = "column";
     progressWin.alignChildren = "fill";
-    var progressTextLocal = progressWin.add("statictext", undefined, "Bereite Prüfung vor...");
+    var progressTextLocal = progressWin.add("statictext", undefined, t("german_prepare_check"));
     progressTextLocal.preferredSize.width = 380;
     var progressBarLocal = progressWin.add("progressbar", undefined, 0, targets.length);
     progressWin.show();
@@ -1905,7 +2300,7 @@ function runMasterSpellingCheck(doc) {
     for (var i = 0; i < targets.length; i++) {
         var item = targets[i];
         progressBarLocal.value = i + 1;
-        progressTextLocal.text = "Pruefe Dokumentseiten mit deutscher Musterseite: Text " + (i + 1) + " von " + targets.length + "...";
+        progressTextLocal.text = t("german_check_progress", { current: (i + 1), total: targets.length });
         progressWin.update();
         try {
             var response = runLanguageToolGermanFrameCheck(item.text);
@@ -1924,15 +2319,15 @@ function runMasterSpellingCheck(doc) {
     progressWin.close();
 
     if (corrections.length === 0) {
-        var okMessage = "Korrekturpruefung fuer Dokumentseiten mit deutscher Musterseite abgeschlossen. Keine Aenderungen vorgeschlagen.";
-        if (skippedTexts > 0) okMessage += "\n\nHinweis: " + skippedTexts + " Textblöcke konnten nicht geprüft werden.";
+        var okMessage = t("german_check_ok");
+        if (skippedTexts > 0) okMessage += t("german_check_notice_skipped", { count: skippedTexts });
         alert(okMessage);
         return;
     }
 
     var correctionResult = openGermanFrameCorrectionDialog(corrections);
-    var finalMessage = "Korrekturdialog beendet.\nErsetzt: " + correctionResult.replaced + "\nUebersprungen: " + correctionResult.skipped;
-    if (correctionResult.stopped) finalMessage += "\nVorzeitig beendet.";
+    var finalMessage = t("german_dialog_done", { replaced: correctionResult.replaced, skipped: correctionResult.skipped });
+    if (correctionResult.stopped) finalMessage += t("german_dialog_done_stopped");
     alert(finalMessage);
 }
 
@@ -1942,31 +2337,31 @@ function createProgressWindow() {
     startTime = new Date().getTime();
     globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 }; 
     
-    progressWin = new Window("palette", "Übersetzung läuft...");
+    progressWin = new Window("palette", t("progress_title"));
     progressWin.orientation = "column";
     progressWin.alignChildren = "fill";
     
-    progressWin.add("statictext", undefined, "Aktueller Schritt:");
-    progressText = progressWin.add("statictext", undefined, "Vorbereitung...");
+    progressWin.add("statictext", undefined, t("progress_current_step"));
+    progressText = progressWin.add("statictext", undefined, t("progress_preparing"));
     progressText.preferredSize.width = 350;
     progressBar = progressWin.add("progressbar", undefined, 0, 100);
     progressBar.preferredSize.width = 350;
     
-    progressWin.add("statictext", undefined, "Gesamter Vorgang:");
-    overallText = progressWin.add("statictext", undefined, "0% abgeschlossen");
+    progressWin.add("statictext", undefined, t("progress_overall"));
+    overallText = progressWin.add("statictext", undefined, t("progress_complete_pct", { pct: 0 }));
     overallBar = progressWin.add("progressbar", undefined, 0, 100);
     overallBar.preferredSize.width = 350;
     
-    etaText = progressWin.add("statictext", undefined, "Restzeit: Berechne...");
+    etaText = progressWin.add("statictext", undefined, t("progress_eta_calc"));
     etaText.justify = "center";
     
-    btnStopProgress = progressWin.add("button", undefined, "Abbrechen");
+    btnStopProgress = progressWin.add("button", undefined, t("progress_cancel"));
     btnStopProgress.onClick = function() {
-        if (btnStopProgress.text === "Schließen") progressWin.close(); 
+        if (btnStopProgress.text === t("progress_close")) progressWin.close(); 
         else {
             cancelFlag = true;
-            progressText.text = "Abbruch angefordert... bitte warten.";
-            overallText.text = "Wird abgebrochen...";
+            progressText.text = t("progress_cancel_requested");
+            overallText.text = t("progress_cancelling");
             progressWin.update();
         }
     };
@@ -1982,7 +2377,7 @@ function updateProgress(taskPct, taskMsg, overallPct, overallMsg) {
         
         if (overallPct !== null) {
             overallBar.value = overallPct;
-            overallText.text = overallMsg ? overallMsg : Math.round(overallPct) + "% abgeschlossen";
+            overallText.text = overallMsg ? overallMsg : t("progress_complete_pct", { pct: Math.round(overallPct) });
             
             if (overallPct > 0 && overallPct < 100) {
                 var elapsed = new Date().getTime() - startTime;
@@ -1994,9 +2389,9 @@ function updateProgress(taskPct, taskMsg, overallPct, overallMsg) {
                 secs = secs % 60;
                 
                 var secStr = (secs < 10) ? "0" + secs : secs;
-                etaText.text = "Restzeit: ca. " + mins + " Min. " + secStr + " Sek.";
+                etaText.text = t("progress_eta", { mins: mins, secs: secStr });
             } else if (overallPct >= 100) {
-                etaText.text = "Verarbeitung abgeschlossen.";
+                etaText.text = t("progress_done");
             }
         }
         progressWin.update(); 
@@ -2007,16 +2402,21 @@ function showSuccessScreen(finalMessage) {
     if (progressWin) {
         progressBar.value = 100;
         overallBar.value = 100;
-        progressText.text = "✅ Erfolgreich abgeschlossen!";
+        progressText.text = t("progress_success");
         overallText.text = finalMessage;
         
         var elapsedTotal = new Date().getTime() - startTime;
         var totalSecs = Math.round(elapsedTotal / 1000);
         var totalMins = Math.floor(totalSecs / 60);
         
-        etaText.text = "Dauer: " + totalMins + " Min. " + (totalSecs % 60) + " Sek. | API gespart: " + globalStats.savedChars + " Z. | Rahmen gefixt: " + globalStats.fittedFrames;
+        etaText.text = t("progress_duration", {
+            mins: totalMins,
+            secs: (totalSecs % 60),
+            saved: globalStats.savedChars,
+            frames: globalStats.fittedFrames
+        });
         
-        btnStopProgress.text = "Schließen";
+        btnStopProgress.text = t("progress_close");
         progressWin.update();
     }
 }
@@ -2029,7 +2429,7 @@ function closeProgressWindow() {
 // --- 3. KLICK-LOGIK & START ---
 btnTranslate.onClick = function() {
     var doc = null;
-    try { doc = app.activeDocument; } catch(e) { alert("Kein Dokument offen!"); return; }
+    try { doc = app.activeDocument; } catch(e) { alert(t("no_document_open")); return; }
 
     var config = {
         mode: radioBDA.value ? "BDA" : (radioPages.value ? "PAGES" : "SELECTION"),
@@ -2041,17 +2441,17 @@ btnTranslate.onClick = function() {
     };
 
     if (config.mode !== "BDA" && config.lang.indexOf("-") !== -1) {
-        alert("Bitte wähle eine gültige Zielsprache aus, keine Trennlinie.");
+        alert(t("validation_invalid_lang"));
         return;
     }
 
-    if (config.mode === "SELECTION" && app.selection.length === 0) { alert("Bitte markiere zuerst etwas im Dokument."); return; }
-    if (config.mode === "PAGES" && config.sourcePages.replace(/\s/g, "") === "") { alert("Bitte Seitenzahlen eintragen."); return; }
-    if (config.mode === "BDA" && config.bdaSourcePages.replace(/\s/g, "") === "") { alert("Bitte gib die Seiten an oder nutze AUTO."); return; }
+    if (config.mode === "SELECTION" && app.selection.length === 0) { alert(t("validation_select_something")); return; }
+    if (config.mode === "PAGES" && config.sourcePages.replace(/\s/g, "") === "") { alert(t("validation_enter_pages")); return; }
+    if (config.mode === "BDA" && config.bdaSourcePages.replace(/\s/g, "") === "") { alert(t("validation_enter_pages_or_auto")); return; }
     
     // Prüfen, ob API-Key hinterlegt ist
     if (!apiKey || apiKey === "") {
-        alert("Bitte trage zuerst deinen DeepL API-Key in den Einstellungen (⚙️) ein.");
+        alert(t("validation_enter_api_key"));
         return;
     }
 
@@ -2068,22 +2468,22 @@ btnTranslate.onClick = function() {
             try {
                 var resultMsg = runMainProcess(doc, config); 
                 writeLog("Erfolgreich beendet. (API genutzt: " + globalStats.apiChars + " Z., API gespart: " + globalStats.savedChars + " Z., Auto-Fit: " + globalStats.fittedFrames + " Rahmen)");
-                showSuccessScreen(resultMsg ? resultMsg : "Alle Übersetzungen fehlerfrei beendet.");
+                showSuccessScreen(resultMsg ? resultMsg : t("all_translations_done"));
             } catch(e) {
                 closeProgressWindow();
                 if (e.message === "CANCELLED") {
                     writeLog("Vorgang durch Benutzer abgebrochen.", "WARNUNG");
-                    alert("⚠️ Vorgang abgebrochen!\n\nTipp: Drücke jetzt Cmd+Z (Rückgängig), um alle bisherigen Änderungen in einem Rutsch zu verwerfen.");
+                    alert(t("process_cancelled"));
                 } else {
                     writeLog("FEHLER: " + e.message, "ERROR");
-                    alert("Ein Fehler ist aufgetreten:\n" + e.message);
+                    alert(t("process_error", { message: e.message }));
                 }
             }
         }, 
         ScriptLanguage.JAVASCRIPT, 
         undefined, 
         UndoModes.ENTIRE_SCRIPT, 
-        "Super Übersetzer: " + config.mode
+        t("undo_translation", { mode: config.mode })
     );
 }
 
@@ -2104,7 +2504,7 @@ function runMainProcess(doc, config) {
     if (config.mode === "BDA") {
         return runBDAMode(doc, config, preparedLegacy);
     } else {
-        updateProgress(5, "Lese Textrahmen aus...", 5, "Vorbereitung");
+        updateProgress(5, t("read_textframes"), 5, t("preparation"));
         var targetTextObjArray = [];
         if (config.mode === "SELECTION") {
             for (var i = 0; i < app.selection.length; i++) {
@@ -2120,17 +2520,17 @@ function runMainProcess(doc, config) {
             }
         }
         executeTranslation(doc, targetTextObjArray, (config.mode === "PAGES"), config.sourcePages, config.lang, 10, 90);
-        return "Markierung/Seiten in " + config.lang + " übersetzt.";
+        return t("result_selection_pages", { lang: config.lang });
     }
 }
 
 // --- 5. BDA AUTOMATIK LOGIK ---
 function runBDAMode(doc, config, preparedLegacy) {
-    updateProgress(5, "Suche Mustervorlagen...", 5, "Analysiere Dokument...");
+    updateProgress(5, t("bda_search_templates"), 5, t("bda_analyze_doc"));
     var langTasks = (preparedLegacy && preparedLegacy.langTasks) ? preparedLegacy.langTasks : collectLegacyBDALanguageTasks(doc);
 
     if (!config.onlyTextUpdate) updateLanguageMasterVersionLabels(doc);
-    if (langTasks.length === 0) { throw new Error("Keine anderssprachigen Mustervorlagen (z.B. -en-) gefunden."); }
+    if (langTasks.length === 0) { throw new Error(t("bda_no_templates")); }
     
     var originalPages = [];
     if (config.bdaSourcePages.toUpperCase() === "AUTO") {
@@ -2143,12 +2543,12 @@ function runBDAMode(doc, config, preparedLegacy) {
         originalPages = getPagesFromString(doc, config.bdaSourcePages);
     }
 
-    if (originalPages.length === 0) { throw new Error("Keine deutschen Originalseiten gefunden."); }
+    if (originalPages.length === 0) { throw new Error(t("bda_no_original_pages")); }
 
-    var resultMsg = "BDA-Automatik beendet für " + langTasks.length + " Sprachen.\n";
+    var resultMsg = t("bda_finished", { count: langTasks.length });
 
     if (config.updateTOC) {
-        updateProgress(8, "Aktualisiere Titelseite für DE...", 8, "Passe TOC an...");
+        updateProgress(8, t("bda_update_cover"), 8, t("bda_adjust_toc"));
         updateTOCForLanguage(doc, "de", originalPages[0].name);
     }
 
@@ -2162,7 +2562,7 @@ function runBDAMode(doc, config, preparedLegacy) {
         var overallStartPct = 10 + (i / langTasks.length) * 85;
         var overallEndPct = 10 + ((i + 1) / langTasks.length) * 85;
         
-        updateProgress(10, "Erstelle Dokument für: " + task.code.toUpperCase() + "...", overallStartPct, "Sprache " + (i+1) + " von " + langTasks.length + ": " + task.code.toUpperCase());
+        updateProgress(10, t("bda_create_doc_lang", { lang: task.code.toUpperCase() }), overallStartPct, t("bda_language_progress", { current: (i + 1), total: langTasks.length, lang: task.code.toUpperCase() }));
         
         var newPagesForThisLang = [];
         for (var p = 0; p < originalPages.length; p++) {
@@ -2198,7 +2598,7 @@ function runBDAMode(doc, config, preparedLegacy) {
 
         try {
             if (doc.saved) {
-                updateProgress(95, "Speichere temporäres Backup...", overallEndPct, "Sichere Fortschritt...");
+                updateProgress(95, t("bda_save_backup"), overallEndPct, t("bda_save_progress"));
                 var docFolder = doc.filePath.fsName;
                 var docName = doc.name.replace(/\.indd$/i, "");
                 var backupFile = new File(docFolder + "/" + docName + "_TempBackup_" + task.code.toUpperCase() + ".indd");
@@ -2208,7 +2608,7 @@ function runBDAMode(doc, config, preparedLegacy) {
         } catch(e) {} 
     }
 
-    updateProgress(98, "Verschiebe Original-Rückseite ans Ende...", 98, "Räume Seiten auf...");
+    updateProgress(98, t("bda_move_back_page"), 98, t("bda_cleanup_pages"));
     var backPageMoved = false;
     for (var p = doc.pages.length - 1; p >= 0; p--) {
         if (doc.pages[p].appliedMaster && doc.pages[p].appliedMaster.name.match(/back/i)) {
@@ -2218,7 +2618,7 @@ function runBDAMode(doc, config, preparedLegacy) {
         }
     }
     
-    updateProgress(99, "Räume temporäre Backups auf...", 99, "Fast fertig...");
+    updateProgress(99, t("bda_cleanup_backups"), 99, t("bda_almost_done"));
     for (var b = 0; b < createdBackups.length; b++) {
         if (createdBackups[b].exists) {
             try { createdBackups[b].remove(); } catch(e) {}
@@ -2710,7 +3110,7 @@ function getChangedTextSegment(oldText, newText) {
 function syncBDATextChanges(doc, config) {
     var sourcePages = getBDAOriginalPages(doc, config);
     if (!sourcePages || sourcePages.length === 0) {
-        throw new Error("Keine deutschen Originalseiten zum Vergleich gefunden.");
+        throw new Error(t("sync_no_source_pages"));
     }
     var prevSnapshotData = loadBDASnapshot(doc);
     var prevSnapshot = getBDASnapshotPages(prevSnapshotData);
@@ -2722,7 +3122,7 @@ function syncBDATextChanges(doc, config) {
     }
     if (!prevSnapshotData) {
         saveBDASnapshot(doc, currentSnapshot);
-        return "BDA-Textupdate: Ausgangszustand gespeichert. Ändere jetzt den deutschen Text und starte erneut.";
+        return t("sync_state_saved");
     }
 
     var targetsByLang = getBDATargetPagesByLang(doc);
@@ -2733,7 +3133,7 @@ function syncBDATextChanges(doc, config) {
         }
     }
     if (langCodes.length === 0) {
-        throw new Error("Keine Zielseiten in anderen Sprachen gefunden.");
+        throw new Error(t("sync_no_target_pages"));
     }
 
     var changeBlocks = [];
@@ -2752,7 +3152,7 @@ function syncBDATextChanges(doc, config) {
 
     if (changeBlocks.length === 0) {
         saveBDASnapshot(doc, currentSnapshot);
-        return "Keine geänderten Textblöcke oder Bilder gefunden.";
+        return t("sync_no_changes");
     }
 
     var anyUpdated = false;
@@ -2838,7 +3238,7 @@ function syncBDATextChanges(doc, config) {
             var overallEndPct = 10 + ((li + 1) / langCodes.length) * 85;
             try {
                 if (targetTextObjArray.length > 0) {
-                    updateProgress(10, "Übersetze geänderte Inhalte in " + langCode.toUpperCase() + "...", overallStartPct, "Sprache " + (li+1) + " von " + langCodes.length + ": " + langCode.toUpperCase());
+                    updateProgress(10, t("sync_translate_changed", { lang: langCode.toUpperCase() }), overallStartPct, t("bda_language_progress", { current: (li + 1), total: langCodes.length, lang: langCode.toUpperCase() }));
                     executeTranslation(doc, targetTextObjArray, false, "", deepLLang, overallStartPct, overallEndPct);
                 }
 
@@ -2862,7 +3262,7 @@ function syncBDATextChanges(doc, config) {
     }
 
     saveBDASnapshot(doc, currentSnapshot);
-    return anyUpdated ? "BDA-Textupdate ausgeführt für " + changeBlocks.length + " geänderte Elemente." : "Keine geänderten Textblöcke oder Bilder gefunden.";
+    return anyUpdated ? t("sync_updated", { count: changeBlocks.length }) : t("sync_no_changes");
 }
 
 function createFeedbackReport() {
@@ -2882,15 +3282,16 @@ function createFeedbackReport() {
             reportFile.writeln("API-Key gesetzt: " + ((apiKey && apiKey !== "") ? "Ja" : "Nein"));
             reportFile.writeln("CSV-Pfad: " + (csvPath || "(leer)"));
             reportFile.writeln("TM-Pfad: " + (tmPath || "(leer)"));
+            reportFile.writeln("Referenz-Symbole: " + (refSymbolsSetting || "[]"));
             reportFile.writeln("Formality: " + (formalitySetting || "default"));
             reportFile.writeln("DNT Styles: " + (dntStyles || "(leer)"));
             reportFile.writeln("\n--- Bitte hier beschreiben: \n");
             reportFile.close();
-            alert("Feedback-Report erstellt:\n" + reportFile.fsName);
+            alert(t("feedback_created", { path: reportFile.fsName }));
             try { reportFile.execute(); } catch (e) {}
         }
     } catch (e) {
-        alert("Feedback-Report konnte nicht erstellt werden:\n" + e.message);
+        alert(t("feedback_failed", { message: e.message }));
     }
 }
 
@@ -3180,7 +3581,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
     var storageEnv = setupTempImageStorage(doc);
     var textTargets = [];
     var storyIds = {};
-    var inDesignLangName = getInDesignLanguageName(selectedLang); 
+    var inDesignLangCode = String(selectedLang || "").toUpperCase(); 
 
     var tm = loadTM();
     if (!tm[selectedLang]) tm[selectedLang] = {};
@@ -3356,7 +3757,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             
             var translatedBatch = translateBatchDeepL(justXMLs, selectedLang, overStartPct, overEndPct);
             if (!translatedBatch || translatedBatch.length !== deepLQueue.length) {
-                throw new Error("DeepL lieferte unvollständige Ergebnisse zurück.");
+                throw new Error(t("deepl_incomplete"));
             }
 
             var tmUpdated = false;
@@ -3374,18 +3775,18 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         }
         
         var formatPct = overStartPct + ((overEndPct - overStartPct) * 0.9);
-        updateProgress(90, "Wende Formatierungen an...", formatPct, null);
+        updateProgress(90, t("applying_formatting"), formatPct, null);
         for (var i = 0; i < textTargets.length; i++) {
             if (cancelFlag) throw new Error("CANCELLED");
-            if (finalTranslations[i]) applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangName);
+            if (finalTranslations[i]) applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangCode);
         }
 
-        updateProgress(95, "Stelle Tabellen und Bilder wieder her...", overEndPct, null);
+        updateProgress(95, t("restoring_tables_images"), overEndPct, null);
     } finally {
         restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets);
     }
 
-    updateProgress(98, "Prüfe auf Textübersatz (Auto-Fit)...", overEndPct, null);
+    updateProgress(98, t("checking_overflow"), overEndPct, null);
     var checkedFrameIds = {};
     for (var i = 0; i < textTargets.length; i++) {
         var st = textTargets[i];
@@ -3428,7 +3829,7 @@ function extractDeepLFailureMessage(resultJSON, parsedObj) {
         msg = String(resultJSON).replace(/[\r\n]+/g, " ").replace(/^\s+|\s+$/g, "");
         if (msg.length > 220) msg = msg.substring(0, 220) + "...";
     }
-    if (msg === "") msg = "Unbekannte Antwort von DeepL.";
+    if (msg === "") msg = t("deepl_unknown_response");
     return msg;
 }
 
@@ -3444,7 +3845,7 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
         var currentOverPct = overStartPct ? (overStartPct + (batchPct * (overEndPct - overStartPct) * 0.8)) : null;
         
         var endBatch = Math.min(b + batchSize, textsArray.length);
-        updateProgress(currentTaskPct, "DeepL Anfrage: Sende Blöcke " + (b+1) + " bis " + endBatch + " von " + textsArray.length + "...", currentOverPct, null);
+        updateProgress(currentTaskPct, t("deepl_request_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
         
         var payloadStr = "target_lang=" + targetLangCode + "&tag_handling=xml&ignore_tags=tab,nt&splitting_tags=pbr,lbr";
         if (formalitySetting === "more" || formalitySetting === "less") {
@@ -3480,20 +3881,20 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
             try {
                 parsedObj = eval("(" + resultJSON + ")");
             } catch (parseError) {
-                throw new Error("DeepL-Antwort konnte nicht gelesen werden.");
+                throw new Error(t("deepl_parse_error"));
             }
             if (!parsedObj || !parsedObj.translations) {
-                throw new Error("DeepL-Fehler: " + extractDeepLFailureMessage(resultJSON, parsedObj));
+                throw new Error(t("deepl_error_prefix", { message: extractDeepLFailureMessage(resultJSON, parsedObj) }));
             }
             if (parsedObj.translations.length !== (endBatch - b)) {
-                throw new Error("DeepL lieferte unvollständige Ergebnisse zurück.");
+                throw new Error(t("deepl_incomplete"));
             }
             for (var k = 0; k < parsedObj.translations.length; k++) {
                 translated.push(normalizeTranslatedXML(parsedObj.translations[k].text));
             }
         } catch (e) {
             if (e.message === "CANCELLED") throw e;
-            throw new Error(e.message && e.message.indexOf("DeepL-") === 0 ? e.message : "DeepL-Verbindungsfehler: " + (e.message || "Anfrage fehlgeschlagen."));
+            throw new Error(e.message && e.message.indexOf("DeepL") === 0 ? e.message : t("deepl_connection_error", { message: (e.message || "Request failed.") }));
         }
         finally { try { payloadFile.remove(); } catch(e){} }
     }
@@ -3509,7 +3910,7 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
         var currentTaskPct = 20 + Math.round(batchPct * 60);
         var currentOverPct = overStartPct ? (overStartPct + (batchPct * (overEndPct - overStartPct) * 0.8)) : null;
         var endBatch = Math.min(b + batchSize, textsArray.length);
-        updateProgress(currentTaskPct, "DeepL Anfrage: Sende Textblöcke " + (b+1) + " bis " + endBatch + " von " + textsArray.length + "...", currentOverPct, null);
+        updateProgress(currentTaskPct, t("deepl_request_text_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
         var payloadStr = "target_lang=" + targetLangCode;
         if (formalitySetting === "more" || formalitySetting === "less") {
             payloadStr += "&formality=" + formalitySetting;
@@ -3531,24 +3932,24 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
                 var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
                 resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
             } else {
-                throw new Error("DeepL Plain Batch ist unter Windows nicht implementiert.");
+                throw new Error(t("deepl_windows_plain_not_implemented"));
             }
             var parsedObj = null;
             try {
                 parsedObj = eval("(" + resultJSON + ")");
             } catch (parseError) {
-                throw new Error("DeepL-Antwort konnte nicht gelesen werden.");
+                throw new Error(t("deepl_parse_error"));
             }
             if (!parsedObj || !parsedObj.translations) {
-                throw new Error("DeepL-Fehler: " + extractDeepLFailureMessage(resultJSON, parsedObj));
+                throw new Error(t("deepl_error_prefix", { message: extractDeepLFailureMessage(resultJSON, parsedObj) }));
             }
             if (parsedObj.translations.length !== (endBatch - b)) {
-                throw new Error("DeepL lieferte unvollständige Ergebnisse zurück.");
+                throw new Error(t("deepl_incomplete"));
             }
             for (var k = 0; k < parsedObj.translations.length; k++) translated.push(parsedObj.translations[k].text);
         } catch (e) {
             if (e.message === "CANCELLED") throw e;
-            throw new Error(e.message && e.message.indexOf("DeepL-") === 0 ? e.message : "DeepL-Verbindungsfehler: " + (e.message || "Anfrage fehlgeschlagen."));
+            throw new Error(e.message && e.message.indexOf("DeepL") === 0 ? e.message : t("deepl_connection_error", { message: (e.message || "Request failed.") }));
         }
         finally { try { payloadFile.remove(); } catch(e){} }
     }
@@ -3561,11 +3962,11 @@ function normalizeTranslatedXML(xml) {
                       .replace(/>\s+</g, '><');
 }
 
-function normalizeReferenceSpacing(textScope) {
+function normalizeReferenceSpacing(textScope, symbols) {
     if (!textScope || !textScope.isValid) return false;
     var changed = false;
     var referenceTextCharPattern = "([\\u\\l\\d])";
-    var referenceMarkerPattern = "(\\[[0-9]+\\]|\\([0-9]+\\))";
+    var referenceMarkerPattern = buildReferenceMarkerPattern(symbols || refSymbolsSetting);
     var inlineWhitespacePattern = "[ \\t]";
     try {
         app.findGrepPreferences = NothingEnum.nothing;
@@ -3593,6 +3994,196 @@ function normalizeReferenceSpacing(textScope) {
         try { app.changeGrepPreferences = NothingEnum.nothing; } catch (e3) {}
     }
     return changed;
+}
+
+function getStoryRangeSignature(textObj) {
+    if (!textObj || !textObj.isValid) return null;
+    var story = null;
+    try { story = textObj.parentStory; } catch (e) { story = null; }
+    if (!story || !story.isValid) return null;
+    try {
+        return {
+            storyId: story.id,
+            start: textObj.insertionPoints[0].index,
+            end: textObj.insertionPoints[textObj.insertionPoints.length - 1].index
+        };
+    } catch (e2) {
+        return null;
+    }
+}
+
+function isSameStoryRange(a, b) {
+    if (!a || !b) return false;
+    return a.storyId === b.storyId && a.start === b.start && a.end === b.end;
+}
+
+function findPackageSectionInfo(doc) {
+    var headings = ["Lieferumfang", "Scope of Delivery", "Scope of delivery"];
+    var best = null;
+    try {
+        var stories = doc.stories.everyItem().getElements();
+        for (var i = 0; i < stories.length; i++) {
+            var story = stories[i];
+            if (!story || !story.isValid) continue;
+            var contents = "";
+            try { contents = String(story.contents); } catch (e) { contents = ""; }
+            if (contents === "") continue;
+            for (var h = 0; h < headings.length; h++) {
+                var heading = headings[h];
+                var index = contents.toLowerCase().indexOf(String(heading).toLowerCase());
+                if (index === -1) continue;
+                if (!best || i < best.storyIndex || (i === best.storyIndex && index < best.headingIndex)) {
+                    best = { story: story, headingIndex: index, headingTitle: heading, storyIndex: i };
+                }
+            }
+        }
+    } catch (e2) {}
+    return best;
+}
+
+function collectPackageDestinations(doc, sectionInfo) {
+    var destinationsByNumber = {};
+    var createdCount = 0;
+    if (!sectionInfo || !sectionInfo.story || !sectionInfo.story.isValid) {
+        return { destinationsByNumber: destinationsByNumber, createdCount: createdCount };
+    }
+
+    var story = sectionInfo.story;
+    var storyText = "";
+    try { storyText = String(story.contents); } catch (e) { storyText = ""; }
+    var searchStart = sectionInfo.headingIndex + sectionInfo.headingTitle.length;
+    if (searchStart < 0 || searchStart >= storyText.length) searchStart = 0;
+    var searchText = storyText.substring(searchStart);
+    var regex = /(^|\r)\s*(\d+)(?=[\.\)\]:\-\t ])/g;
+    var match;
+
+    while ((match = regex.exec(searchText)) !== null) {
+        var normalizedNumber = extractReferenceNumber(match[2]);
+        if (!normalizedNumber || destinationsByNumber[normalizedNumber]) continue;
+
+        var localMatch = match[0];
+        var numberOffset = localMatch.lastIndexOf(match[2]);
+        if (numberOffset < 0) continue;
+
+        var absoluteStart = searchStart + match.index + numberOffset;
+        var absoluteEnd = absoluteStart + match[2].length - 1;
+        try {
+            var textRange = story.characters.itemByRange(absoluteStart, absoluteEnd);
+            var destName = "STP_REF_DEST_" + normalizedNumber;
+            var destination = null;
+            try {
+                destination = doc.hyperlinkTextDestinations.itemByName(destName);
+                if (destination && !destination.isValid) destination = null;
+            } catch (existingErr) { destination = null; }
+            if (!destination || !destination.isValid) {
+                destination = doc.hyperlinkTextDestinations.add(textRange);
+                try { destination.name = destName; } catch (nameErr) {}
+                createdCount++;
+            }
+            destinationsByNumber[normalizedNumber] = {
+                destination: destination,
+                range: getStoryRangeSignature(textRange)
+            };
+        } catch (rangeErr) {}
+    }
+
+    return { destinationsByNumber: destinationsByNumber, createdCount: createdCount };
+}
+
+function hasExistingHyperlinkForText(doc, textObj) {
+    var targetRange = getStoryRangeSignature(textObj);
+    if (!targetRange) return true;
+    try {
+        var hyperlinks = doc.hyperlinks.everyItem().getElements();
+        for (var i = 0; i < hyperlinks.length; i++) {
+            var hyperlink = hyperlinks[i];
+            if (!hyperlink || !hyperlink.isValid || !hyperlink.source || !hyperlink.source.isValid) continue;
+            if (hyperlink.source.constructor.name !== "HyperlinkTextSource") continue;
+            var sourceText = null;
+            try { sourceText = hyperlink.source.sourceText; } catch (e) { sourceText = null; }
+            var sourceRange = getStoryRangeSignature(sourceText);
+            if (isSameStoryRange(targetRange, sourceRange)) return true;
+        }
+    } catch (e2) {}
+    return false;
+}
+
+function linkPackageReferences(doc, symbols) {
+    if (!doc || !doc.isValid) throw new Error(t("no_document_open"));
+
+    var normalizedSymbols = normalizeRefSymbols(symbols || refSymbolsSetting);
+    var sectionInfo = findPackageSectionInfo(doc);
+    if (!sectionInfo) throw new Error(t("link_no_section"));
+
+    var destinationData = collectPackageDestinations(doc, sectionInfo);
+    if (!destinationData || destinationData.createdCount === 0 && !destinationData.destinationsByNumber) {
+        throw new Error(t("link_no_destinations"));
+    }
+
+    var destinationCount = 0;
+    for (var key in destinationData.destinationsByNumber) {
+        if (destinationData.destinationsByNumber.hasOwnProperty(key)) destinationCount++;
+    }
+    if (destinationCount === 0) throw new Error(t("link_no_destinations"));
+
+    var matchedReferences = [];
+    try {
+        app.findGrepPreferences = NothingEnum.nothing;
+        app.changeGrepPreferences = NothingEnum.nothing;
+        app.findGrepPreferences.findWhat = buildReferenceMarkerPattern(normalizedSymbols);
+        matchedReferences = doc.findGrep() || [];
+    } finally {
+        try { app.findGrepPreferences = NothingEnum.nothing; } catch (prefErr1) {}
+        try { app.changeGrepPreferences = NothingEnum.nothing; } catch (prefErr2) {}
+    }
+
+    if (!matchedReferences || matchedReferences.length === 0) throw new Error(t("link_no_matches"));
+
+    var linksCreated = 0;
+    var skipped = 0;
+
+    for (var i = 0; i < matchedReferences.length; i++) {
+        var refText = matchedReferences[i];
+        if (!refText || !refText.isValid) {
+            skipped++;
+            continue;
+        }
+
+        var refNumber = extractReferenceNumber(refText.contents);
+        var destinationEntry = destinationData.destinationsByNumber[refNumber];
+        if (!destinationEntry || !destinationEntry.destination || !destinationEntry.destination.isValid) {
+            skipped++;
+            continue;
+        }
+
+        var refRange = getStoryRangeSignature(refText);
+        if (isSameStoryRange(refRange, destinationEntry.range)) {
+            skipped++;
+            continue;
+        }
+        if (hasExistingHyperlinkForText(doc, refText)) {
+            skipped++;
+            continue;
+        }
+
+        try {
+            var source = doc.hyperlinkTextSources.add(refText);
+            var linkName = "STP_REF_LINK_" + refNumber + "_" + i;
+            var hyperlink = doc.hyperlinks.add(source, destinationEntry.destination);
+            try { hyperlink.name = linkName; } catch (nameErr) {}
+            linksCreated++;
+        } catch (linkErr) {
+            skipped++;
+        }
+    }
+
+    return {
+        sectionTitle: sectionInfo.headingTitle,
+        symbols: normalizedSymbols,
+        destinations: destinationCount,
+        links: linksCreated,
+        skipped: skipped
+    };
 }
 
 function escapeDeepLXMLText(text) {
@@ -3683,7 +4274,7 @@ function buildTextObjectXML(textObj) {
     return xmlString + "</root>";
 }
 
-function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
+function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode) {
     if (!translatedXML || translatedXML === "") return;
     translatedXML = normalizeTranslatedXML(translatedXML)
                                  .replace(/(###(?:IMG|TBL)_\d+###)\s+(?=###(?:IMG|TBL)_\d+###)/g, '$1');
@@ -3742,9 +4333,8 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangName) {
                 try { appliedRange.firstLineIndent = parseFloat(fInd); } catch(e) {}
                 
                 try {
-                    if (inDesignLangName !== "") {
-                        var langObj = doc.languagesWithVendors.itemByName(inDesignLangName);
-                        if (!langObj.isValid) langObj = app.languagesWithVendors.itemByName(inDesignLangName);
+                    if (inDesignLangCode !== "") {
+                        var langObj = resolveInDesignLanguageObject(doc, inDesignLangCode);
                         if (langObj && langObj.isValid) appliedRange.appliedLanguage = langObj;
                     }
                 } catch(e) {}
