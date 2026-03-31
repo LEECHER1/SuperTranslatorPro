@@ -1,0 +1,10 @@
+DE;EN;FR;IT;ES;CS;HU;BG;DA;EL;ET;FI;LT;LV;NL;PL;PT;RO;RU;SK;SL;SV;_INFO;_FLAGS;_ALIASES;_CATEGORY
+# Super Translator Pro Glossary Template
+# DE = deutscher Quellbegriff. Leere Sprachzellen = normale DeepL-Uebersetzung.
+# DNT in einer Sprachzelle = Begriff in genau dieser Sprache nicht uebersetzen.
+# _FLAGS=DNT = Begriff in allen Sprachen unveraendert lassen. _ALIASES = deutsche Synonyme mit | trennen.
+Warnung!;Warning!;Avertissement !;Avvertimento!;Advertencia!;Varovani!;Figyelmeztetes!;;;;;;;;;;;;;;;Beispiel fuer UI-Hinweis;;;UI
+Lieferumfang;Scope of delivery;Contenu de la livraison;Contenuto della fornitura;Alcance de la entrega;Rozsah dodavky;Szallitasi terjedelem;;;;;;;;;;;;;;;Produkt-/Dokumentbegriff;;;DOC
+Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;;;Produktbegriff, bei Bedarf manuell fuer weitere Sprachen pflegen;;;PRODUCT
+M5*15;;;;;;;;;;;;;;;;;;;;;;Technischer Code, in allen Sprachen unveraendert lassen;DNT;;TECH
+Duschunterteil;Shower base;;;;;;;;;;;;;;;;;;;;;;Beispiel mit Aliasen;;Duschwanne|Duschtasse;PRODUCT

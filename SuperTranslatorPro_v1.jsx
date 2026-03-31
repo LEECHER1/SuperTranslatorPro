@@ -56,6 +56,15 @@ var UI_STRINGS = {
     glossary_path: { de: "Netzwerk-Wörterbuch (CSV Pfad):", en: "Network glossary (CSV path):" },
     browse: { de: "Durchsuchen...", en: "Browse..." },
     glossary_select: { de: "Bitte wähle die Wörterbuch CSV-Datei aus", en: "Please choose the glossary CSV file" },
+    glossary_create_select: { de: "Speicherort für neues Wörterbuch wählen", en: "Choose where to save the new glossary" },
+    glossary_setup_title: { de: "Wörterbuch einrichten", en: "Set up glossary" },
+    glossary_setup_message: { de: "Beim ersten Start kann ein neues Wörterbuch-Template erstellt oder ein bestehendes Wörterbuch ausgewählt werden.", en: "On first launch you can create a new glossary template or choose an existing glossary." },
+    glossary_setup_create: { de: "Neu erstellen", en: "Create new" },
+    glossary_setup_choose: { de: "Bestehend wählen", en: "Choose existing" },
+    glossary_setup_later: { de: "Später", en: "Later" },
+    glossary_setup_current_path: { de: "Aktueller Pfad:", en: "Current path:" },
+    glossary_template_created: { de: "Wörterbuch-Template erstellt:\n{path}", en: "Glossary template created:\n{path}" },
+    glossary_template_failed: { de: "Wörterbuch-Template konnte nicht erstellt werden:\n{message}", en: "Glossary template could not be created:\n{message}" },
     formality: { de: "Anrede-Form (für unterstützte Sprachen):", en: "Formality (for supported languages):" },
     formality_default: { de: "Standard (DeepL entscheidet)", en: "Default (DeepL decides)" },
     formality_formal: { de: "Formell (Sie)", en: "Formal" },
@@ -650,7 +659,8 @@ if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
 }
 
-var csvPath = resolveCSVPath(app.extractLabel(CSV_PATH_LABEL) || "");
+var csvPathSettingRaw = app.extractLabel(CSV_PATH_LABEL) || "";
+var csvPath = resolveCSVPath(csvPathSettingRaw);
 var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
 var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
 var hyperlinkPageMappings = {};
@@ -691,6 +701,236 @@ var LEGACY_BDA_LANGUAGE_OPTIONS = [
     { code: "SL", labelDe: "Slowenisch", labelEn: "Slovenian" },
     { code: "SV", labelDe: "Schwedisch", labelEn: "Swedish" }
 ];
+
+function getSupportedGlossaryLanguageHeaders() {
+    var headers = ["DE"];
+    var seen = { DE: true };
+    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
+        var code = String(LEGACY_BDA_LANGUAGE_OPTIONS[i].code || "").toUpperCase();
+        if (code === "" || seen[code]) continue;
+        headers.push(code);
+        seen[code] = true;
+    }
+    return headers;
+}
+
+function isSupportedGlossaryLanguageHeader(header) {
+    var upper = String(header || "").replace(/^\s+|\s+$/g, "").toUpperCase();
+    if (upper === "DE" || upper === "EN-US" || upper === "EN-GB" || upper === "PT-PT") return true;
+    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
+        if (LEGACY_BDA_LANGUAGE_OPTIONS[i].code === upper) return true;
+    }
+    return false;
+}
+
+function isGlossaryMetaHeader(header) {
+    return /^_(INFO|FLAGS|ALIASES|CATEGORY|NOTE|NOTES|COMMENT|COMMENTS)$/i.test(String(header || ""));
+}
+
+function isGlossaryCommentRow(value) {
+    var trimmed = String(value || "").replace(/^\s+|\s+$/g, "");
+    if (trimmed === "") return false;
+    return trimmed.indexOf("#") === 0 || trimmed.indexOf("//") === 0;
+}
+
+function parseGlossaryFlags(value) {
+    var flags = {};
+    var raw = String(value || "").replace(/^\s+|\s+$/g, "");
+    if (raw === "") return flags;
+    var parts = raw.split(/[;,|]+/);
+    for (var i = 0; i < parts.length; i++) {
+        var token = String(parts[i] || "").replace(/^\s+|\s+$/g, "").toUpperCase();
+        if (token !== "") flags[token] = true;
+    }
+    return flags;
+}
+
+function parseGlossaryAliases(value) {
+    var aliases = [];
+    var seen = {};
+    var raw = String(value || "").replace(/^\s+|\s+$/g, "");
+    if (raw === "") return aliases;
+    var parts = raw.split(/[|;,]+/);
+    for (var i = 0; i < parts.length; i++) {
+        var alias = String(parts[i] || "").replace(/^\s+|\s+$/g, "");
+        if (alias === "" || seen[alias]) continue;
+        aliases.push(alias);
+        seen[alias] = true;
+    }
+    return aliases;
+}
+
+function createGlossaryTemplateRow(headers, values) {
+    var row = [];
+    for (var i = 0; i < headers.length; i++) {
+        row.push(values.hasOwnProperty(headers[i]) ? values[headers[i]] : "");
+    }
+    return row;
+}
+
+function escapeCSVField(value, separator) {
+    var text = String(value === null || value === undefined ? "" : value);
+    if (text.indexOf('"') !== -1) text = text.replace(/"/g, '""');
+    if (text.indexOf(separator) !== -1 || text.indexOf('"') !== -1 || text.indexOf("\n") !== -1 || text.indexOf("\r") !== -1) {
+        text = '"' + text + '"';
+    }
+    return text;
+}
+
+function buildGlossaryTemplateCSV() {
+    var separator = ";";
+    var headers = getSupportedGlossaryLanguageHeaders().concat(["_INFO", "_FLAGS", "_ALIASES", "_CATEGORY"]);
+    var rows = [];
+
+    rows.push(headers);
+    rows.push(["# Super Translator Pro Glossary Template"]);
+    rows.push(["# DE = deutscher Quellbegriff. Leere Sprachzellen = normale DeepL-Uebersetzung."]);
+    rows.push(["# DNT in einer Sprachzelle = Begriff in genau dieser Sprache nicht uebersetzen."]);
+    rows.push(["# _FLAGS=DNT = Begriff in allen Sprachen unveraendert lassen. _ALIASES = deutsche Synonyme mit | trennen."]);
+
+    rows.push(createGlossaryTemplateRow(headers, {
+        DE: "Warnung!",
+        EN: "Warning!",
+        FR: "Avertissement !",
+        IT: "Avvertimento!",
+        ES: "Advertencia!",
+        CS: "Varovani!",
+        HU: "Figyelmeztetes!",
+        _INFO: "Beispiel fuer UI-Hinweis",
+        _CATEGORY: "UI"
+    }));
+
+    rows.push(createGlossaryTemplateRow(headers, {
+        DE: "Lieferumfang",
+        EN: "Scope of delivery",
+        FR: "Contenu de la livraison",
+        IT: "Contenuto della fornitura",
+        ES: "Alcance de la entrega",
+        CS: "Rozsah dodavky",
+        HU: "Szallitasi terjedelem",
+        _INFO: "Produkt-/Dokumentbegriff",
+        _CATEGORY: "DOC"
+    }));
+
+    rows.push(createGlossaryTemplateRow(headers, {
+        DE: "Montagebox",
+        EN: "Mounting box",
+        _INFO: "Produktbegriff, bei Bedarf manuell fuer weitere Sprachen pflegen",
+        _CATEGORY: "PRODUCT"
+    }));
+
+    rows.push(createGlossaryTemplateRow(headers, {
+        DE: "M5*15",
+        _FLAGS: "DNT",
+        _INFO: "Technischer Code, in allen Sprachen unveraendert lassen",
+        _CATEGORY: "TECH"
+    }));
+
+    rows.push(createGlossaryTemplateRow(headers, {
+        DE: "Duschunterteil",
+        EN: "Shower base",
+        _ALIASES: "Duschwanne|Duschtasse",
+        _INFO: "Beispiel mit Aliasen",
+        _CATEGORY: "PRODUCT"
+    }));
+
+    var lines = [];
+    for (var r = 0; r < rows.length; r++) {
+        var cols = rows[r];
+        var lineParts = [];
+        for (var c = 0; c < cols.length; c++) lineParts.push(escapeCSVField(cols[c], separator));
+        lines.push(lineParts.join(separator));
+    }
+    return "\uFEFF" + lines.join("\r\n") + "\r\n";
+}
+
+function writeGlossaryTemplateFile(path) {
+    var file = new File(path);
+    try {
+        file.encoding = "UTF-8";
+        if (!file.open("w")) return false;
+        file.write(buildGlossaryTemplateCSV());
+        file.close();
+        return true;
+    } catch (e) {
+        try { if (file.opened) file.close(); } catch (closeErr) {}
+        return false;
+    }
+}
+
+function promptForGlossaryPath(currentPath, allowLater) {
+    var dlg = new Window("dialog", t("glossary_setup_title"));
+    dlg.orientation = "column";
+    dlg.alignChildren = ["fill", "top"];
+    dlg.margins = 16;
+
+    dlg.add("statictext", undefined, t("glossary_setup_message"), { multiline: true });
+    if (currentPath && currentPath !== "") {
+        dlg.add("statictext", undefined, t("glossary_setup_current_path"));
+        var currentPathView = dlg.add("edittext", undefined, currentPath, { readonly: true });
+        currentPathView.characters = 42;
+    }
+
+    var buttonRow = dlg.add("group");
+    buttonRow.alignment = "center";
+    var btnCreate = buttonRow.add("button", undefined, t("glossary_setup_create"));
+    var btnChoose = buttonRow.add("button", undefined, t("glossary_setup_choose"));
+    var btnLater = null;
+    if (allowLater) btnLater = buttonRow.add("button", undefined, t("glossary_setup_later"));
+
+    var resultPath = "";
+
+    btnCreate.onClick = function() {
+        var suggestedPath = currentPath && currentPath !== "" ? currentPath : "";
+        var saveFile = File.saveDialog(t("glossary_create_select"), "*.csv");
+        if (!saveFile) return;
+        if (!writeGlossaryTemplateFile(saveFile.fsName)) {
+            alert(t("glossary_template_failed", { message: saveFile.fsName }));
+            return;
+        }
+        resultPath = saveFile.fsName;
+        dlg.close(1);
+    };
+
+    btnChoose.onClick = function() {
+        var existingFile = File.openDialog(t("glossary_select"), "*.csv");
+        if (!existingFile) return;
+        resultPath = existingFile.fsName;
+        dlg.close(1);
+    };
+
+    if (btnLater) {
+        btnLater.onClick = function() {
+            dlg.close(0);
+        };
+    }
+
+    if (dlg.show() !== 1) return "";
+    return resultPath;
+}
+
+function ensureGlossaryPathConfigured(currentResolvedPath, storedPath) {
+    var stored = String(storedPath || "").replace(/^\s+|\s+$/g, "");
+    var resolved = resolveCSVPath(currentResolvedPath || stored);
+    var hasStoredPath = stored !== "";
+    var hasValidStoredFile = false;
+    if (hasStoredPath) {
+        try {
+            var storedFile = new File(resolveCSVPath(stored) || stored);
+            hasValidStoredFile = storedFile.exists;
+        } catch (e) { hasValidStoredFile = false; }
+    }
+
+    if (hasStoredPath && hasValidStoredFile) return resolveCSVPath(stored) || stored;
+
+    var chosenPath = promptForGlossaryPath(resolved, true);
+    if (chosenPath && chosenPath !== "") {
+        csvPathSettingRaw = chosenPath;
+        app.insertLabel(CSV_PATH_LABEL, chosenPath);
+        return resolveCSVPath(chosenPath) || chosenPath;
+    }
+    return resolved || "";
+}
 
 var logPath = Folder.temp + "/SuperTranslatorPRO_Log.txt";
 
@@ -911,8 +1151,12 @@ function loadCSVGlossary(path) {
         if (rows.length < 2) return null;
 
         var headers = rows[0];
+        var columnKinds = [];
         for (var h = 0; h < headers.length; h++) {
             headers[h] = sanitizeCSVContent(headers[h]).replace(/^\s+|\s+$/g, '').toUpperCase();
+            if (isSupportedGlossaryLanguageHeader(headers[h])) columnKinds[h] = "lang";
+            else if (isGlossaryMetaHeader(headers[h])) columnKinds[h] = "meta";
+            else columnKinds[h] = "ignore";
         }
 
         for (var i = 1; i < rows.length; i++) {
@@ -920,15 +1164,39 @@ function loadCSVGlossary(path) {
             if (!cols || cols.length === 0) continue;
             var original = sanitizeCSVContent(cols[0]).replace(/^\s+|\s+$/g, '');
             if (original === "") continue;
+            if (isGlossaryCommentRow(original)) continue;
 
-            var translations = {};
+            var entry = {};
+            var meta = {};
             for (var j = 1; j < cols.length; j++) {
-                if (j < headers.length) {
-                    var val = sanitizeCSVContent(cols[j]).replace(/^\s+|\s+$/g, '');
-                    if (val !== "") translations[headers[j]] = val;
+                if (j >= headers.length) continue;
+                var val = sanitizeCSVContent(cols[j]).replace(/^\s+|\s+$/g, '');
+                if (val === "") continue;
+                if (columnKinds[j] === "lang") entry[headers[j]] = val;
+                else if (columnKinds[j] === "meta") meta[headers[j]] = val;
+            }
+
+            var hasEntryData = false;
+            for (var entryKey in entry) {
+                if (entry.hasOwnProperty(entryKey)) { hasEntryData = true; break; }
+            }
+            for (var metaKey in meta) {
+                if (meta.hasOwnProperty(metaKey)) { hasEntryData = true; break; }
+            }
+            if (!hasEntryData) continue;
+
+            if (meta.hasOwnProperty("_FLAGS")) entry.__flags = parseGlossaryFlags(meta._FLAGS);
+            if (meta.hasOwnProperty("_ALIASES")) entry.__aliases = parseGlossaryAliases(meta._ALIASES);
+            if (hasOwnMappings(meta)) entry.__meta = meta;
+
+            glossary[original] = entry;
+
+            if (entry.__aliases && entry.__aliases.length > 0) {
+                for (var aliasIdx = 0; aliasIdx < entry.__aliases.length; aliasIdx++) {
+                    var alias = entry.__aliases[aliasIdx];
+                    if (alias && alias !== "" && !glossary.hasOwnProperty(alias)) glossary[alias] = entry;
                 }
             }
-            glossary[original] = translations;
         }
         return glossary;
     } catch(e) { return null; }
@@ -940,6 +1208,7 @@ function getGlossaryOverrideForTarget(entry, targetUpper, shortTarget) {
 
     if (entry.hasOwnProperty(targetUpper)) rawValue = entry[targetUpper];
     else if (entry.hasOwnProperty(shortTarget)) rawValue = entry[shortTarget];
+    else if (entry.__flags && entry.__flags.DNT) return "###DNT###";
 
     if (rawValue === null || rawValue === undefined) return null;
 
@@ -1173,6 +1442,8 @@ function getCurrentArticleVersionLabel() {
     var version = "v" + ("0" + year).slice(-2) + ("0" + month).slice(-2);
     return "Artikelnummer_" + version;
 }
+
+csvPath = ensureGlossaryPathConfigured(csvPath, csvPathSettingRaw);
 
 function updateLanguageMasterVersionLabels(doc) {
     var versionLabel = getCurrentArticleVersionLabel();
@@ -1552,8 +1823,8 @@ btnSettings.onClick = function() {
     var btnBrowse = grpCSV.add("button", undefined, t("browse"));
     
     btnBrowse.onClick = function() {
-        var f = File.openDialog(t("glossary_select"), "*.csv");
-        if (f) csvInput.text = f.fsName;
+        var chosenGlossaryPath = promptForGlossaryPath(csvInput.text, true);
+        if (chosenGlossaryPath && chosenGlossaryPath !== "") csvInput.text = chosenGlossaryPath;
     };
 
     setWin.add("panel", undefined, "");
@@ -1609,6 +1880,7 @@ btnSettings.onClick = function() {
     btnSave.onClick = function() {
         apiKey = keyInput.text;
         csvPath = csvInput.text;
+        csvPathSettingRaw = csvPath;
         tmPath = tmInput.text;
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(CSV_PATH_LABEL, csvPath); 
