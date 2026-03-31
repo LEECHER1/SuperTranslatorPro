@@ -11,6 +11,7 @@ var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path";
 var REF_SYMBOLS_LABEL = "SuperTranslatorPRO_RefSymbols";
 var HYPERLINK_PAGE_MAP_LABEL = "SuperTranslatorPRO_HyperlinkPageMap";
 var AUTO_HYPERLINKS_LABEL = "SuperTranslatorPRO_BDAAutoHyperlinks";
+var BACK_PAGE_TRACKER_LABEL = "SuperTranslatorPRO_BackPageTracker";
 
 function detectUILanguage() {
     var localeText = "";
@@ -42,6 +43,8 @@ var UI_STRINGS = {
     auto_hyperlink_checkbox: { de: "Referenz-Hyperlinks automatisch erstellen", en: "Create reference hyperlinks automatically" },
     auto_hyperlink_symbols: { de: "Klammern/Symbole:", en: "Brackets/symbols:" },
     auto_hyperlink_help: { de: "Verwendet die Sprachcodes und Seitenzahlen von Seite 1, z. B. fr (33) und en (22).", en: "Uses the language codes and page numbers from page 1, for example fr (33) and en (22)." },
+    back_page_tracker_label: { de: "Rückseiten-Suche:", en: "Back-page search:" },
+    back_page_tracker_help: { de: "Text zur Erkennung der Rückseite. Standard: ©. Mehrere Begriffe mit |, ; oder Zeilenumbruch trennen. Wenn © mehrfach vorkommt, wird zusätzlich automatisch nach 'Steinbach International GmbH' gesucht.", en: "Text used to detect the back page. Default: ©. Separate multiple terms with |, ; or a line break. If © appears multiple times, 'Steinbach International GmbH' is checked automatically as an extra filter." },
     only_text_update: { de: "Nur bei Textupdate", en: "Text update only" },
     translate_start: { de: "Übersetzung starten", en: "Start Translation" },
     spellcheck_button: { de: "Deutsch prüfen", en: "Check German" },
@@ -271,6 +274,13 @@ function normalizeRefSymbols(symbols) {
     }
     if (normalized.length === 0) normalized.push("[]");
     return normalized.join(", ");
+}
+
+function normalizeBackPageTrackerSetting(value) {
+    var raw = (value === null || value === undefined) ? "" : String(value);
+    raw = raw.replace(/^\s+|\s+$/g, "");
+    if (raw === "") raw = "©";
+    return raw;
 }
 
 function getReferenceSymbolPairs(symbols) {
@@ -667,6 +677,7 @@ var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTransl
 var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
 var hyperlinkPageMappings = {};
 var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
+var backPageTrackerSetting = normalizeBackPageTrackerSetting(app.extractLabel(BACK_PAGE_TRACKER_LABEL) || "©");
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
 var DNT_LABEL = "SuperTranslatorPRO_DNT_Styles";
@@ -1627,6 +1638,13 @@ var bdaHyperlinkSymbolsInput = grpBDAHyperlinkSymbols.add("edittext", undefined,
 bdaHyperlinkSymbolsInput.characters = 12;
 bdaHyperlinkSymbolsInput.helpTip = t("reference_symbols");
 
+var grpBDABackPageTracker = panelBDA.add("group");
+grpBDABackPageTracker.indent = 20;
+grpBDABackPageTracker.add("statictext", undefined, t("back_page_tracker_label"));
+var bdaBackPageTrackerInput = grpBDABackPageTracker.add("edittext", undefined, backPageTrackerSetting);
+bdaBackPageTrackerInput.characters = 28;
+bdaBackPageTrackerInput.helpTip = t("back_page_tracker_help");
+
 var cbOnlyTextUpdate = panelBDA.add("checkbox", undefined, t("only_text_update"));
 cbOnlyTextUpdate.indent = 20;
 cbOnlyTextUpdate.value = false;
@@ -1637,6 +1655,8 @@ function updateBDAHyperlinkControls(enabled) {
     checkAutoBDAHyperlinks.enabled = !!enabled;
     grpBDAHyperlinkSymbols.enabled = inputEnabled;
     bdaHyperlinkSymbolsInput.enabled = inputEnabled;
+    grpBDABackPageTracker.enabled = !!enabled;
+    bdaBackPageTrackerInput.enabled = !!enabled;
 }
 
 // START-ZUSTAND FESTLEGEN
@@ -3337,7 +3357,8 @@ btnTranslate.onClick = function() {
         lang: dropdownLang.selection.text.substring(0, 2),
         onlyTextUpdate: cbOnlyTextUpdate ? cbOnlyTextUpdate.value : false,
         autoReferenceLinks: checkAutoBDAHyperlinks ? checkAutoBDAHyperlinks.value : false,
-        autoReferenceSymbols: bdaHyperlinkSymbolsInput ? bdaHyperlinkSymbolsInput.text : refSymbolsSetting
+        autoReferenceSymbols: bdaHyperlinkSymbolsInput ? bdaHyperlinkSymbolsInput.text : refSymbolsSetting,
+        backPageTracker: bdaBackPageTrackerInput ? bdaBackPageTrackerInput.text : backPageTrackerSetting
     };
 
     if (config.mode !== "BDA" && config.lang.indexOf("-") !== -1) {
@@ -3361,6 +3382,8 @@ btnTranslate.onClick = function() {
     if (config.mode === "BDA") {
         autoBDAHyperlinksSetting = !!config.autoReferenceLinks;
         app.insertLabel(AUTO_HYPERLINKS_LABEL, autoBDAHyperlinksSetting ? "1" : "0");
+        backPageTrackerSetting = normalizeBackPageTrackerSetting(config.backPageTracker);
+        app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
         if (config.autoReferenceLinks) {
             refSymbolsSetting = normalizeRefSymbols(config.autoReferenceSymbols);
             app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
@@ -3435,6 +3458,129 @@ function runMainProcess(doc, config) {
 }
 
 // --- 5. BDA AUTOMATIK LOGIK ---
+function normalizeBackPageSearchTerm(term) {
+    return String(term || "").toLowerCase().replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+}
+
+function parseBackPageTrackerTerms(settingValue) {
+    var raw = normalizeBackPageTrackerSetting(settingValue);
+    var parts = raw.split(/[\r\n|;,]+/);
+    var terms = [];
+    var seen = {};
+    for (var i = 0; i < parts.length; i++) {
+        var term = String(parts[i] || "").replace(/^\s+|\s+$/g, "");
+        if (term === "") continue;
+        var normalized = normalizeBackPageSearchTerm(term);
+        if (normalized === "" || seen[normalized]) continue;
+        seen[normalized] = true;
+        terms.push(term);
+    }
+    if (terms.length === 0) terms.push("©");
+    return terms;
+}
+
+function getPageSearchableText(page) {
+    if (!page || !page.isValid) return "";
+    var textFrames = getTextFramesFromContainer(page);
+    var fragments = [];
+    var seenStories = {};
+    for (var i = 0; i < textFrames.length; i++) {
+        var story = getTextFrameStory(textFrames[i]);
+        if (!story || !story.isValid) continue;
+        var storyId = null;
+        try { storyId = story.id; } catch (eId) { storyId = null; }
+        if (storyId !== null && seenStories[storyId]) continue;
+        if (storyId !== null) seenStories[storyId] = true;
+        try {
+            var contents = String(story.contents || "");
+            if (contents !== "") fragments.push(contents);
+        } catch (e) {}
+    }
+    return normalizeBackPageSearchTerm(fragments.join(" "));
+}
+
+function collectBackPageCandidates(doc) {
+    var candidates = [];
+    if (!doc || !doc.isValid) return candidates;
+    for (var i = 0; i < doc.pages.length; i++) {
+        var page = doc.pages[i];
+        candidates.push({ page: page, index: i, text: getPageSearchableText(page) });
+    }
+    return candidates;
+}
+
+function ensureAutomaticBackPageFallbackTerms(terms, candidates) {
+    var result = [];
+    var seen = {};
+    for (var i = 0; i < terms.length; i++) {
+        var normalized = normalizeBackPageSearchTerm(terms[i]);
+        if (normalized === "" || seen[normalized]) continue;
+        seen[normalized] = true;
+        result.push(terms[i]);
+    }
+    if (result.length === 0) result.push("©");
+
+    var firstNormalized = normalizeBackPageSearchTerm(result[0]);
+    if (firstNormalized === normalizeBackPageSearchTerm("©")) {
+        var copyrightMatches = 0;
+        for (var j = 0; j < candidates.length; j++) {
+            if (candidates[j].text.indexOf(firstNormalized) !== -1) copyrightMatches++;
+        }
+        var companyTerm = "Steinbach International GmbH";
+        var companyNormalized = normalizeBackPageSearchTerm(companyTerm);
+        if (copyrightMatches >= 2 && !seen[companyNormalized]) result.push(companyTerm);
+    }
+    return result;
+}
+
+function findBackPageByTracker(doc, trackerSetting) {
+    var candidates = collectBackPageCandidates(doc);
+    if (candidates.length === 0) return null;
+
+    var terms = ensureAutomaticBackPageFallbackTerms(parseBackPageTrackerTerms(trackerSetting), candidates);
+    var filtered = candidates.slice(0);
+    var matchedAny = false;
+
+    for (var i = 0; i < terms.length; i++) {
+        var normalizedTerm = normalizeBackPageSearchTerm(terms[i]);
+        if (normalizedTerm === "") continue;
+        var matches = [];
+        for (var j = 0; j < filtered.length; j++) {
+            if (filtered[j].text.indexOf(normalizedTerm) !== -1) matches.push(filtered[j]);
+        }
+        if (matches.length === 1) return matches[0].page;
+        if (matches.length > 0) {
+            filtered = matches;
+            matchedAny = true;
+        }
+    }
+
+    if (matchedAny && filtered.length > 0) return filtered[filtered.length - 1].page;
+
+    var best = null;
+    for (var c = 0; c < candidates.length; c++) {
+        var score = 0;
+        for (var tIndex = 0; tIndex < terms.length; tIndex++) {
+            var scoreTerm = normalizeBackPageSearchTerm(terms[tIndex]);
+            if (scoreTerm !== "" && candidates[c].text.indexOf(scoreTerm) !== -1) score++;
+        }
+        if (score > 0 && (!best || score > best.score || (score === best.score && candidates[c].index > best.index))) {
+            best = { page: candidates[c].page, score: score, index: candidates[c].index };
+        }
+    }
+    return best ? best.page : null;
+}
+
+function findOriginalBackPage(doc, trackerSetting) {
+    if (!doc || !doc.isValid) return null;
+    for (var p = doc.pages.length - 1; p >= 0; p--) {
+        try {
+            if (doc.pages[p].appliedMaster && doc.pages[p].appliedMaster.name.match(/back/i)) return doc.pages[p];
+        } catch (e) {}
+    }
+    return findBackPageByTracker(doc, trackerSetting);
+}
+
 function runBDAMode(doc, config, preparedLegacy) {
     updateProgress(5, t("bda_search_templates"), 5, t("bda_analyze_doc"));
     var langTasks = (preparedLegacy && preparedLegacy.langTasks) ? preparedLegacy.langTasks : collectLegacyBDALanguageTasks(doc);
@@ -3454,6 +3600,8 @@ function runBDAMode(doc, config, preparedLegacy) {
     }
 
     if (originalPages.length === 0) { throw new Error(t("bda_no_original_pages")); }
+
+    var originalBackPage = findOriginalBackPage(doc, config.backPageTracker || backPageTrackerSetting);
 
     var resultMsg = t("bda_finished", { count: langTasks.length });
 
@@ -3520,11 +3668,19 @@ function runBDAMode(doc, config, preparedLegacy) {
 
     updateProgress(98, t("bda_move_back_page"), 98, t("bda_cleanup_pages"));
     var backPageMoved = false;
-    for (var p = doc.pages.length - 1; p >= 0; p--) {
-        if (doc.pages[p].appliedMaster && doc.pages[p].appliedMaster.name.match(/back/i)) {
-            doc.pages[p].move(LocationOptions.AT_END);
+    if (originalBackPage && originalBackPage.isValid) {
+        try {
+            originalBackPage.move(LocationOptions.AT_END);
             backPageMoved = true;
-            break; 
+        } catch (moveBackErr) {}
+    }
+    if (!backPageMoved) {
+        for (var p = doc.pages.length - 1; p >= 0; p--) {
+            if (doc.pages[p].appliedMaster && doc.pages[p].appliedMaster.name.match(/back/i)) {
+                doc.pages[p].move(LocationOptions.AT_END);
+                backPageMoved = true;
+                break;
+            }
         }
     }
     
