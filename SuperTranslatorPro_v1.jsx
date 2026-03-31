@@ -4711,8 +4711,8 @@ function buildTextObjectXML(textObj) {
 
 function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode) {
     if (!translatedXML || translatedXML === "") return;
-    translatedXML = normalizeTranslatedXML(translatedXML)
-                                 .replace(/(###(?:IMG|TBL)_\d+###)\s+(?=###(?:IMG|TBL)_\d+###)/g, '$1');
+    // Preserve tabs/line breaks between consecutive placeholders so inline image rows keep their original layout.
+    translatedXML = normalizeTranslatedXML(translatedXML);
     var isPartial = false; var textFlow = null; var currentIdx = 0;
     var normalizeStartIndex = 0;
     try {
