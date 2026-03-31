@@ -3755,6 +3755,7 @@ function updateTOCForLanguage(doc, langCode, newStartPage) {
             var oldText = targetItem.obj.texts[0].contents;
             var newText = oldText.replace(/\([Xx\d]*\)/, "(" + newStartPage + ")");
             targetItem.obj.texts[0].contents = newText;
+            createOrUpdateTOCLanguageHyperlink(doc, targetItem, langCode, newStartPage);
         }
     } catch(e) {}
 }
@@ -4359,12 +4360,67 @@ function isManagedUrlHyperlink(hyperlink) {
     return name.indexOf("STP_URL_LINK_") === 0;
 }
 
+function isManagedTOCHyperlink(hyperlink) {
+    if (!hyperlink || !hyperlink.isValid) return false;
+    var name = "";
+    try { name = String(hyperlink.name || ""); } catch (e) { name = ""; }
+    return name.indexOf("STP_TOC_LINK_") === 0;
+}
+
 function removeManagedHyperlink(hyperlink) {
     if (!hyperlink || !hyperlink.isValid) return;
     var source = null;
     try { source = hyperlink.source; } catch (e) { source = null; }
     try { hyperlink.remove(); } catch (e2) {}
     try { if (source && source.isValid) source.remove(); } catch (e3) {}
+}
+
+function getHyperlinkTextObjectFromItemEntry(itemEntry) {
+    if (!itemEntry || !itemEntry.obj || !itemEntry.obj.isValid) return null;
+    try {
+        if (itemEntry.obj.texts && itemEntry.obj.texts.length > 0 && itemEntry.obj.texts[0].isValid) {
+            return itemEntry.obj.texts[0];
+        }
+    } catch (e) {}
+    if (itemEntry.type === "frame") return getTextFrameStory(itemEntry.obj);
+    return null;
+}
+
+function createOrUpdateTOCLanguageHyperlink(doc, targetItem, langCode, pageSetting) {
+    if (!doc || !doc.isValid || !targetItem) return false;
+    var targetText = getHyperlinkTextObjectFromItemEntry(targetItem);
+    if (!targetText || !targetText.isValid) return false;
+
+    var targetPage = resolvePageBySetting(doc, pageSetting);
+    if (!targetPage || !targetPage.isValid) return false;
+
+    var destination = getOrCreatePageDestination(doc, targetPage, langCode, pageSetting);
+    if (!destination || !destination.isValid) return false;
+
+    var sourceKey = getTextObjectRangeKey(targetText);
+    if (sourceKey === "") return false;
+
+    var existingHyperlinksBySource = buildExistingHyperlinkSourceMap(doc);
+    var existingHyperlink = existingHyperlinksBySource[sourceKey];
+    if (existingHyperlink && existingHyperlink.isValid) {
+        if (!isManagedTOCHyperlink(existingHyperlink)) return false;
+        try {
+            existingHyperlink.destination = destination;
+            try { existingHyperlink.name = "STP_TOC_LINK_" + String(langCode || "").toUpperCase(); } catch (renameErr) {}
+            return true;
+        } catch (updateErr) {
+            return false;
+        }
+    }
+
+    try {
+        var source = doc.hyperlinkTextSources.add(targetText);
+        var hyperlink = doc.hyperlinks.add(source, destination);
+        try { hyperlink.name = "STP_TOC_LINK_" + String(langCode || "").toUpperCase(); } catch (nameErr) {}
+        return true;
+    } catch (createErr) {
+        return false;
+    }
 }
 
 function buildURLDestinationCache(doc) {
