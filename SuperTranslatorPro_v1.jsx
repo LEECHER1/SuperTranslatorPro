@@ -45,6 +45,7 @@ var UI_STRINGS = {
     auto_hyperlink_help: { de: "Verwendet die Sprachcodes und Seitenzahlen von Seite 1, z. B. fr (33) und en (22).", en: "Uses the language codes and page numbers from page 1, for example fr (33) and en (22)." },
     back_page_tracker_label: { de: "Rückseiten-Suche:", en: "Back-page search:" },
     back_page_tracker_help: { de: "Text zur Erkennung der Rückseite. Standard: ©. Mehrere Begriffe mit |, ; oder Zeilenumbruch trennen. Wenn © mehrfach vorkommt, wird zusätzlich automatisch nach 'Steinbach International GmbH' gesucht.", en: "Text used to detect the back page. Default: ©. Separate multiple terms with |, ; or a line break. If © appears multiple times, 'Steinbach International GmbH' is checked automatically as an extra filter." },
+    back_page_not_found_notice: { de: "Hinweis: Es konnte keine Rückseite sicher erkannt werden.\nDer Automatiklauf wird trotzdem fortgesetzt.\nWenn nötig, bitte die Rückseiten-Suche in den Einstellungen anpassen.", en: "Note: No back page could be identified with confidence.\nThe automatic run will continue anyway.\nIf needed, adjust the back-page search in the settings." },
     only_text_update: { de: "Nur bei Textupdate", en: "Text update only" },
     translate_start: { de: "Übersetzung starten", en: "Start Translation" },
     spellcheck_button: { de: "Deutsch prüfen", en: "Check German" },
@@ -3510,6 +3511,183 @@ function collectBackPageCandidates(doc) {
     return candidates;
 }
 
+function isBackMasterName(name) {
+    return !!(name && String(name).match(/back/i));
+}
+
+function setBackMasterSpreadNaming(masterSpread) {
+    if (!masterSpread || !masterSpread.isValid) return "";
+    try {
+        masterSpread.baseName = "Back-Musterseite";
+    } catch (e) {
+        try { masterSpread.properties = { baseName: "Back-Musterseite" }; } catch (e2) {}
+    }
+    return String(masterSpread.name || "");
+}
+
+function getMasterSpreadSearchableText(masterSpread) {
+    if (!masterSpread || !masterSpread.isValid) return "";
+    var fragments = [];
+    var seenStories = {};
+    for (var p = 0; p < masterSpread.pages.length; p++) {
+        var frames = getTextFramesFromContainer(masterSpread.pages[p]);
+        for (var f = 0; f < frames.length; f++) {
+            var story = getTextFrameStory(frames[f]);
+            if (!story || !story.isValid) continue;
+            var storyId = null;
+            try { storyId = story.id; } catch (eId) { storyId = null; }
+            if (storyId !== null && seenStories[storyId]) continue;
+            if (storyId !== null) seenStories[storyId] = true;
+            try {
+                var contents = String(story.contents || "");
+                if (contents !== "") fragments.push(contents);
+            } catch (e) {}
+        }
+    }
+    return normalizeBackPageSearchTerm(fragments.join(" "));
+}
+
+function collectBackMasterCandidates(doc) {
+    var candidates = [];
+    if (!doc || !doc.isValid) return candidates;
+    for (var i = 0; i < doc.masterSpreads.length; i++) {
+        var master = doc.masterSpreads[i];
+        candidates.push({ master: master, index: i, text: getMasterSpreadSearchableText(master) });
+    }
+    return candidates;
+}
+
+function findBackMasterByTracker(doc, trackerSetting) {
+    var candidates = collectBackMasterCandidates(doc);
+    if (candidates.length === 0) return null;
+
+    var terms = ensureAutomaticBackPageFallbackTerms(parseBackPageTrackerTerms(trackerSetting), candidates);
+    var filtered = candidates.slice(0);
+    var matchedAny = false;
+
+    for (var i = 0; i < terms.length; i++) {
+        var normalizedTerm = normalizeBackPageSearchTerm(terms[i]);
+        if (normalizedTerm === "") continue;
+        var matches = [];
+        for (var j = 0; j < filtered.length; j++) {
+            if (filtered[j].text.indexOf(normalizedTerm) !== -1) matches.push(filtered[j]);
+        }
+        if (matches.length === 1) return matches[0].master;
+        if (matches.length > 0) {
+            filtered = matches;
+            matchedAny = true;
+        }
+    }
+
+    if (matchedAny && filtered.length > 0) return filtered[filtered.length - 1].master;
+
+    var best = null;
+    for (var c = 0; c < candidates.length; c++) {
+        var score = 0;
+        for (var tIndex = 0; tIndex < terms.length; tIndex++) {
+            var scoreTerm = normalizeBackPageSearchTerm(terms[tIndex]);
+            if (scoreTerm !== "" && candidates[c].text.indexOf(scoreTerm) !== -1) score++;
+        }
+        if (score > 0 && (!best || score > best.score || (score === best.score && candidates[c].index > best.index))) {
+            best = { master: candidates[c].master, score: score, index: candidates[c].index };
+        }
+    }
+    return best ? best.master : null;
+}
+
+function findNamedBackMasterSpread(doc) {
+    if (!doc || !doc.isValid) return null;
+    for (var i = doc.masterSpreads.length - 1; i >= 0; i--) {
+        if (isBackMasterName(doc.masterSpreads[i].name)) return doc.masterSpreads[i];
+    }
+    return null;
+}
+
+function getPagesUsingMasterSpread(doc, masterSpread) {
+    var pages = [];
+    if (!doc || !doc.isValid || !masterSpread || !masterSpread.isValid) return pages;
+    var masterId = null;
+    try { masterId = masterSpread.id; } catch (eId) { masterId = null; }
+    for (var i = 0; i < doc.pages.length; i++) {
+        try {
+            var applied = doc.pages[i].appliedMaster;
+            if (!applied || !applied.isValid) continue;
+            if (masterId !== null) {
+                var appliedId = null;
+                try { appliedId = applied.id; } catch (eAppliedId) { appliedId = null; }
+                if (appliedId === masterId) pages.push(doc.pages[i]);
+            } else if (String(applied.name || "") === String(masterSpread.name || "")) {
+                pages.push(doc.pages[i]);
+            }
+        } catch (e) {}
+    }
+    return pages;
+}
+
+function getAppliedMasterSpread(page) {
+    if (!page || !page.isValid) return null;
+    try {
+        if (page.appliedMaster && page.appliedMaster.isValid) return page.appliedMaster;
+    } catch (e) {}
+    return null;
+}
+
+function createBackMasterSpread(doc, sourceMaster) {
+    var master = null;
+    if (sourceMaster && sourceMaster.isValid) {
+        try { master = sourceMaster.duplicate(LocationOptions.AFTER, sourceMaster); } catch (dupErr) { master = null; }
+        if (!master || !master.isValid) {
+            try { master = sourceMaster.duplicate(); } catch (dupErr2) { master = null; }
+        }
+    }
+    if ((!master || !master.isValid) && doc && doc.isValid) {
+        try { master = doc.masterSpreads.add(); } catch (addErr) { master = null; }
+    }
+    if (master && master.isValid) setBackMasterSpreadNaming(master);
+    return master;
+}
+
+function ensureBackMasterForPage(doc, backPage, preferredMaster) {
+    if (!doc || !doc.isValid || !backPage || !backPage.isValid) return null;
+
+    var currentMaster = getAppliedMasterSpread(backPage);
+    if (currentMaster && currentMaster.isValid && isBackMasterName(currentMaster.name)) {
+        setBackMasterSpreadNaming(currentMaster);
+        return currentMaster;
+    }
+
+    var existingBackMaster = findNamedBackMasterSpread(doc);
+    if (existingBackMaster && existingBackMaster.isValid) {
+        setBackMasterSpreadNaming(existingBackMaster);
+        try { backPage.appliedMaster = existingBackMaster; } catch (assignExistingErr) {}
+        return existingBackMaster;
+    }
+
+    var candidateMaster = currentMaster && currentMaster.isValid ? currentMaster : preferredMaster;
+    if (candidateMaster && candidateMaster.isValid) {
+        var usingPages = getPagesUsingMasterSpread(doc, candidateMaster);
+        var canRenameExisting = false;
+        if (usingPages.length === 0) {
+            canRenameExisting = true;
+        } else if (usingPages.length === 1) {
+            try { canRenameExisting = (usingPages[0].id === backPage.id); } catch (eSingle) { canRenameExisting = (usingPages[0] === backPage); }
+        }
+
+        if (canRenameExisting) {
+            setBackMasterSpreadNaming(candidateMaster);
+            try { backPage.appliedMaster = candidateMaster; } catch (assignCandidateErr) {}
+            return candidateMaster;
+        }
+    }
+
+    var newBackMaster = createBackMasterSpread(doc, candidateMaster);
+    if (newBackMaster && newBackMaster.isValid) {
+        try { backPage.appliedMaster = newBackMaster; } catch (assignNewErr) {}
+        return newBackMaster;
+    }
+    return currentMaster;
+}
+
 function ensureAutomaticBackPageFallbackTerms(terms, candidates) {
     var result = [];
     var seen = {};
@@ -3582,27 +3760,61 @@ function findOriginalBackPage(doc, trackerSetting) {
     return findBackPageByTracker(doc, trackerSetting);
 }
 
+function findOriginalBackPageInfo(doc, trackerSetting) {
+    if (!doc || !doc.isValid) return { page: null, master: null };
+
+    var namedBackMaster = findNamedBackMasterSpread(doc);
+    var namedBackMasterPages = getPagesUsingMasterSpread(doc, namedBackMaster);
+    if (namedBackMasterPages.length > 0) {
+        return { page: namedBackMasterPages[namedBackMasterPages.length - 1], master: namedBackMaster };
+    }
+
+    var namedPage = findOriginalBackPage(doc, trackerSetting);
+    if (namedPage && namedPage.isValid) {
+        return { page: namedPage, master: getAppliedMasterSpread(namedPage) || namedBackMaster };
+    }
+
+    var trackedMaster = findBackMasterByTracker(doc, trackerSetting);
+    var trackedMasterPages = getPagesUsingMasterSpread(doc, trackedMaster);
+    if (trackedMasterPages.length > 0) {
+        return { page: trackedMasterPages[trackedMasterPages.length - 1], master: trackedMaster };
+    }
+
+    return { page: null, master: trackedMaster || namedBackMaster || null };
+}
+
 function runBDAMode(doc, config, preparedLegacy) {
     updateProgress(5, t("bda_search_templates"), 5, t("bda_analyze_doc"));
     var langTasks = (preparedLegacy && preparedLegacy.langTasks) ? preparedLegacy.langTasks : collectLegacyBDALanguageTasks(doc);
 
     if (!config.onlyTextUpdate) updateLanguageMasterVersionLabels(doc);
     if (langTasks.length === 0) { throw new Error(t("bda_no_templates")); }
-    
-    var originalPages = [];
-    if (config.bdaSourcePages.toUpperCase() === "AUTO") {
-        for (var p = 0; p < doc.pages.length; p++) {
-            if (doc.pages[p].appliedMaster && isGermanMasterName(doc.pages[p].appliedMaster.name)) {
-                originalPages.push(doc.pages[p]);
-            }
-        }
+
+    var backPageInfo = findOriginalBackPageInfo(doc, config.backPageTracker || backPageTrackerSetting);
+    var originalBackPage = backPageInfo.page;
+    if (originalBackPage && originalBackPage.isValid) {
+        ensureBackMasterForPage(doc, originalBackPage, backPageInfo.master);
     } else {
-        originalPages = getPagesFromString(doc, config.bdaSourcePages);
+        alert(t("back_page_not_found_notice"));
+    }
+
+    var originalPages = getBDAOriginalPages(doc, config);
+    if (originalBackPage && originalBackPage.isValid) {
+        var filteredOriginalPages = [];
+        var backPageId = null;
+        try { backPageId = originalBackPage.id; } catch (eBackId) { backPageId = null; }
+        for (var op = 0; op < originalPages.length; op++) {
+            var samePage = false;
+            try {
+                if (backPageId !== null && originalPages[op] && originalPages[op].isValid && originalPages[op].id === backPageId) samePage = true;
+            } catch (eSameId) {}
+            if (!samePage && originalPages[op] === originalBackPage) samePage = true;
+            if (!samePage) filteredOriginalPages.push(originalPages[op]);
+        }
+        originalPages = filteredOriginalPages;
     }
 
     if (originalPages.length === 0) { throw new Error(t("bda_no_original_pages")); }
-
-    var originalBackPage = findOriginalBackPage(doc, config.backPageTracker || backPageTrackerSetting);
 
     var resultMsg = t("bda_finished", { count: langTasks.length });
 
