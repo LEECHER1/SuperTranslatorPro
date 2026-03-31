@@ -10,6 +10,7 @@ var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 var REF_SYMBOLS_LABEL = "SuperTranslatorPRO_RefSymbols";
 var HYPERLINK_PAGE_MAP_LABEL = "SuperTranslatorPRO_HyperlinkPageMap";
+var AUTO_HYPERLINKS_LABEL = "SuperTranslatorPRO_BDAAutoHyperlinks";
 
 function detectUILanguage() {
     var localeText = "";
@@ -38,6 +39,9 @@ var UI_STRINGS = {
     original_pages: { de: "Originalseiten:", en: "Source pages:" },
     auto_source_help: { de: "AUTO sucht selbst nach der deutschen Musterseite über das schwarze Sprachkästchen", en: "AUTO detects the German master via the black language badge" },
     toc_checkbox: { de: "Titelseite (Seite 1): Start-Seitenzahlen aktualisieren", en: "Title page (page 1): update start page numbers" },
+    auto_hyperlink_checkbox: { de: "Referenz-Hyperlinks automatisch erstellen", en: "Create reference hyperlinks automatically" },
+    auto_hyperlink_symbols: { de: "Klammern/Symbole:", en: "Brackets/symbols:" },
+    auto_hyperlink_help: { de: "Verwendet die Sprachcodes und Seitenzahlen von Seite 1, z. B. fr (33) und en (22).", en: "Uses the language codes and page numbers from page 1, for example fr (33) and en (22)." },
     only_text_update: { de: "Nur bei Textupdate", en: "Text update only" },
     translate_start: { de: "Übersetzung starten", en: "Start Translation" },
     spellcheck_button: { de: "Deutsch prüfen", en: "Check German" },
@@ -398,6 +402,117 @@ function formatHyperlinkPageMappings(pageMappings) {
     return lines.join("\r");
 }
 
+function hasOwnMappings(map) {
+    if (!map) return false;
+    for (var key in map) {
+        if (map.hasOwnProperty(key)) return true;
+    }
+    return false;
+}
+
+function saveHyperlinkSettings(symbols, pageMappings) {
+    refSymbolsSetting = normalizeRefSymbols(symbols || refSymbolsSetting);
+    hyperlinkPageMappings = normalizeHyperlinkPageMappings(pageMappings || hyperlinkPageMappings);
+    app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
+    app.insertLabel(HYPERLINK_PAGE_MAP_LABEL, serializeJSON(hyperlinkPageMappings));
+}
+
+function collectTOCTextEntries(page) {
+    var items = [];
+    if (!page || !page.isValid) return items;
+    var allPageItems = [];
+    try { allPageItems = page.allPageItems; } catch (e) { allPageItems = []; }
+    for (var i = 0; i < allPageItems.length; i++) {
+        if (!allPageItems[i] || !allPageItems[i].isValid || allPageItems[i].constructor.name !== "TextFrame") continue;
+        items.push({ type: "frame", obj: allPageItems[i] });
+        try {
+            var tables = allPageItems[i].tables;
+            for (var tIndex = 0; tIndex < tables.length; tIndex++) {
+                var cells = tables[tIndex].cells;
+                for (var c = 0; c < cells.length; c++) items.push({ type: "cell", obj: cells[c] });
+            }
+        } catch (tableErr) {}
+    }
+    return items;
+}
+
+function getTOCItemContents(itemEntry) {
+    var textObj = getHyperlinkTextObjectFromItemEntry(itemEntry);
+    if (!textObj || !textObj.isValid) return "";
+    try { return String(textObj.contents); } catch (e) { return ""; }
+}
+
+function extractTOCLanguageCodeFromItem(itemEntry) {
+    var rawText = getTOCItemContents(itemEntry);
+    var compact = String(rawText || "").replace(/[\s\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, "").toUpperCase();
+    if (!compact.match(/^[A-Z]{2}$/) || !isSupportedLegacyLanguageCode(compact)) return "";
+    return compact;
+}
+
+function hasTOCPageMarkerText(text) {
+    return /\([^()]*\)/.test(String(text || ""));
+}
+
+function extractTOCPageSetting(text) {
+    var match = String(text || "").match(/\(([^()]*)\)/);
+    if (!match) return "";
+    var value = String(match[1] || "").replace(/^\s+|\s+$/g, "");
+    if (value === "" || /^[Xx]+$/.test(value)) return "";
+    return value;
+}
+
+function findTOCPageTargetItem(items, markerItem) {
+    if (!items || !markerItem) return null;
+    if (markerItem.type === "cell") {
+        try {
+            var rowCells = markerItem.obj.parentRow.cells;
+            for (var c = 0; c < rowCells.length; c++) {
+                if (rowCells[c] === markerItem.obj) continue;
+                if (hasTOCPageMarkerText(getTOCItemContents({ type: "cell", obj: rowCells[c] }))) {
+                    return { type: "cell", obj: rowCells[c] };
+                }
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    var markerBounds = null;
+    try { markerBounds = markerItem.obj.geometricBounds; } catch (boundsErr) { markerBounds = null; }
+    if (!markerBounds) return null;
+    var markerCenterY = (markerBounds[0] + markerBounds[2]) / 2;
+    for (var i = 0; i < items.length; i++) {
+        if (items[i].type !== "frame" || items[i].obj === markerItem.obj) continue;
+        var frameBounds = null;
+        try { frameBounds = items[i].obj.geometricBounds; } catch (e2) { frameBounds = null; }
+        if (!frameBounds) continue;
+        var frameCenterY = (frameBounds[0] + frameBounds[2]) / 2;
+        if (Math.abs(markerCenterY - frameCenterY) >= 10) continue;
+        if (hasTOCPageMarkerText(getTOCItemContents(items[i]))) return items[i];
+    }
+    return null;
+}
+
+function collectCoverHyperlinkPageMappings(doc) {
+    var mappings = {};
+    if (!doc || !doc.isValid || doc.pages.length === 0) return mappings;
+    var items = collectTOCTextEntries(doc.pages[0]);
+    for (var i = 0; i < items.length; i++) {
+        var langCode = extractTOCLanguageCodeFromItem(items[i]);
+        if (!langCode || mappings.hasOwnProperty(langCode)) continue;
+        var targetItem = findTOCPageTargetItem(items, items[i]);
+        if (!targetItem) continue;
+        var pageSetting = extractTOCPageSetting(getTOCItemContents(targetItem));
+        if (pageSetting !== "") mappings[langCode] = pageSetting;
+    }
+    return mappings;
+}
+
+function getHyperlinkPageMappingsForDialog(doc) {
+    var coverMappings = collectCoverHyperlinkPageMappings(doc);
+    if (hasOwnMappings(coverMappings)) return coverMappings;
+    return normalizeHyperlinkPageMappings(hyperlinkPageMappings);
+}
+
 function getTextObjectParentPage(textObj) {
     if (!textObj || !textObj.isValid) return null;
     try {
@@ -535,6 +650,7 @@ var csvPath = resolveCSVPath(app.extractLabel(CSV_PATH_LABEL) || "");
 var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
 var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
 var hyperlinkPageMappings = loadHyperlinkPageMappings(app.extractLabel(HYPERLINK_PAGE_MAP_LABEL) || "");
+var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
 var DNT_LABEL = "SuperTranslatorPRO_DNT_Styles";
@@ -1175,16 +1291,36 @@ var checkTOC = panelBDA.add("checkbox", undefined, t("toc_checkbox"));
 checkTOC.indent = 20;
 checkTOC.value = true;
 
+var checkAutoBDAHyperlinks = panelBDA.add("checkbox", undefined, t("auto_hyperlink_checkbox"));
+checkAutoBDAHyperlinks.indent = 20;
+checkAutoBDAHyperlinks.value = autoBDAHyperlinksSetting;
+checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
+
+var grpBDAHyperlinkSymbols = panelBDA.add("group");
+grpBDAHyperlinkSymbols.indent = 40;
+grpBDAHyperlinkSymbols.add("statictext", undefined, t("auto_hyperlink_symbols"));
+var bdaHyperlinkSymbolsInput = grpBDAHyperlinkSymbols.add("edittext", undefined, refSymbolsSetting);
+bdaHyperlinkSymbolsInput.characters = 12;
+bdaHyperlinkSymbolsInput.helpTip = t("reference_symbols");
+
 var cbOnlyTextUpdate = panelBDA.add("checkbox", undefined, t("only_text_update"));
 cbOnlyTextUpdate.indent = 20;
 cbOnlyTextUpdate.value = false;
 cbOnlyTextUpdate.enabled = false;
+
+function updateBDAHyperlinkControls(enabled) {
+    var inputEnabled = !!enabled && !!checkAutoBDAHyperlinks.value;
+    checkAutoBDAHyperlinks.enabled = !!enabled;
+    grpBDAHyperlinkSymbols.enabled = inputEnabled;
+    bdaHyperlinkSymbolsInput.enabled = inputEnabled;
+}
 
 // START-ZUSTAND FESTLEGEN
 radioSelection.value = true;
 bdaSourceInput.enabled = false;
 checkTOC.enabled = false;
 cbOnlyTextUpdate.enabled = false;
+updateBDAHyperlinkControls(false);
 
 // --- UI INTERAKTIONEN ---
 radioSelection.onClick = function() {
@@ -1195,6 +1331,7 @@ radioSelection.onClick = function() {
     checkTOC.enabled = false;
     cbOnlyTextUpdate.enabled = false;
     cbOnlyTextUpdate.value = false;
+    updateBDAHyperlinkControls(false);
 }
 
 radioPages.onClick = function() {
@@ -1205,6 +1342,7 @@ radioPages.onClick = function() {
     checkTOC.enabled = false;
     cbOnlyTextUpdate.enabled = false;
     cbOnlyTextUpdate.value = false;
+    updateBDAHyperlinkControls(false);
 }
 
 radioBDA.onClick = function() {
@@ -1214,6 +1352,7 @@ radioBDA.onClick = function() {
     bdaSourceInput.enabled = true;
     checkTOC.enabled = true;
     cbOnlyTextUpdate.enabled = true;
+    updateBDAHyperlinkControls(true);
 }
 
 editPages.onActivate = function() {
@@ -1225,6 +1364,7 @@ editPages.onActivate = function() {
     checkTOC.enabled = false;
     cbOnlyTextUpdate.enabled = false;
     cbOnlyTextUpdate.value = false;
+    updateBDAHyperlinkControls(false);
 }
 
 bdaSourceInput.onActivate = function() {
@@ -1235,7 +1375,12 @@ bdaSourceInput.onActivate = function() {
     bdaSourceInput.enabled = true;
     checkTOC.enabled = true;
     cbOnlyTextUpdate.enabled = true;
+    updateBDAHyperlinkControls(true);
 }
+
+checkAutoBDAHyperlinks.onClick = function() {
+    updateBDAHyperlinkControls(radioBDA.value);
+};
 
 // --- BUTTONS UNTEN ---
 var groupButtons = myWindow.add("group"); 
@@ -1255,7 +1400,7 @@ btnSpellCheck.onClick = function() {
     }
 };
 
-function showHyperlinkDialog() {
+function showHyperlinkDialog(doc) {
     var dlg = new Window("dialog", t("hyperlink_dialog_title"));
     dlg.orientation = "column";
     dlg.alignChildren = ["fill", "top"];
@@ -1264,7 +1409,7 @@ function showHyperlinkDialog() {
     var refSymbolsInput = dlg.add("edittext", undefined, refSymbolsSetting);
     refSymbolsInput.characters = 20;
 
-    var hyperlinkMappingsDraft = normalizeHyperlinkPageMappings(hyperlinkPageMappings);
+    var hyperlinkMappingsDraft = getHyperlinkPageMappingsForDialog(doc);
     var hyperlinkPanel = dlg.add("panel", undefined, t("hyperlink_group_title"));
     hyperlinkPanel.orientation = "column";
     hyperlinkPanel.alignChildren = ["fill", "top"];
@@ -1333,10 +1478,7 @@ function showHyperlinkDialog() {
         if (selectedCode && pageValue !== "") {
             hyperlinkMappingsDraft[selectedCode] = pageValue;
         }
-        refSymbolsSetting = normalizeRefSymbols(refSymbolsInput.text);
-        hyperlinkPageMappings = normalizeHyperlinkPageMappings(hyperlinkMappingsDraft);
-        app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
-        app.insertLabel(HYPERLINK_PAGE_MAP_LABEL, serializeJSON(hyperlinkPageMappings));
+        saveHyperlinkSettings(refSymbolsInput.text, hyperlinkMappingsDraft);
         dlg.close(1);
     };
 
@@ -1351,7 +1493,7 @@ function showHyperlinkDialog() {
 btnLinkReferences.onClick = function() {
     var doc = null;
     try { doc = app.activeDocument; } catch (e) { alert(t("no_document_open")); return; }
-    var hyperlinkConfig = showHyperlinkDialog();
+    var hyperlinkConfig = showHyperlinkDialog(doc);
     if (!hyperlinkConfig) return;
     try {
         app.doScript(
@@ -2692,7 +2834,9 @@ btnTranslate.onClick = function() {
         bdaSourcePages: bdaSourceInput.text,
         updateTOC: checkTOC.value,
         lang: dropdownLang.selection.text.substring(0, 2),
-        onlyTextUpdate: cbOnlyTextUpdate ? cbOnlyTextUpdate.value : false
+        onlyTextUpdate: cbOnlyTextUpdate ? cbOnlyTextUpdate.value : false,
+        autoReferenceLinks: checkAutoBDAHyperlinks ? checkAutoBDAHyperlinks.value : false,
+        autoReferenceSymbols: bdaHyperlinkSymbolsInput ? bdaHyperlinkSymbolsInput.text : refSymbolsSetting
     };
 
     if (config.mode !== "BDA" && config.lang.indexOf("-") !== -1) {
@@ -2712,6 +2856,15 @@ btnTranslate.onClick = function() {
 
     if (config.lang === "EN") config.lang = "EN-GB"; 
     if (config.lang === "PT") config.lang = "PT-PT";
+
+    if (config.mode === "BDA") {
+        autoBDAHyperlinksSetting = !!config.autoReferenceLinks;
+        app.insertLabel(AUTO_HYPERLINKS_LABEL, autoBDAHyperlinksSetting ? "1" : "0");
+        if (config.autoReferenceLinks) {
+            refSymbolsSetting = normalizeRefSymbols(config.autoReferenceSymbols);
+            app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
+        }
+    }
 
     createProgressWindow();
 
@@ -2752,6 +2905,7 @@ function runMainProcess(doc, config) {
         updateLanguageMasterVersionLabels(doc);
         syncMasterTextChanges(doc);
         var updateMsg = syncBDATextChanges(doc, config);
+        runAutomaticHyperlinksForBDA(doc, config);
         return updateMsg;
     }
     updateLanguageMasterVersionLabels(doc);
@@ -2890,6 +3044,8 @@ function runBDAMode(doc, config, preparedLegacy) {
             saveBDASnapshot(doc, buildBDASnapshotPayload(snapshotPages));
         }
     } catch (e) {}
+
+    runAutomaticHyperlinksForBDA(doc, config);
 
     return resultMsg;
 }
@@ -3706,68 +3862,50 @@ function syncMasterTextChanges(doc) {
 // --- 5B. TOC RÖNTGEN-UPDATE LOGIK ---
 function updateTOCForLanguage(doc, langCode, newStartPage) {
     try {
-        var page = doc.pages[0]; 
-        var items = [];
-        var allPI = page.allPageItems;
-        for (var i = 0; i < allPI.length; i++) {
-            if (allPI[i].constructor.name === "TextFrame") {
-                items.push({ type: "frame", obj: allPI[i] });
-                if (allPI[i].tables.length > 0) {
-                    var tbs = allPI[i].tables;
-                    for (var tableIndex = 0; tableIndex < tbs.length; tableIndex++) {
-                        var cls = tbs[tableIndex].cells;
-                        for (var c = 0; c < cls.length; c++) {
-                            items.push({ type: "cell", obj: cls[c] });
-                        }
-                    }
-                }
-            }
-        }
-
+        var page = doc.pages[0];
+        var items = collectTOCTextEntries(page);
         var markerItem = null;
         for (var i = 0; i < items.length; i++) {
-            var rawText = "";
-            try { rawText = items[i].obj.texts[0].contents; } catch(e) { continue; }
-            if (typeof rawText !== "string") rawText = String(rawText);
-            var txt = rawText.replace(/[\s\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, "").toLowerCase();
-            if (txt === langCode.toLowerCase()) { markerItem = items[i]; break; }
+            if (extractTOCLanguageCodeFromItem(items[i]) === String(langCode || "").toUpperCase()) {
+                markerItem = items[i];
+                break;
+            }
         }
 
         if (markerItem === null) return;
 
-        var targetItem = null;
-        if (markerItem.type === "cell") {
-            var rowCells = markerItem.obj.parentRow.cells;
-            for (var c = 0; c < rowCells.length; c++) {
-                if (rowCells[c] === markerItem.obj) continue; 
-                var cStr = "";
-                try { cStr = String(rowCells[c].texts[0].contents); } catch(e){}
-                if (cStr.match(/\([Xx\d]*\)/)) {
-                    targetItem = { type: "cell", obj: rowCells[c] }; break;
-                }
-            }
-        } else {
-            var mBounds = markerItem.obj.geometricBounds;
-            var markerCenterY = (mBounds[0] + mBounds[2]) / 2;
-            for (var j = 0; j < items.length; j++) {
-                if (items[j].type !== "frame" || items[j].obj === markerItem.obj) continue;
-                var fBounds = items[j].obj.geometricBounds;
-                var frameCenterY = (fBounds[0] + fBounds[2]) / 2;
-                if (Math.abs(markerCenterY - frameCenterY) < 10) {
-                    var str = "";
-                    try { str = String(items[j].obj.texts[0].contents); } catch(e){}
-                    if (str.match(/\([Xx\d]*\)/)) { targetItem = items[j]; break; }
-                }
-            }
-        }
+        var targetItem = findTOCPageTargetItem(items, markerItem);
 
         if (targetItem !== null) {
-            var oldText = targetItem.obj.texts[0].contents;
-            var newText = oldText.replace(/\([Xx\d]*\)/, "(" + newStartPage + ")");
-            targetItem.obj.texts[0].contents = newText;
+            var targetText = getHyperlinkTextObjectFromItemEntry(targetItem);
+            if (!targetText || !targetText.isValid) return;
+            var oldText = getTOCItemContents(targetItem);
+            var newText = oldText.replace(/\([^()]*\)/, "(" + newStartPage + ")");
+            targetText.contents = newText;
             createOrUpdateTOCLanguageHyperlink(doc, targetItem, langCode, newStartPage);
         }
     } catch(e) {}
+}
+
+function runAutomaticHyperlinksForBDA(doc, config) {
+    if (!config || !config.autoReferenceLinks) return null;
+
+    var pageMappings = collectCoverHyperlinkPageMappings(doc);
+    if (!hasOwnMappings(pageMappings)) return null;
+
+    var normalizedSymbols = normalizeRefSymbols(config.autoReferenceSymbols || refSymbolsSetting);
+    saveHyperlinkSettings(normalizedSymbols, pageMappings);
+
+    try {
+        updateProgress(99, t("link_working"), 99, t("link_working"));
+    } catch (progressErr) {}
+
+    try {
+        return linkPackageReferences(doc, normalizedSymbols, pageMappings, { throwOnNoMatches: false });
+    } catch (e) {
+        writeLog("Auto-Hyperlinks konnten nicht erstellt werden: " + (e.message || e), "WARNUNG");
+    }
+    return null;
 }
 
 function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
@@ -4556,11 +4694,13 @@ function getReferencePageDestinationForLanguage(doc, langCode, pageMappings, des
     return destinationCache[langCode];
 }
 
-function linkPackageReferences(doc, symbols, pageMappings) {
+function linkPackageReferences(doc, symbols, pageMappings, options) {
     if (!doc || !doc.isValid) throw new Error(t("no_document_open"));
 
     var mappings = normalizeHyperlinkPageMappings(pageMappings || hyperlinkPageMappings);
     var normalizedSymbols = normalizeRefSymbols(symbols || refSymbolsSetting);
+    var throwOnNoMatches = true;
+    if (options && options.hasOwnProperty("throwOnNoMatches")) throwOnNoMatches = !!options.throwOnNoMatches;
     var existingHyperlinksBySource = buildExistingHyperlinkSourceMap(doc);
     var pageDestinationCache = {};
     var urlDestinationCache = buildURLDestinationCache(doc);
@@ -4636,7 +4776,15 @@ function linkPackageReferences(doc, symbols, pageMappings) {
 
     var urlResult = linkDocumentUrls(doc, existingHyperlinksBySource, urlDestinationCache);
     if (matchedReferences.length === 0 && urlResult.found === 0) {
-        throw new Error(t("link_no_matches"));
+        if (throwOnNoMatches) throw new Error(t("link_no_matches"));
+        return {
+            symbols: normalizedSymbols,
+            links: 0,
+            urlLinks: 0,
+            skipped: 0,
+            mappingSummary: formatHyperlinkPageMappings(mappings),
+            noMatches: true
+        };
     }
 
     return {
