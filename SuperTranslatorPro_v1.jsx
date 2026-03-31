@@ -714,8 +714,24 @@ function getSupportedGlossaryLanguageHeaders() {
     return headers;
 }
 
+function normalizeGlossaryLanguageCode(code) {
+    return String(code || "").replace(/^\s+|\s+$/g, "").toUpperCase();
+}
+
+function getGlossaryLanguageShortCode(code) {
+    var upper = normalizeGlossaryLanguageCode(code);
+    return upper.length >= 2 ? upper.substring(0, 2) : upper;
+}
+
+function isMatchingGlossaryLanguageCode(a, b) {
+    var upperA = normalizeGlossaryLanguageCode(a);
+    var upperB = normalizeGlossaryLanguageCode(b);
+    if (upperA === "" || upperB === "") return false;
+    return upperA === upperB || getGlossaryLanguageShortCode(upperA) === getGlossaryLanguageShortCode(upperB);
+}
+
 function isSupportedGlossaryLanguageHeader(header) {
-    var upper = String(header || "").replace(/^\s+|\s+$/g, "").toUpperCase();
+    var upper = normalizeGlossaryLanguageCode(header);
     if (upper === "DE" || upper === "EN-US" || upper === "EN-GB" || upper === "PT-PT") return true;
     for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
         if (LEGACY_BDA_LANGUAGE_OPTIONS[i].code === upper) return true;
@@ -724,7 +740,7 @@ function isSupportedGlossaryLanguageHeader(header) {
 }
 
 function isGlossaryMetaHeader(header) {
-    return /^_(INFO|FLAGS|ALIASES|CATEGORY|NOTE|NOTES|COMMENT|COMMENTS)$/i.test(String(header || ""));
+    return /^_(INFO|FLAGS|ALIASES|CATEGORY|SOURCE|NOTE|NOTES|COMMENT|COMMENTS)$/i.test(String(header || ""));
 }
 
 function isGlossaryCommentRow(value) {
@@ -779,7 +795,7 @@ function escapeCSVField(value, separator) {
 
 function buildGlossaryTemplateCSV() {
     var separator = ";";
-    var headers = getSupportedGlossaryLanguageHeaders().concat(["_INFO", "_FLAGS", "_ALIASES", "_CATEGORY"]);
+    var headers = getSupportedGlossaryLanguageHeaders().concat(["_INFO", "_FLAGS", "_ALIASES", "_SOURCE", "_CATEGORY"]);
     var rows = [];
 
     rows.push(headers);
@@ -790,10 +806,11 @@ function buildGlossaryTemplateCSV() {
     rows.push(["# Leere Sprachzellen bedeuten: kein Glossar-Eintrag fuer diese Sprache, DeepL darf normal uebersetzen."]);
     rows.push(["# DNT in einer Sprachzelle bedeutet: in genau dieser Sprache nicht uebersetzen, Originaltext beibehalten."]);
     rows.push(["# _FLAGS=DNT bedeutet: in allen Sprachen nicht uebersetzen, z. B. bei technischen Codes wie M5*15."]);
-    rows.push(["# _ALIASES = alternative deutsche Schreibweisen oder Synonyme, mit | trennen, z. B. Duschwanne|Duschtasse."]);
+    rows.push(["# _ALIASES = alternative Schreibweisen in der Quellsprache dieser Zeile, mit | trennen, z. B. Duschwanne|Duschtasse."]);
+    rows.push(["# _SOURCE = Quellsprache dieser Zeile. Standard ist DE. Wenn die Quelle z. B. Englisch ist, hier EN eintragen."]);
     rows.push(["# _INFO = interne Erklaerung fuer Kollegen, warum der Eintrag existiert oder wie er benutzt werden soll."]);
     rows.push(["# _CATEGORY = freie Gruppierung, z. B. UI, PRODUCT, DOC, TECH, SAFETY."]);
-    rows.push(["# TIPP: Wenn mehrere deutsche Varianten denselben Zielbegriff bekommen sollen, den Hauptbegriff in DE pflegen und die Varianten in _ALIASES eintragen."]);
+    rows.push(["# TIPP: Wenn mehrere Varianten derselben Quellsprache denselben Zielbegriff bekommen sollen, den Hauptbegriff in der Quellspalte pflegen und Varianten in _ALIASES eintragen."]);
     rows.push(["# TIPP: Fuer feste Produktnamen oder Artikelcodes am besten DNT oder eine feste Zieluebersetzung verwenden."]);
 
     rows.push(createGlossaryTemplateRow(headers, {
@@ -839,6 +856,14 @@ function buildGlossaryTemplateCSV() {
         EN: "Shower base",
         _ALIASES: "Duschwanne|Duschtasse",
         _INFO: "Beispiel mit Aliasen",
+        _CATEGORY: "PRODUCT"
+    }));
+
+    rows.push(createGlossaryTemplateRow(headers, {
+        DE: "Montagebox",
+        EN: "Mounting box",
+        _SOURCE: "EN",
+        _INFO: "Beispiel: Quelle ist Englisch, Ziel kann z. B. DE sein",
         _CATEGORY: "PRODUCT"
     }));
 
@@ -1195,9 +1220,21 @@ function loadCSVGlossary(path) {
 
             if (meta.hasOwnProperty("_FLAGS")) entry.__flags = parseGlossaryFlags(meta._FLAGS);
             if (meta.hasOwnProperty("_ALIASES")) entry.__aliases = parseGlossaryAliases(meta._ALIASES);
+            entry.__sourceLang = "DE";
+            if (meta.hasOwnProperty("_SOURCE")) {
+                var sourceCandidate = normalizeGlossaryLanguageCode(meta._SOURCE);
+                if (isSupportedGlossaryLanguageHeader(sourceCandidate)) entry.__sourceLang = sourceCandidate;
+            }
             if (hasOwnMappings(meta)) entry.__meta = meta;
 
-            glossary[original] = entry;
+            var sourceText = original;
+            if (entry.__sourceLang !== "DE" && entry.hasOwnProperty(entry.__sourceLang)) {
+                sourceText = String(entry[entry.__sourceLang] || "").replace(/^\s+|\s+$/g, "");
+            }
+            if (sourceText === "") sourceText = original;
+            entry.__sourceText = sourceText;
+
+            glossary[sourceText] = entry;
 
             if (entry.__aliases && entry.__aliases.length > 0) {
                 for (var aliasIdx = 0; aliasIdx < entry.__aliases.length; aliasIdx++) {
@@ -1213,6 +1250,11 @@ function loadCSVGlossary(path) {
 function getGlossaryOverrideForTarget(entry, targetUpper, shortTarget) {
     if (!entry) return null;
     var rawValue = null;
+    var sourceLang = entry.__sourceLang ? normalizeGlossaryLanguageCode(entry.__sourceLang) : "DE";
+
+    if ((!entry.__flags || !entry.__flags.DNT) && (isMatchingGlossaryLanguageCode(sourceLang, targetUpper) || isMatchingGlossaryLanguageCode(sourceLang, shortTarget))) {
+        return null;
+    }
 
     if (entry.hasOwnProperty(targetUpper)) rawValue = entry[targetUpper];
     else if (entry.hasOwnProperty(shortTarget)) rawValue = entry[shortTarget];
