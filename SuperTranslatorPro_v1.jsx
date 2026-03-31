@@ -89,7 +89,7 @@ var UI_STRINGS = {
     hyperlink_target_page: { de: "Zielseite:", en: "Target page:" },
     hyperlink_save_mapping: { de: "Zuordnung speichern", en: "Save mapping" },
     hyperlink_remove_mapping: { de: "Zuordnung entfernen", en: "Remove mapping" },
-    hyperlink_saved_mappings: { de: "Gespeicherte Zuordnungen:", en: "Saved mappings:" },
+    hyperlink_saved_mappings: { de: "Aktuelle Zuordnungen:", en: "Current mappings:" },
     hyperlink_no_mappings_saved: { de: "Keine Sprach-Zielseiten gespeichert.", en: "No language page mappings saved." },
     hyperlink_execute: { de: "Verlinken", en: "Link" },
     link_working: { de: "Referenz-Hyperlinks werden erstellt...", en: "Creating reference hyperlinks..." },
@@ -412,9 +412,8 @@ function hasOwnMappings(map) {
 
 function saveHyperlinkSettings(symbols, pageMappings) {
     refSymbolsSetting = normalizeRefSymbols(symbols || refSymbolsSetting);
-    hyperlinkPageMappings = normalizeHyperlinkPageMappings(pageMappings || hyperlinkPageMappings);
     app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
-    app.insertLabel(HYPERLINK_PAGE_MAP_LABEL, serializeJSON(hyperlinkPageMappings));
+    if (pageMappings) hyperlinkPageMappings = normalizeHyperlinkPageMappings(pageMappings);
 }
 
 function collectTOCTextEntries(page) {
@@ -508,9 +507,14 @@ function collectCoverHyperlinkPageMappings(doc) {
 }
 
 function getHyperlinkPageMappingsForDialog(doc) {
-    var coverMappings = collectCoverHyperlinkPageMappings(doc);
-    if (hasOwnMappings(coverMappings)) return coverMappings;
-    return normalizeHyperlinkPageMappings(hyperlinkPageMappings);
+    return collectCoverHyperlinkPageMappings(doc);
+}
+
+function getRuntimeHyperlinkPageMappings(doc, explicitMappings) {
+    var liveMappings = collectCoverHyperlinkPageMappings(doc);
+    if (hasOwnMappings(liveMappings)) return liveMappings;
+    if (explicitMappings) return normalizeHyperlinkPageMappings(explicitMappings);
+    return {};
 }
 
 function getTextObjectParentPage(textObj) {
@@ -649,7 +653,7 @@ if (!apiKey || apiKey === "") {
 var csvPath = resolveCSVPath(app.extractLabel(CSV_PATH_LABEL) || "");
 var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
 var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
-var hyperlinkPageMappings = loadHyperlinkPageMappings(app.extractLabel(HYPERLINK_PAGE_MAP_LABEL) || "");
+var hyperlinkPageMappings = {};
 var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
@@ -1490,7 +1494,7 @@ function showHyperlinkDialog(doc) {
     if (dlg.show() !== 1) return null;
     return {
         symbols: refSymbolsSetting,
-        pageMappings: hyperlinkPageMappings
+        pageMappings: normalizeHyperlinkPageMappings(hyperlinkMappingsDraft)
     };
 }
 
@@ -4732,7 +4736,7 @@ function getReferencePageDestinationForLanguage(doc, langCode, pageMappings, des
 function linkPackageReferences(doc, symbols, pageMappings, options) {
     if (!doc || !doc.isValid) throw new Error(t("no_document_open"));
 
-    var mappings = normalizeHyperlinkPageMappings(pageMappings || hyperlinkPageMappings);
+    var mappings = getRuntimeHyperlinkPageMappings(doc, pageMappings);
     var normalizedSymbols = normalizeRefSymbols(symbols || refSymbolsSetting);
     var throwOnNoMatches = true;
     if (options && options.hasOwnProperty("throwOnNoMatches")) throwOnNoMatches = !!options.throwOnNoMatches;
