@@ -1638,13 +1638,6 @@ var bdaHyperlinkSymbolsInput = grpBDAHyperlinkSymbols.add("edittext", undefined,
 bdaHyperlinkSymbolsInput.characters = 12;
 bdaHyperlinkSymbolsInput.helpTip = t("reference_symbols");
 
-var grpBDABackPageTracker = panelBDA.add("group");
-grpBDABackPageTracker.indent = 20;
-grpBDABackPageTracker.add("statictext", undefined, t("back_page_tracker_label"));
-var bdaBackPageTrackerInput = grpBDABackPageTracker.add("edittext", undefined, backPageTrackerSetting);
-bdaBackPageTrackerInput.characters = 28;
-bdaBackPageTrackerInput.helpTip = t("back_page_tracker_help");
-
 var cbOnlyTextUpdate = panelBDA.add("checkbox", undefined, t("only_text_update"));
 cbOnlyTextUpdate.indent = 20;
 cbOnlyTextUpdate.value = false;
@@ -1655,8 +1648,6 @@ function updateBDAHyperlinkControls(enabled) {
     checkAutoBDAHyperlinks.enabled = !!enabled;
     grpBDAHyperlinkSymbols.enabled = inputEnabled;
     bdaHyperlinkSymbolsInput.enabled = inputEnabled;
-    grpBDABackPageTracker.enabled = !!enabled;
-    bdaBackPageTrackerInput.enabled = !!enabled;
 }
 
 // START-ZUSTAND FESTLEGEN
@@ -1919,6 +1910,14 @@ btnSettings.onClick = function() {
         }
     };
 
+    setWin.add("panel", undefined, "");
+    var autoSettingsLabel = setWin.add("statictext", undefined, t("auto_settings"));
+    autoSettingsLabel.graphics.font = ScriptUI.newFont(autoSettingsLabel.graphics.font.family, "BOLD", autoSettingsLabel.graphics.font.size);
+    setWin.add("statictext", undefined, t("back_page_tracker_label"));
+    var backPageTrackerInput = setWin.add("edittext", undefined, backPageTrackerSetting);
+    backPageTrackerInput.characters = 40;
+    backPageTrackerInput.helpTip = t("back_page_tracker_help");
+
     var g = setWin.add("group");
     g.alignment = "fill";
     g.alignChildren = ["fill", "center"];
@@ -1947,9 +1946,11 @@ btnSettings.onClick = function() {
         csvPath = csvInput.text;
         csvPathSettingRaw = csvPath;
         tmPath = tmInput.text;
+        backPageTrackerSetting = normalizeBackPageTrackerSetting(backPageTrackerInput.text);
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(CSV_PATH_LABEL, csvPath); 
         app.insertLabel(TM_PATH_LABEL, tmPath); 
+        app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
         
         var selForm = "default";
         if (formDrop.selection.index === 1) selForm = "more"; else if (formDrop.selection.index === 2) selForm = "less";
@@ -3358,7 +3359,7 @@ btnTranslate.onClick = function() {
         onlyTextUpdate: cbOnlyTextUpdate ? cbOnlyTextUpdate.value : false,
         autoReferenceLinks: checkAutoBDAHyperlinks ? checkAutoBDAHyperlinks.value : false,
         autoReferenceSymbols: bdaHyperlinkSymbolsInput ? bdaHyperlinkSymbolsInput.text : refSymbolsSetting,
-        backPageTracker: bdaBackPageTrackerInput ? bdaBackPageTrackerInput.text : backPageTrackerSetting
+        backPageTracker: backPageTrackerSetting
     };
 
     if (config.mode !== "BDA" && config.lang.indexOf("-") !== -1) {
