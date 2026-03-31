@@ -1,20 +1,19 @@
-DE;EN;FR;IT;ES;CS;HU;BG;DA;EL;ET;FI;LT;LV;NL;PL;PT;RO;RU;SK;SL;SV;_INFO;_FLAGS;_ALIASES;_SOURCE;_CATEGORY
+_SOURCE;_INFO;_FLAGS;_ALIASES;DE;EN;FR;IT;ES;CS;HU;BG;DA;EL;ET;FI;LT;LV;NL;PL;PT;RO;RU;SK;SL;SV
 # Super Translator Pro Glossary Template
-# SO WIRD DIE DATEI VERWENDET
-# DE = deutscher Quellbegriff, so wie er im Layout wirklich vorkommt.
+# SO WIRD DIE DATEI VERWENDET:
 # EN / FR / IT / ES ... = gewuenschte Zieluebersetzung fuer genau diese Sprache.
 # Leere Sprachzellen bedeuten: kein Glossar-Eintrag fuer diese Sprache, DeepL darf normal uebersetzen.
 # DNT in einer Sprachzelle bedeutet: in genau dieser Sprache nicht uebersetzen, Originaltext beibehalten.
-# _FLAGS=DNT bedeutet: in allen Sprachen nicht uebersetzen, z. B. bei technischen Codes wie M5*15.
+# _FLAGS=DNT (DNT = Do Not Translate) bedeutet: in allen Sprachen nicht uebersetzen, z. B. bei technischen Codes wie M5*15.
 # _ALIASES = alternative Schreibweisen in der Quellsprache dieser Zeile, mit | trennen, z. B. Duschwanne|Duschtasse.
-# _SOURCE = Quellsprache dieser Zeile. Standard ist DE. Wenn die Quelle z. B. Englisch ist, hier EN eintragen.
-# _INFO = interne Erklaerung fuer Kollegen, warum der Eintrag existiert oder wie er benutzt werden soll.
-# _CATEGORY = freie Gruppierung, z. B. UI, PRODUCT, DOC, TECH, SAFETY.
+# _SOURCE = Quellsprache dieser Zeile. Leer = Standard DE. Wenn die Quelle z. B. Englisch ist, hier EN eintragen.
+# _INFO = Infos & Erklaerung
 # TIPP: Wenn mehrere Varianten derselben Quellsprache denselben Zielbegriff bekommen sollen, den Hauptbegriff in der Quellspalte pflegen und Varianten in _ALIASES eintragen.
 # TIPP: Fuer feste Produktnamen oder Artikelcodes am besten DNT oder eine feste Zieluebersetzung verwenden.
-Warnung!;Warning!;Avertissement !;Avvertimento!;Advertencia!;Varovani!;Figyelmeztetes!;;;;;;;;;;;;;;;Beispiel fuer UI-Hinweis;;;;UI
-Lieferumfang;Scope of delivery;Contenu de la livraison;Contenuto della fornitura;Alcance de la entrega;Rozsah dodavky;Szallitasi terjedelem;;;;;;;;;;;;;;;Produkt-/Dokumentbegriff;;;;DOC
-Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;;;Produktbegriff, bei Bedarf manuell fuer weitere Sprachen pflegen;;;;PRODUCT
-M5*15;;;;;;;;;;;;;;;;;;;;;;Technischer Code, in allen Sprachen unveraendert lassen;DNT;;;TECH
-Duschunterteil;Shower base;;;;;;;;;;;;;;;;;;;;;;Beispiel mit Aliasen;;Duschwanne|Duschtasse;;PRODUCT
-Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;;;Beispiel: Quelle ist Englisch, Ziel kann z. B. DE sein;;;EN;PRODUCT
+
+;Beispiel fuer UI-Hinweis;;;Warnung!;Warning!;Avertissement !;Avvertimento!;Advertencia!;Varovani!;Figyelmeztetes!;;;;;;;;;;;;;;;
+;Produkt-/Dokumentbegriff;;;Lieferumfang;Scope of delivery;Contenu de la livraison;Contenuto della fornitura;Alcance de la entrega;Rozsah dodavky;Szallitasi terjedelem;;;;;;;;;;;;;;;
+;Produktbegriff, bei Bedarf manuell fuer weitere Sprachen pflegen;;;Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;;;
+;Technischer Code, in allen Sprachen unveraendert lassen;DNT;;M5*15;;;;;;;;;;;;;;;;;;;;;;
+;Beispiel mit Aliasen;;Duschwanne|Duschtasse;Duschunterteil;Shower base;;;;;;;;;;;;;;;;;;;;;;
+EN;Beispiel: Quelle ist Englisch, Ziel kann z. B. DE sein;;;Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;;;

@@ -795,23 +795,22 @@ function escapeCSVField(value, separator) {
 
 function buildGlossaryTemplateCSV() {
     var separator = ";";
-    var headers = getSupportedGlossaryLanguageHeaders().concat(["_INFO", "_FLAGS", "_ALIASES", "_SOURCE", "_CATEGORY"]);
+    var headers = ["_SOURCE", "_INFO", "_FLAGS", "_ALIASES"].concat(getSupportedGlossaryLanguageHeaders());
     var rows = [];
 
     rows.push(headers);
     rows.push(["# Super Translator Pro Glossary Template"]);
-    rows.push(["# SO WIRD DIE DATEI VERWENDET"]);
-    rows.push(["# DE = deutscher Quellbegriff, so wie er im Layout wirklich vorkommt."]);
+    rows.push(["# SO WIRD DIE DATEI VERWENDET:"]);
     rows.push(["# EN / FR / IT / ES ... = gewuenschte Zieluebersetzung fuer genau diese Sprache."]);
     rows.push(["# Leere Sprachzellen bedeuten: kein Glossar-Eintrag fuer diese Sprache, DeepL darf normal uebersetzen."]);
     rows.push(["# DNT in einer Sprachzelle bedeutet: in genau dieser Sprache nicht uebersetzen, Originaltext beibehalten."]);
-    rows.push(["# _FLAGS=DNT bedeutet: in allen Sprachen nicht uebersetzen, z. B. bei technischen Codes wie M5*15."]);
+    rows.push(["# _FLAGS=DNT (DNT = Do Not Translate) bedeutet: in allen Sprachen nicht uebersetzen, z. B. bei technischen Codes wie M5*15."]);
     rows.push(["# _ALIASES = alternative Schreibweisen in der Quellsprache dieser Zeile, mit | trennen, z. B. Duschwanne|Duschtasse."]);
-    rows.push(["# _SOURCE = Quellsprache dieser Zeile. Standard ist DE. Wenn die Quelle z. B. Englisch ist, hier EN eintragen."]);
-    rows.push(["# _INFO = interne Erklaerung fuer Kollegen, warum der Eintrag existiert oder wie er benutzt werden soll."]);
-    rows.push(["# _CATEGORY = freie Gruppierung, z. B. UI, PRODUCT, DOC, TECH, SAFETY."]);
+    rows.push(["# _SOURCE = Quellsprache dieser Zeile. Leer = Standard DE. Wenn die Quelle z. B. Englisch ist, hier EN eintragen."]);
+    rows.push(["# _INFO = Infos & Erklaerung"]);
     rows.push(["# TIPP: Wenn mehrere Varianten derselben Quellsprache denselben Zielbegriff bekommen sollen, den Hauptbegriff in der Quellspalte pflegen und Varianten in _ALIASES eintragen."]);
     rows.push(["# TIPP: Fuer feste Produktnamen oder Artikelcodes am besten DNT oder eine feste Zieluebersetzung verwenden."]);
+    rows.push([""]);
 
     rows.push(createGlossaryTemplateRow(headers, {
         DE: "Warnung!",
@@ -821,8 +820,7 @@ function buildGlossaryTemplateCSV() {
         ES: "Advertencia!",
         CS: "Varovani!",
         HU: "Figyelmeztetes!",
-        _INFO: "Beispiel fuer UI-Hinweis",
-        _CATEGORY: "UI"
+        _INFO: "Beispiel fuer UI-Hinweis"
     }));
 
     rows.push(createGlossaryTemplateRow(headers, {
@@ -833,38 +831,33 @@ function buildGlossaryTemplateCSV() {
         ES: "Alcance de la entrega",
         CS: "Rozsah dodavky",
         HU: "Szallitasi terjedelem",
-        _INFO: "Produkt-/Dokumentbegriff",
-        _CATEGORY: "DOC"
+        _INFO: "Produkt-/Dokumentbegriff"
     }));
 
     rows.push(createGlossaryTemplateRow(headers, {
         DE: "Montagebox",
         EN: "Mounting box",
-        _INFO: "Produktbegriff, bei Bedarf manuell fuer weitere Sprachen pflegen",
-        _CATEGORY: "PRODUCT"
+        _INFO: "Produktbegriff, bei Bedarf manuell fuer weitere Sprachen pflegen"
     }));
 
     rows.push(createGlossaryTemplateRow(headers, {
         DE: "M5*15",
         _FLAGS: "DNT",
-        _INFO: "Technischer Code, in allen Sprachen unveraendert lassen",
-        _CATEGORY: "TECH"
+        _INFO: "Technischer Code, in allen Sprachen unveraendert lassen"
     }));
 
     rows.push(createGlossaryTemplateRow(headers, {
         DE: "Duschunterteil",
         EN: "Shower base",
         _ALIASES: "Duschwanne|Duschtasse",
-        _INFO: "Beispiel mit Aliasen",
-        _CATEGORY: "PRODUCT"
+        _INFO: "Beispiel mit Aliasen"
     }));
 
     rows.push(createGlossaryTemplateRow(headers, {
         DE: "Montagebox",
         EN: "Mounting box",
         _SOURCE: "EN",
-        _INFO: "Beispiel: Quelle ist Englisch, Ziel kann z. B. DE sein",
-        _CATEGORY: "PRODUCT"
+        _INFO: "Beispiel: Quelle ist Englisch, Ziel kann z. B. DE sein"
     }));
 
     var lines = [];
