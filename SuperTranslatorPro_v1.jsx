@@ -3784,34 +3784,51 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
 
         try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.itemLayer.visible = true; } catch (e4) {}
 
-        app.findGrepPreferences.findWhat = "###IMG_\\s*\\d+\\s*###";
-        var allFoundImages = doc.findGrep();
-        for (var f = allFoundImages.length - 1; f >= 0; f--) {
-            var placeholderRange = allFoundImages[f];
-            var match = placeholderRange.contents.match(/IMG_\s*(\d+)/);
-            if (!match) continue;
-            var imgID = match[1];
-            var targetImageInStorage = null;
-            var storageItems = storageEnv.frame.allPageItems;
-            for (var j = 0; j < storageItems.length; j++) {
-                if (storageItems[j].label === "TMP_IMG_" + imgID) {
-                    targetImageInStorage = storageItems[j];
-                    break;
+        var restorePasses = 0;
+        var restoreLimit = 10000;
+        while (restorePasses < restoreLimit) {
+            app.findGrepPreferences.findWhat = "###IMG_\\s*\\d+\\s*###";
+            var allFoundImages = doc.findGrep();
+            if (!allFoundImages || allFoundImages.length === 0) break;
+
+            var restoredOne = false;
+            for (var f = allFoundImages.length - 1; f >= 0; f--) {
+                var placeholderRange = allFoundImages[f];
+                if (!placeholderRange || !placeholderRange.isValid) continue;
+
+                var match = placeholderRange.contents.match(/IMG_\s*(\d+)/);
+                if (!match) continue;
+
+                var imgID = match[1];
+                var targetImageInStorage = null;
+                var storageItems = storageEnv.frame.allPageItems;
+                for (var j = storageItems.length - 1; j >= 0; j--) {
+                    if (storageItems[j].label === "TMP_IMG_" + imgID) {
+                        targetImageInStorage = storageItems[j];
+                        break;
+                    }
                 }
-            }
-            if (targetImageInStorage !== null) {
+                if (targetImageInStorage === null) continue;
+
                 try {
                     var targetChar = targetImageInStorage.parent;
                     while (targetChar && targetChar.constructor.name !== "Character" && targetChar.constructor.name !== "Story" && targetChar.constructor.name !== "Application") targetChar = targetChar.parent;
                     if (targetChar && targetChar.constructor.name === "Character") {
                         targetChar.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
                         placeholderRange.remove();
-                    } else {
+                        restoredOne = true;
+                        break;
+                    } else if (targetImageInStorage.parent && targetImageInStorage.parent.isValid) {
                         targetImageInStorage.parent.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
                         placeholderRange.remove();
+                        restoredOne = true;
+                        break;
                     }
                 } catch (e5) {}
             }
+
+            if (!restoredOne) break;
+            restorePasses++;
         }
     } catch (restoreErr) {
     } finally {
