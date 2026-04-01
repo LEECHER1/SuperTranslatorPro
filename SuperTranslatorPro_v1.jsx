@@ -4852,6 +4852,47 @@ function findTranslationMarkerMatches(doc, preferredScope, markerText, includeOu
     }
 }
 
+function getFirstParkedTable(frame) {
+    if (!frame || !frame.isValid) return null;
+    try {
+        if (frame.tables && frame.tables.length > 0) {
+            var table = frame.tables[0];
+            if (table && table.isValid) return table;
+        }
+    } catch (e) {}
+    return null;
+}
+
+function restoreParkedTableAtMarker(parked, placeholderRange) {
+    var parkedTable = getFirstParkedTable(parked ? parked.frame : null);
+    var anchorChar = null;
+    try {
+        if (parked && parked.anchorChar && parked.anchorChar.isValid) anchorChar = parked.anchorChar;
+    } catch (e) { anchorChar = null; }
+    if (!anchorChar) anchorChar = getParkedTableAnchorCharacter(parked ? parked.frame : null);
+
+    return restoreInlineMarkerRange(placeholderRange, function(targetInsertionPoint) {
+        var restored = false;
+        if (parkedTable && parkedTable.isValid) {
+            try {
+                parkedTable.duplicate(LocationOptions.AFTER, targetInsertionPoint);
+                restored = true;
+            } catch (dupErr) {}
+            if (!restored) {
+                try {
+                    parkedTable.move(LocationOptions.AFTER, targetInsertionPoint);
+                    restored = true;
+                } catch (moveErr) {}
+            }
+        }
+        if (!restored && anchorChar && anchorChar.isValid) {
+            anchorChar.move(LocationOptions.AFTER, targetInsertionPoint);
+            restored = true;
+        }
+        if (!restored) throw new Error("TABLE_RESTORE_FAILED");
+    });
+}
+
 function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
     try {
         app.findGrepPreferences = NothingEnum.nothing;
@@ -4865,16 +4906,7 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
             if (results.length > 0) {
                 var tableRestored = false;
                 try {
-                    var tableAnchor = null;
-                    try {
-                        if (parked.anchorChar && parked.anchorChar.isValid) tableAnchor = parked.anchorChar;
-                    } catch (anchorErr) { tableAnchor = null; }
-                    if (!tableAnchor) tableAnchor = getParkedTableAnchorCharacter(parked.frame);
-                    if (tableAnchor && tableAnchor.isValid) {
-                        tableRestored = restoreInlineMarkerRange(results[0], function(targetInsertionPoint) {
-                            tableAnchor.move(LocationOptions.AFTER, targetInsertionPoint);
-                        });
-                    }
+                    tableRestored = restoreParkedTableAtMarker(parked, results[0]);
                 } catch (e1) {}
                 if (!tableRestored) {
                     try { writeLog("Tabelle konnte nicht exakt wiederhergestellt werden: " + parked.marker, "WARNUNG"); } catch (eWarn) {}
