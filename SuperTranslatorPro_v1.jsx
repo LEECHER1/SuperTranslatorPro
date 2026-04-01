@@ -93,11 +93,10 @@ var UI_STRINGS = {
     about_title: { de: "Über Super Translator Pro", en: "About Super Translator Pro" },
     memory_write_warning: { de: "Memory-Warnung: Datei konnte nicht geschrieben werden.", en: "Memory warning: the file could not be written." },
     legacy_missing_title: { de: "Fehlende Musterseiten erzeugen", en: "Create Missing Master Pages" },
-    legacy_missing_info: { de: "Zielsprachen auswählen oder abwählen.\nBereits erkannte Sprachen sind automatisch aktiviert.\nDie Quellsprache wird automatisch erkannt und kann in der Reihenfolge mit verschoben werden.\nMit Reihenfolge bestimmst du die Position der Musterseiten (1 = zuerst).", en: "Select or deselect target languages.\nDetected languages are enabled automatically.\nThe source language is detected automatically and can also be repositioned in the order.\nUse the order field to control the master-page position (1 = first)." },
+    legacy_missing_info: { de: "Zielsprachen auswählen oder abwählen.\nBereits erkannte Sprachen sind automatisch aktiviert.\nMit Reihenfolge bestimmst du die Position der Musterseiten (1 = zuerst).", en: "Select or deselect target languages.\nDetected languages are enabled automatically.\nUse the order field to control the master-page position (1 = first)." },
     legacy_create: { de: "Übernehmen", en: "Apply" },
     legacy_language_label: { de: "Sprache", en: "Language" },
     legacy_order_label: { de: "Reihenfolge", en: "Order" },
-    legacy_source_label: { de: "Quellsprache:", en: "Source language:" },
     legacy_no_german_master: { de: "Keine deutsche Musterseite erkannt. Erwartet wurde ein schwarzes Kästchen mit 'de'.", en: "No German master page detected. Expected a black badge with 'de'." },
     legacy_creation_cancelled: { de: "Musterseiten-Erzeugung abgebrochen.", en: "Master-page creation cancelled." },
     legacy_no_languages_selected: { de: "Keine Zielsprachen für die automatische Musterseiten-Generierung ausgewählt.", en: "No target languages selected for automatic master-page creation." },
@@ -2306,36 +2305,17 @@ function findGermanLegacyMasterSpread(doc) {
     return null;
 }
 
-function getLegacyDetectedSourceCode(doc) {
-    var germanMaster = findGermanLegacyMasterSpread(doc);
-    if (germanMaster && germanMaster.isValid) {
-        var badge = findMasterLanguageBadge(germanMaster, "de");
-        if (badge && badge.code && isSupportedLegacyLanguageCode(badge.code)) {
-            return String(badge.code).toLowerCase();
-        }
-        var masterLang = getMasterLang(germanMaster.name);
-        if (masterLang && isSupportedLegacyLanguageCode(masterLang)) return String(masterLang).toLowerCase();
-    }
-    return "de";
-}
-
-function promptLegacyTargetLanguageSelection(preselectedCodes, doc, sourceCode) {
+function promptLegacyTargetLanguageSelection(preselectedCodes, doc) {
     var dlg = new Window("dialog", t("legacy_missing_title"));
     dlg.orientation = "column";
     dlg.alignChildren = ["fill", "top"];
-    dlg.spacing = 10;
-    dlg.margins = 16;
 
     var info = dlg.add("statictext", undefined, t("legacy_missing_info"), { multiline: true });
-    info.preferredSize.width = 560;
+    info.preferredSize.width = 360;
 
-    var normalizedSourceCode = String(sourceCode || getLegacyDetectedSourceCode(doc) || "de").toLowerCase();
-    var sourceGroup = dlg.add("group");
-    sourceGroup.orientation = "row";
-    sourceGroup.alignChildren = ["left", "center"];
-    sourceGroup.add("statictext", undefined, t("legacy_source_label"));
-    var sourceInput = sourceGroup.add("edittext", undefined, normalizedSourceCode.toUpperCase() + " (" + getLocalizedLanguageName(normalizedSourceCode) + ")", { readonly: true });
-    sourceInput.characters = 16;
+    var listGroup = dlg.add("group");
+    listGroup.orientation = "column";
+    listGroup.alignChildren = ["left", "top"];
 
     var defaultMap = { en: true, fr: true, it: true, es: true, cs: true, hu: true };
     var selectedMap = {};
@@ -2349,59 +2329,28 @@ function promptLegacyTargetLanguageSelection(preselectedCodes, doc, sourceCode) 
             if (defaultMap.hasOwnProperty(fallbackCode)) selectedMap[fallbackCode] = true;
         }
     }
-    var orderMap = buildLegacyLanguageOrderMap(doc, normalizedSourceCode);
-    var rows = [];
-    function addLegacyColumnHeader(parentGroup) {
-        var headerRow = parentGroup.add("group");
-        headerRow.orientation = "row";
-        headerRow.alignChildren = ["left", "center"];
-        var languageHeader = headerRow.add("statictext", undefined, t("legacy_language_label"));
-        languageHeader.preferredSize.width = 220;
-        var orderHeader = headerRow.add("statictext", undefined, t("legacy_order_label"));
-        orderHeader.preferredSize.width = 70;
-    }
+    var orderMap = buildLegacyLanguageOrderMap(doc);
+    var headerRow = listGroup.add("group");
+    headerRow.orientation = "row";
+    headerRow.alignChildren = ["left", "center"];
+    var languageHeader = headerRow.add("statictext", undefined, t("legacy_language_label"));
+    languageHeader.preferredSize.width = 220;
+    var orderHeader = headerRow.add("statictext", undefined, t("legacy_order_label"));
+    orderHeader.preferredSize.width = 90;
 
-    function addLegacyLanguageRow(parentGroup, code, enabledByDefault, forced, fallbackOrder) {
-        var row = parentGroup.add("group");
+    var rows = [];
+    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
+        var opt = LEGACY_BDA_LANGUAGE_OPTIONS[i];
+        var row = listGroup.add("group");
         row.orientation = "row";
         row.alignChildren = ["left", "center"];
-        var cb = row.add("checkbox", undefined, String(code).toUpperCase() + " (" + getLocalizedLanguageName(code) + ")");
+        var cb = row.add("checkbox", undefined, opt.code + " (" + getLocalizedLanguageName(opt.code) + ")");
         cb.preferredSize.width = 220;
-        cb.value = !!enabledByDefault;
-        if (forced) cb.onClick = function() { this.value = true; };
-        var orderInput = row.add("edittext", undefined, String(fallbackOrder));
-        orderInput.characters = 3;
+        cb.value = !!selectedMap[opt.code.toLowerCase()];
+        var orderInput = row.add("edittext", undefined, String(orderMap[opt.code.toLowerCase()] || (i + 1)));
+        orderInput.characters = 4;
         orderInput.justify = "center";
-        rows.push({ code: String(code).toLowerCase(), box: cb, orderField: orderInput, forced: !!forced });
-    }
-
-    var allCodes = [normalizedSourceCode];
-    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) allCodes.push(String(LEGACY_BDA_LANGUAGE_OPTIONS[i].code || "").toLowerCase());
-
-    var listGroup = dlg.add("group");
-    listGroup.orientation = "row";
-    listGroup.alignChildren = ["left", "top"];
-    listGroup.spacing = 18;
-
-    var listColumns = [];
-    for (var col = 0; col < 2; col++) {
-        var columnGroup = listGroup.add("group");
-        columnGroup.orientation = "column";
-        columnGroup.alignChildren = ["left", "top"];
-        addLegacyColumnHeader(columnGroup);
-        listColumns.push(columnGroup);
-    }
-
-    var rowsPerColumn = Math.ceil(allCodes.length / listColumns.length);
-    for (var codeIndex = 0; codeIndex < allCodes.length; codeIndex++) {
-        var code = allCodes[codeIndex];
-        var parentColumn = listColumns[Math.min(listColumns.length - 1, Math.floor(codeIndex / rowsPerColumn))];
-        var fallbackOrder = orderMap[code] || (codeIndex + 1);
-        if (code === normalizedSourceCode) {
-            addLegacyLanguageRow(parentColumn, code, true, true, fallbackOrder);
-        } else {
-            addLegacyLanguageRow(parentColumn, code, !!selectedMap[code], false, fallbackOrder);
-        }
+        rows.push({ code: opt.code.toLowerCase(), box: cb, orderField: orderInput });
     }
 
     var buttonRow = dlg.add("group");
@@ -2421,11 +2370,11 @@ function promptLegacyTargetLanguageSelection(preselectedCodes, doc, sourceCode) 
         var rowInfo = rows[j];
         entries.push({
             code: rowInfo.code,
-            enabled: rowInfo.forced ? true : !!rowInfo.box.value,
+            enabled: !!rowInfo.box.value,
             order: normalizeLegacyOrderValue(rowInfo.orderField.text, orderMap[rowInfo.code] || (j + 1))
         });
     }
-    return buildLegacyLanguageSelectionResult(entries, orderMap, normalizedSourceCode);
+    return buildLegacyLanguageSelectionResult(entries, orderMap);
 }
 
 function collectLegacyBDALanguageTasks(doc, preferredCodes) {
@@ -2462,34 +2411,27 @@ function collectLegacyBDALanguageTasks(doc, preferredCodes) {
     return tasks;
 }
 
-function collectLegacyMasterCodesInDocumentOrder(doc, sourceCode) {
+function collectLegacyMasterCodesInDocumentOrder(doc) {
     var codes = [];
     var seen = {};
-    var normalizedSourceCode = String(sourceCode || "de").toLowerCase();
     try {
         for (var i = 0; i < doc.masterSpreads.length; i++) {
             var code = getMasterLang(doc.masterSpreads[i].name);
-            if (!code || seen[code] || !isSupportedLegacyLanguageCode(code)) continue;
+            if (!code || code === "de" || seen[code] || !isSupportedLegacyLanguageCode(code)) continue;
             seen[code] = true;
             codes.push(code);
         }
     } catch (e) {}
-    if (!seen[normalizedSourceCode]) {
-        codes.unshift(normalizedSourceCode);
-        seen[normalizedSourceCode] = true;
-    }
     return codes;
 }
 
-function buildLegacyLanguageOrderMap(doc, sourceCode) {
+function buildLegacyLanguageOrderMap(doc) {
     var orderMap = {};
     var nextOrder = 1;
-    var normalizedSourceCode = String(sourceCode || "de").toLowerCase();
-    var existingCodes = collectLegacyMasterCodesInDocumentOrder(doc, normalizedSourceCode);
+    var existingCodes = collectLegacyMasterCodesInDocumentOrder(doc);
     for (var i = 0; i < existingCodes.length; i++) {
         orderMap[existingCodes[i]] = nextOrder++;
     }
-    if (!orderMap[normalizedSourceCode]) orderMap[normalizedSourceCode] = nextOrder++;
     for (var j = 0; j < LEGACY_BDA_LANGUAGE_OPTIONS.length; j++) {
         var code = String(LEGACY_BDA_LANGUAGE_OPTIONS[j].code || "").toLowerCase();
         if (!orderMap[code]) orderMap[code] = nextOrder++;
@@ -2503,9 +2445,8 @@ function normalizeLegacyOrderValue(rawValue, fallbackValue) {
     return fallbackValue;
 }
 
-function buildLegacyLanguageSelectionResult(entries, fallbackOrderMap, sourceCode) {
+function buildLegacyLanguageSelectionResult(entries, fallbackOrderMap) {
     var sorted = [];
-    var normalizedSourceCode = String(sourceCode || "de").toLowerCase();
     for (var i = 0; i < entries.length; i++) sorted.push(entries[i]);
     sorted.sort(function(a, b) {
         if (a.order !== b.order) return a.order - b.order;
@@ -2518,22 +2459,12 @@ function buildLegacyLanguageSelectionResult(entries, fallbackOrderMap, sourceCod
     });
 
     var selectedCodes = [];
-    var selectedTargetCodes = [];
     var orderedCodes = [];
     for (var j = 0; j < sorted.length; j++) {
         orderedCodes.push(sorted[j].code);
-        if (sorted[j].enabled) {
-            selectedCodes.push(sorted[j].code);
-            if (sorted[j].code !== normalizedSourceCode) selectedTargetCodes.push(sorted[j].code);
-        }
+        if (sorted[j].enabled) selectedCodes.push(sorted[j].code);
     }
-    return {
-        entries: sorted,
-        selectedCodes: selectedCodes,
-        selectedTargetCodes: selectedTargetCodes,
-        orderedCodes: orderedCodes,
-        sourceCode: normalizedSourceCode
-    };
+    return { entries: sorted, selectedCodes: selectedCodes, orderedCodes: orderedCodes };
 }
 
 function getMasterSpreadPrefix(masterSpread) {
@@ -2580,191 +2511,25 @@ function getLegacyMasterCreationState(germanMaster, langTasks) {
     return { anchor: anchor, nextPrefixIndex: maxIndex + 1 };
 }
 
-function refreshLegacyMasterPrefixes(orderedMasters) {
-    if (!orderedMasters || orderedMasters.length === 0) return;
-    for (var i = 0; i < orderedMasters.length; i++) {
-        var master = orderedMasters[i];
-        if (!master || !master.isValid) continue;
-        var code = getMasterLang(master.name);
-        if (!code || !isSupportedLegacyLanguageCode(code)) continue;
-        setMasterSpreadLanguageNaming(master, makeAlphabeticIndex(i + 1), code);
-    }
-}
-
-function reorderLegacyTargetMasters(doc, germanMaster, orderedCodes, sourceCode) {
+function reorderLegacyTargetMasters(doc, germanMaster, orderedCodes) {
     if (!doc || !doc.isValid || !germanMaster || !germanMaster.isValid) return;
-    var normalizedSourceCode = String(sourceCode || "de").toLowerCase();
 
     var mastersByCode = {};
-    var documentOrderMasters = [];
     for (var i = 0; i < doc.masterSpreads.length; i++) {
         var master = doc.masterSpreads[i];
         var code = getMasterLang(master.name);
-        if (!code || !isSupportedLegacyLanguageCode(code) || mastersByCode[code]) continue;
+        if (!code || code === "de" || mastersByCode[code]) continue;
         mastersByCode[code] = master;
-        documentOrderMasters.push(master);
     }
-    mastersByCode[normalizedSourceCode] = germanMaster;
 
-    var orderedMasters = [];
-    var seen = {};
+    var anchor = germanMaster;
     for (var j = 0; j < orderedCodes.length; j++) {
         var orderCode = String(orderedCodes[j] || "").toLowerCase();
-        if (orderCode === "") continue;
-        var orderedMaster = mastersByCode[orderCode];
-        if (!orderedMaster || !orderedMaster.isValid || seen[orderCode]) continue;
-        orderedMasters.push(orderedMaster);
-        seen[orderCode] = true;
-    }
-    for (var d = 0; d < documentOrderMasters.length; d++) {
-        var docMaster = documentOrderMasters[d];
-        var docCode = getMasterLang(docMaster.name);
-        if (!docCode || seen[docCode]) continue;
-        orderedMasters.push(docMaster);
-        seen[docCode] = true;
-    }
-    if (orderedMasters.length === 0) return;
-
-    var firstLanguageMasterIndex = -1;
-    for (var m = 0; m < doc.masterSpreads.length; m++) {
-        var currentCode = getMasterLang(doc.masterSpreads[m].name);
-        if (currentCode && mastersByCode[currentCode]) {
-            firstLanguageMasterIndex = m;
-            break;
-        }
-    }
-
-    var anchor = (firstLanguageMasterIndex > 0) ? doc.masterSpreads[firstLanguageMasterIndex - 1] : null;
-    var insertBefore = (firstLanguageMasterIndex === 0 && doc.masterSpreads.length > 0) ? doc.masterSpreads[0] : null;
-
-    for (var om = 0; om < orderedMasters.length; om++) {
-        var targetMaster = orderedMasters[om];
+        if (orderCode === "" || orderCode === "de") continue;
+        var targetMaster = mastersByCode[orderCode];
         if (!targetMaster || !targetMaster.isValid) continue;
-        try {
-            if (anchor && anchor.isValid) {
-                targetMaster.move(LocationOptions.AFTER, anchor);
-            } else if (insertBefore && insertBefore.isValid && targetMaster !== insertBefore) {
-                targetMaster.move(LocationOptions.BEFORE, insertBefore);
-            }
-        } catch (moveErr) {}
+        try { targetMaster.move(LocationOptions.AFTER, anchor); } catch (moveErr) {}
         anchor = targetMaster;
-        insertBefore = null;
-    }
-
-    refreshLegacyMasterPrefixes(orderedMasters);
-}
-
-function collectValidBDAPages(pages) {
-    var validPages = [];
-    if (!pages || !pages.length) return validPages;
-    for (var i = 0; i < pages.length; i++) {
-        if (pages[i] && pages[i].isValid) validPages.push(pages[i]);
-    }
-    return validPages;
-}
-
-function isSameDocumentPage(a, b) {
-    if (!a || !a.isValid || !b || !b.isValid) return false;
-    try {
-        if (a.id !== undefined && b.id !== undefined) return a.id === b.id;
-    } catch (e) {}
-    return a === b;
-}
-
-function collectBDAPageBlocksFromDocument(doc, excludedPage) {
-    var blocksByLang = {};
-    if (!doc || !doc.isValid) return blocksByLang;
-
-    for (var i = 0; i < doc.pages.length; i++) {
-        var page = doc.pages[i];
-        if (!page || !page.isValid) continue;
-        if (page.documentOffset === 0) continue;
-        if (excludedPage && isSameDocumentPage(page, excludedPage)) continue;
-
-        var langCode = getPageLanguageCode(page);
-        if (!langCode || !isSupportedLegacyLanguageCode(langCode)) continue;
-        langCode = String(langCode).toLowerCase();
-        if (!blocksByLang[langCode]) blocksByLang[langCode] = [];
-        blocksByLang[langCode].push(page);
-    }
-
-    return blocksByLang;
-}
-
-function reorderBDALanguagePageBlocks(doc, pageBlocksByLang, orderedCodes) {
-    if (!doc || !doc.isValid || !pageBlocksByLang) return;
-
-    var orderedBlocks = [];
-    var seen = {};
-    var code = "";
-    for (var i = 0; i < orderedCodes.length; i++) {
-        code = String(orderedCodes[i] || "").toLowerCase();
-        if (code === "" || seen[code]) continue;
-        var preferredBlock = collectValidBDAPages(pageBlocksByLang[code]);
-        if (preferredBlock.length === 0) continue;
-        orderedBlocks.push({ code: code, pages: preferredBlock });
-        seen[code] = true;
-    }
-
-    for (code in pageBlocksByLang) {
-        if (!pageBlocksByLang.hasOwnProperty(code) || seen[code]) continue;
-        var fallbackBlock = collectValidBDAPages(pageBlocksByLang[code]);
-        if (fallbackBlock.length === 0) continue;
-        orderedBlocks.push({ code: code, pages: fallbackBlock });
-        seen[code] = true;
-    }
-    if (orderedBlocks.length === 0) return;
-
-    var firstBlockPageIndex = Number.MAX_VALUE;
-    for (var b = 0; b < orderedBlocks.length; b++) {
-        for (var p = 0; p < orderedBlocks[b].pages.length; p++) {
-            try {
-                if (orderedBlocks[b].pages[p].documentOffset < firstBlockPageIndex) firstBlockPageIndex = orderedBlocks[b].pages[p].documentOffset;
-            } catch (e) {}
-        }
-    }
-    if (firstBlockPageIndex === Number.MAX_VALUE) return;
-
-    var anchor = (firstBlockPageIndex > 0) ? doc.pages[firstBlockPageIndex - 1] : null;
-    var insertBefore = (firstBlockPageIndex === 0 && doc.pages.length > 0) ? doc.pages[0] : null;
-
-    for (b = 0; b < orderedBlocks.length; b++) {
-        var blockPages = orderedBlocks[b].pages;
-        for (p = 0; p < blockPages.length; p++) {
-            var blockPage = blockPages[p];
-            if (!blockPage || !blockPage.isValid) continue;
-            try {
-                if (anchor && anchor.isValid) {
-                    blockPage.move(LocationOptions.AFTER, anchor);
-                } else if (insertBefore && insertBefore.isValid && blockPage !== insertBefore) {
-                    blockPage.move(LocationOptions.BEFORE, insertBefore);
-                }
-            } catch (moveErr) {}
-            anchor = blockPage;
-            insertBefore = null;
-        }
-    }
-}
-
-function updateTOCForLanguageBlocks(doc, pageBlocksByLang, orderedCodes) {
-    if (!doc || !doc.isValid || !pageBlocksByLang) return;
-
-    var updated = {};
-    var code = "";
-    for (var i = 0; i < orderedCodes.length; i++) {
-        code = String(orderedCodes[i] || "").toLowerCase();
-        if (code === "" || updated[code]) continue;
-        var orderedBlock = collectValidBDAPages(pageBlocksByLang[code]);
-        if (orderedBlock.length === 0) continue;
-        updateTOCForLanguage(doc, code, orderedBlock[0].name);
-        updated[code] = true;
-    }
-
-    for (code in pageBlocksByLang) {
-        if (!pageBlocksByLang.hasOwnProperty(code) || updated[code]) continue;
-        var fallbackBlock = collectValidBDAPages(pageBlocksByLang[code]);
-        if (fallbackBlock.length === 0) continue;
-        updateTOCForLanguage(doc, code, fallbackBlock[0].name);
     }
 }
 
@@ -2807,8 +2572,6 @@ function prepareLegacyMasterSpreads(doc, allowCreation) {
     setMasterSpreadLanguageNaming(germanMaster, "B", "de");
     replaceMasterLanguageBadgeText(germanMaster, "de");
 
-    var sourceCode = getLegacyDetectedSourceCode(doc);
-    var deferredMasterOrderCodes = [];
     var langTasks = collectLegacyBDALanguageTasks(doc);
     if (allowCreation) {
         var detectedCodes = [];
@@ -2821,13 +2584,13 @@ function prepareLegacyMasterSpreads(doc, allowCreation) {
             }
         }
 
-        var selection = promptLegacyTargetLanguageSelection(detectedCodes, doc, sourceCode);
+        var selection = promptLegacyTargetLanguageSelection(detectedCodes, doc);
         if (selection === null) throw new Error(t("legacy_creation_cancelled"));
-        if (!selection.selectedTargetCodes || selection.selectedTargetCodes.length === 0) throw new Error(t("legacy_no_languages_selected"));
+        if (!selection.selectedCodes || selection.selectedCodes.length === 0) throw new Error(t("legacy_no_languages_selected"));
 
         var missingCodes = [];
-        for (var j = 0; j < selection.selectedTargetCodes.length; j++) {
-            var selectedCode = String(selection.selectedTargetCodes[j] || "").toLowerCase();
+        for (var j = 0; j < selection.selectedCodes.length; j++) {
+            var selectedCode = String(selection.selectedCodes[j] || "").toLowerCase();
             if (selectedCode !== "" && !detectedMap[selectedCode]) missingCodes.push(selectedCode);
         }
 
@@ -2836,12 +2599,11 @@ function prepareLegacyMasterSpreads(doc, allowCreation) {
             var creationState = getLegacyMasterCreationState(germanMaster, langTasks);
             createLegacyTargetMasters(doc, germanMaster, missingCodes, creationState.anchor, creationState.nextPrefixIndex);
         }
-        sourceCode = selection.sourceCode || sourceCode;
-        deferredMasterOrderCodes = selection.orderedCodes || [];
+        reorderLegacyTargetMasters(doc, germanMaster, selection.orderedCodes || []);
         langTasks = collectLegacyBDALanguageTasks(doc, selection.selectedCodes);
     }
 
-    return { germanMaster: germanMaster, langTasks: langTasks, deferredMasterOrderCodes: deferredMasterOrderCodes, sourceCode: sourceCode };
+    return { germanMaster: germanMaster, langTasks: langTasks };
 }
 
 function shouldCheckGermanText(text) {
@@ -4170,7 +3932,6 @@ function findOriginalBackPageInfo(doc, trackerSetting) {
 function runBDAMode(doc, config, preparedLegacy) {
     updateProgress(5, t("bda_search_templates"), 5, t("bda_analyze_doc"));
     var langTasks = (preparedLegacy && preparedLegacy.langTasks) ? preparedLegacy.langTasks : collectLegacyBDALanguageTasks(doc);
-    var sourceCode = (preparedLegacy && preparedLegacy.sourceCode) ? String(preparedLegacy.sourceCode).toLowerCase() : getLegacyDetectedSourceCode(doc);
 
     if (!config.onlyTextUpdate) updateLanguageMasterVersionLabels(doc);
     if (langTasks.length === 0) { throw new Error(t("bda_no_templates")); }
@@ -4202,8 +3963,12 @@ function runBDAMode(doc, config, preparedLegacy) {
     if (originalPages.length === 0) { throw new Error(t("bda_no_original_pages")); }
 
     var resultMsg = t("bda_finished", { count: langTasks.length });
-    var pageBlocksByLang = {};
-    pageBlocksByLang[sourceCode] = originalPages.slice(0);
+
+    if (config.updateTOC) {
+        updateProgress(8, t("bda_update_cover"), 8, t("bda_adjust_toc"));
+        updateTOCForLanguage(doc, "de", originalPages[0].name);
+    }
+
     var createdBackups = [];
 
     for (var i = 0; i < langTasks.length; i++) {
@@ -4243,7 +4008,10 @@ function runBDAMode(doc, config, preparedLegacy) {
             }
             throw langError;
         }
-        pageBlocksByLang[task.code] = newPagesForThisLang.slice(0);
+        
+        if (config.updateTOC) {
+            updateTOCForLanguage(doc, task.code, startPageStr);
+        }
 
         try {
             if (doc.saved) {
@@ -4282,41 +4050,16 @@ function runBDAMode(doc, config, preparedLegacy) {
         }
     }
 
-    var finalOrderCodes = [];
-    if (preparedLegacy && preparedLegacy.deferredMasterOrderCodes && preparedLegacy.deferredMasterOrderCodes.length > 0) {
-        for (var orderIndex = 0; orderIndex < preparedLegacy.deferredMasterOrderCodes.length; orderIndex++) {
-            finalOrderCodes.push(String(preparedLegacy.deferredMasterOrderCodes[orderIndex] || "").toLowerCase());
-        }
-    } else {
-        finalOrderCodes.push(sourceCode);
-        for (var taskIndex = 0; taskIndex < langTasks.length; taskIndex++) finalOrderCodes.push(String(langTasks[taskIndex].code || "").toLowerCase());
-    }
-
     try {
-        if (preparedLegacy && preparedLegacy.germanMaster && finalOrderCodes.length > 0) {
-            reorderLegacyTargetMasters(doc, preparedLegacy.germanMaster, finalOrderCodes, sourceCode);
+        var originalPages = getBDAOriginalPages(doc, config);
+        if (originalPages && originalPages.length > 0) {
+            saveBDASnapshot(doc, buildBDASnapshotPayload(originalPages));
         }
-
-        var livePageBlocksByLang = collectBDAPageBlocksFromDocument(doc, originalBackPage);
-        reorderBDALanguagePageBlocks(doc, livePageBlocksByLang, finalOrderCodes);
-
-        if (config.updateTOC || config.autoReferenceLinks) {
-            updateProgress(99, t("bda_update_cover"), 99, t("bda_adjust_toc"));
-            livePageBlocksByLang = collectBDAPageBlocksFromDocument(doc, originalBackPage);
-            updateTOCForLanguageBlocks(doc, livePageBlocksByLang, finalOrderCodes);
-        }
-    } catch (e) {}
-
-    try {
         var snapshotPages = getBDAOriginalPages(doc, config);
         if (snapshotPages && snapshotPages.length > 0) {
             saveBDASnapshot(doc, buildBDASnapshotPayload(snapshotPages));
         }
-    } catch (e2) {}
-
-    if (originalBackPage && originalBackPage.isValid) {
-        try { originalBackPage.move(LocationOptions.AT_END); } catch (moveBackAgainErr) {}
-    }
+    } catch (e) {}
 
     runAutomaticHyperlinksForBDA(doc, config);
 
