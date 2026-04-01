@@ -226,6 +226,8 @@ var UI_STRINGS = {
     openai_connection_error: { de: "OpenAI-Verbindungsfehler: {message}", en: "OpenAI connection error: {message}" },
     openai_refusal: { de: "OpenAI hat die Anfrage abgelehnt: {message}", en: "OpenAI refused the request: {message}" },
     openai_repair_block: { de: "OpenAI Reparatur: Korrigiere XML-Struktur für Block {index}...", en: "OpenAI repair: fixing XML structure for block {index}..." },
+    openai_retry_block: { de: "OpenAI Retry: Übersetze Block {index} einzeln neu...", en: "OpenAI retry: retranslating block {index} individually..." },
+    openai_fallback_deepl_block: { de: "Fallback: Übersetze Block {index} mit DeepL...", en: "Fallback: translating block {index} with DeepL..." },
     openai_invalid_xml: { de: "OpenAI lieferte für Block {index} ein ungültiges XML-/Tag-Ergebnis zurück.", en: "OpenAI returned an invalid XML/tag result for block {index}." },
     applying_formatting: { de: "Wende Formatierungen an...", en: "Applying formatting..." },
     restoring_tables_images: { de: "Stelle Tabellen und Bilder wieder her...", en: "Restoring tables and images..." },
@@ -5640,6 +5642,23 @@ function buildOpenAIRepairPrompt(sourceXML, candidateXML, targetLangCode) {
     return prompt;
 }
 
+function buildOpenAISingleTranslationPrompt(sourceXML, targetLangCode) {
+    var prompt = "";
+    prompt += "Target language code: " + targetLangCode + "\n";
+    prompt += "Translate this single XML fragment into the target language.\n";
+    prompt += "Preserve every XML tag and every attribute exactly as provided.\n";
+    prompt += "Only translate human-readable text nodes.\n";
+    prompt += "Do not translate or alter text inside <nt>...</nt>.\n";
+    prompt += "Do not change placeholders like ###IMG_1### or ###TBL_1###.\n";
+    prompt += "Keep entities and structure such as <root>, <t>, <tab/>, <pbr/>, and <lbr/> unchanged.\n";
+    if (formalitySetting === "more") prompt += "Use a formal and polite register where the target language supports it.\n";
+    else if (formalitySetting === "less") prompt += "Use an informal and direct register where the target language supports it.\n";
+    else prompt += "Use the most natural default register for the target language.\n";
+    prompt += "Return JSON only with one property named translation.\n\n";
+    prompt += String(sourceXML || "") + "\n";
+    return prompt;
+}
+
 function requestOpenAIResponseObject(payloadObj) {
     var endpoint = "https://api.openai.com/v1/responses";
     var payloadFile = new File(Folder.temp + "/oai_pay_" + new Date().getTime() + ".json");
@@ -5743,6 +5762,76 @@ function repairOpenAIInvalidTranslation(sourceXML, candidateXML, targetLangCode,
 
     writeDebugLog("openai:repair:success block=" + blockIndex);
     return repairedXML;
+}
+
+function retrySingleBlockOpenAITranslation(sourceXML, targetLangCode, blockIndex, overPct) {
+    if (overPct !== null && overPct !== undefined) {
+        updateProgress(null, t("openai_retry_block", { index: blockIndex }), overPct, null);
+    }
+    writeDebugLog("openai:retry_single:start block=" + blockIndex +
+        " source=" + String(sourceXML || "").substring(0, 500), "WARNUNG");
+
+    var payloadObj = {
+        model: normalizeOpenAIModel(openAIModel),
+        instructions: "You translate a single Adobe InDesign XML fragment. Preserve the exact XML/tag/attribute structure and output only JSON that matches the requested schema.",
+        input: buildOpenAISingleTranslationPrompt(sourceXML, targetLangCode),
+        text: {
+            format: {
+                type: "json_schema",
+                name: "single_translation",
+                schema: {
+                    type: "object",
+                    properties: {
+                        translation: { type: "string" }
+                    },
+                    required: ["translation"],
+                    additionalProperties: false
+                }
+            }
+        }
+    };
+
+    var parsedObj = requestOpenAIResponseObject(payloadObj);
+    var structuredObj = parseOpenAIStructuredOutput(parsedObj);
+    if (!structuredObj || typeof structuredObj.translation !== "string") {
+        throw new Error(t("openai_invalid_xml", { index: blockIndex }));
+    }
+
+    var translatedXML = normalizeStructuredXMLCandidate(structuredObj.translation, sourceXML);
+    if (!validateStructuredXMLTranslation(sourceXML, translatedXML)) {
+        writeDebugLog("openai:retry_single:failed block=" + blockIndex +
+            " candidate=" + String(translatedXML || "").substring(0, 500), "WARNUNG");
+        throw new Error(t("openai_invalid_xml", { index: blockIndex }));
+    }
+
+    writeDebugLog("openai:retry_single:success block=" + blockIndex);
+    return translatedXML;
+}
+
+function translateSingleBlockDeepLFallback(sourceXML, targetLangCode, blockIndex, overPct) {
+    if (!apiKey || apiKey === "") {
+        throw new Error(t("openai_invalid_xml", { index: blockIndex }));
+    }
+    if (overPct !== null && overPct !== undefined) {
+        updateProgress(null, t("openai_fallback_deepl_block", { index: blockIndex }), overPct, null);
+    }
+    writeDebugLog("openai:fallback_deepl:start block=" + blockIndex +
+        " source=" + String(sourceXML || "").substring(0, 500), "WARNUNG");
+
+    var translated = translateBatchDeepL([sourceXML], targetLangCode, overPct, overPct);
+    if (!translated || translated.length !== 1) {
+        throw new Error(t("openai_invalid_xml", { index: blockIndex }));
+    }
+
+    var translatedXML = normalizeStructuredXMLCandidate(translated[0], sourceXML);
+    if (!validateStructuredXMLTranslation(sourceXML, translatedXML)) {
+        writeDebugLog("openai:fallback_deepl:failed block=" + blockIndex +
+            " candidate=" + String(translatedXML || "").substring(0, 500), "WARNUNG");
+        throw new Error(t("openai_invalid_xml", { index: blockIndex }));
+    }
+
+    writeDebugLog("openai:fallback_deepl:success block=" + blockIndex);
+    return translatedXML;
 }
 
 function translateBatchWithProvider(textsArray, targetLangCode, overStartPct, overEndPct, providerId) {
@@ -5876,7 +5965,17 @@ function translateBatchOpenAI(textsArray, targetLangCode, overStartPct, overEndP
                     writeDebugLog("openai:invalid_xml block=" + blockIndex +
                         " source=" + String(batchTexts[k] || "").substring(0, 500) +
                         " candidate=" + String(translatedXML || "").substring(0, 500), "WARNUNG");
-                    translatedXML = repairOpenAIInvalidTranslation(batchTexts[k], translatedXML, targetLangCode, blockIndex, currentOverPct);
+                    try {
+                        translatedXML = repairOpenAIInvalidTranslation(batchTexts[k], translatedXML, targetLangCode, blockIndex, currentOverPct);
+                    } catch (repairErr) {
+                        writeDebugLog("openai:repair:error block=" + blockIndex + " error=" + (repairErr.message || repairErr), "WARNUNG");
+                        try {
+                            translatedXML = retrySingleBlockOpenAITranslation(batchTexts[k], targetLangCode, blockIndex, currentOverPct);
+                        } catch (retryErr) {
+                            writeDebugLog("openai:retry_single:error block=" + blockIndex + " error=" + (retryErr.message || retryErr), "WARNUNG");
+                            translatedXML = translateSingleBlockDeepLFallback(batchTexts[k], targetLangCode, blockIndex, currentOverPct);
+                        }
+                    }
                 }
                 translated.push(translatedXML);
             }
