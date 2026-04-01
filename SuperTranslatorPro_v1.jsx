@@ -1333,6 +1333,8 @@ function getTechnicalTokenRegex() {
 function protectChunkNonTranslatables(chunk) {
     if (!chunk || chunk === "") return chunk;
 
+    chunk = chunk.replace(/###((?:TBL|IMG)_[A-Za-z0-9_]+)###/g, '<nt>###$1###</nt>');
+
     var regexArt = getTechnicalTokenRegex();
     chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
         var before = string.substring(0, offset);
@@ -1344,7 +1346,6 @@ function protectChunkNonTranslatables(chunk) {
         return '<nt>' + match + '</nt>';
     });
 
-    chunk = chunk.replace(/###((?:TBL|IMG)_[0-9_]+)###/g, '<nt>###$1###</nt>');
     return chunk;
 }
 
@@ -4882,46 +4883,28 @@ function getParkedTableTextRange(frame) {
 }
 
 function restoreParkedTableAtMarker(parked, placeholderRange) {
-    var parkedTable = getFirstParkedTable(parked ? parked.frame : null);
-    var parkedTextRange = getParkedTableTextRange(parked ? parked.frame : null);
     var anchorChar = null;
     try {
         if (parked && parked.anchorChar && parked.anchorChar.isValid) anchorChar = parked.anchorChar;
     } catch (e) { anchorChar = null; }
     if (!anchorChar) anchorChar = getParkedTableAnchorCharacter(parked ? parked.frame : null);
+    if (!anchorChar || !anchorChar.isValid) return false;
 
-    return restoreInlineMarkerRange(placeholderRange, function(targetInsertionPoint) {
-        var restored = false;
-        if (parkedTextRange && parkedTextRange.isValid) {
-            try {
-                parkedTextRange.duplicate(LocationOptions.AFTER, targetInsertionPoint);
-                restored = true;
-            } catch (textDupErr) {}
-            if (!restored) {
-                try {
-                    parkedTextRange.move(LocationOptions.AFTER, targetInsertionPoint);
-                    restored = true;
-                } catch (textMoveErr) {}
-            }
-        }
-        if (parkedTable && parkedTable.isValid) {
-            try {
-                parkedTable.duplicate(LocationOptions.AFTER, targetInsertionPoint);
-                restored = true;
-            } catch (dupErr) {}
-            if (!restored) {
-                try {
-                    parkedTable.move(LocationOptions.AFTER, targetInsertionPoint);
-                    restored = true;
-                } catch (moveErr) {}
-            }
-        }
-        if (!restored && anchorChar && anchorChar.isValid) {
+    var restored = false;
+    try {
+        restored = restoreInlineMarkerRange(placeholderRange, function(targetInsertionPoint) {
             anchorChar.move(LocationOptions.AFTER, targetInsertionPoint);
-            restored = true;
-        }
-        if (!restored) throw new Error("TABLE_RESTORE_FAILED");
-    });
+        });
+    } catch (e2) { restored = false; }
+    if (restored) return true;
+
+    try {
+        anchorChar.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
+        placeholderRange.remove();
+        return true;
+    } catch (legacyErr) {}
+
+    return false;
 }
 
 function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
@@ -4953,7 +4936,7 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
         var restorePasses = 0;
         var restoreLimit = 10000;
         while (restorePasses < restoreLimit) {
-            app.findGrepPreferences.findWhat = "###IMG_[0-9_]+###";
+            app.findGrepPreferences.findWhat = "###IMG_[A-Za-z0-9_]+###";
             var allFoundImages = doc.findGrep();
             if (!allFoundImages || allFoundImages.length === 0) break;
 
@@ -4962,7 +4945,7 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
                 var placeholderRange = allFoundImages[f];
                 if (!placeholderRange || !placeholderRange.isValid) continue;
 
-                var match = placeholderRange.contents.match(/IMG_([0-9_]+)/);
+                var match = placeholderRange.contents.match(/IMG_([A-Za-z0-9_]+)/);
                 if (!match) continue;
 
                 var imgID = match[1];
@@ -5171,7 +5154,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             }
             
             var xml = buildXMLWithGlossary(textTargets[i]);
-            var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_[0-9_]+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
+            var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_[A-Za-z0-9_]+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
             
             if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
                 finalTranslations[i] = ""; 
@@ -5917,6 +5900,7 @@ function buildTextObjectXML(textObj) {
         }
 
         if (!isDNT) {
+            chunk = chunk.replace(/###((?:TBL|IMG)_[A-Za-z0-9_]+)###/g, '<nt>###$1###</nt>');
             var regexArt = getTechnicalTokenRegex();
             chunk = chunk.replace(regexArt, function(match, p1, offset, string) {
                 var before = string.substring(0, offset);
@@ -5928,7 +5912,6 @@ function buildTextObjectXML(textObj) {
             });
         }
 
-        chunk = chunk.replace(/###((?:TBL|IMG)_[0-9_]+)###/g, '<nt>###$1###</nt>');
         chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
         if (chunk !== "") {
             xmlString += '<t f="' + fFamily + '" s="' + fStyle + '" z="' + pSize + '" p="' + pStyleName + '" l="' + ldingStr + '" c="' + fColor + '" k="' + cStyle + '" a="' + pAli + '" li="' + lInd + '" fi="' + fInd + '" b="' + bList + '">' + chunk + '</t>';
