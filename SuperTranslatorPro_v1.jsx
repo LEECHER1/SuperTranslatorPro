@@ -2387,7 +2387,8 @@ function collectLegacyBDALanguageTasks(doc, preferredCodes) {
     }
 
     var orderedCodes = [];
-    if (preferredCodes && preferredCodes.length > 0) {
+    var hasPreferredCodes = !!(preferredCodes && preferredCodes.length > 0);
+    if (hasPreferredCodes) {
         for (var i = 0; i < preferredCodes.length; i++) orderedCodes.push(String(preferredCodes[i]).toLowerCase());
     } else {
         for (var j = 0; j < LEGACY_BDA_LANGUAGE_OPTIONS.length; j++) orderedCodes.push(LEGACY_BDA_LANGUAGE_OPTIONS[j].code.toLowerCase());
@@ -2402,8 +2403,10 @@ function collectLegacyBDALanguageTasks(doc, preferredCodes) {
             seen[codeKey] = true;
         }
     }
-    for (var extraCode in tasksByCode) {
-        if (tasksByCode.hasOwnProperty(extraCode) && !seen[extraCode]) tasks.push(tasksByCode[extraCode]);
+    if (!hasPreferredCodes) {
+        for (var extraCode in tasksByCode) {
+            if (tasksByCode.hasOwnProperty(extraCode) && !seen[extraCode]) tasks.push(tasksByCode[extraCode]);
+        }
     }
     return tasks;
 }
