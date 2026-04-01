@@ -3443,6 +3443,15 @@ function runMainProcess(doc, config) {
                 var mySel = app.selection[i];
                 if (mySel.constructor.name === "TextFrame") targetTextObjArray.push(mySel.parentStory); 
                 else if (mySel.constructor.name === "Cell") targetTextObjArray.push(mySel.texts[0]);
+                else if (mySel.constructor.name === "Table") {
+                    var selectedTableCells = [];
+                    try { selectedTableCells = mySel.cells.everyItem().getElements(); } catch (tableSelErr) { selectedTableCells = []; }
+                    for (var tc = 0; tc < selectedTableCells.length; tc++) {
+                        try {
+                            if (selectedTableCells[tc].texts && selectedTableCells[tc].texts.length > 0) targetTextObjArray.push(selectedTableCells[tc].texts[0]);
+                        } catch (tableCellErr) {}
+                    }
+                }
                 else if (mySel.constructor.name === "Group") {
                     for (var g=0; g<mySel.allPageItems.length; g++) {
                         if (mySel.allPageItems[g].constructor.name === "TextFrame") targetTextObjArray.push(mySel.allPageItems[g].parentStory);
@@ -4774,7 +4783,57 @@ function runAutomaticHyperlinksForBDA(doc, config) {
     return null;
 }
 
+function getSafeRestoreInsertionPoint(textObj, preferredIndex) {
+    if (!textObj || !textObj.isValid) return null;
+    try {
+        var insertionPoints = textObj.insertionPoints;
+        if (!insertionPoints || insertionPoints.length === 0) return null;
+        var idx = parseInt(preferredIndex, 10);
+        if (isNaN(idx)) idx = insertionPoints.length - 1;
+        if (idx < 0) idx = 0;
+        if (idx >= insertionPoints.length) idx = insertionPoints.length - 1;
+        return insertionPoints.item(idx);
+    } catch (e) {}
+    try { return textObj.insertionPoints.item(-1); } catch (e2) {}
+    return null;
+}
+
+function tryRestoreParkedTableAtInsertionPoint(parked, insertionPoint) {
+    if (!parked || !parked.frame || !parked.frame.isValid || !insertionPoint || !insertionPoint.isValid) return false;
+    try {
+        parked.frame.characters.item(0).move(LocationOptions.AFTER, insertionPoint);
+        return true;
+    } catch (e) {}
+    return false;
+}
+
+function findFallbackTextTargetForParkedTable(parked, textTargets) {
+    try {
+        if (parked.sourceText && parked.sourceText.isValid) return parked.sourceText;
+    } catch (e) {}
+
+    if (textTargets && parked.sourceTextId !== null && parked.sourceTextId !== undefined) {
+        for (var i = 0; i < textTargets.length; i++) {
+            var candidate = textTargets[i];
+            try {
+                if (candidate && candidate.isValid && candidate.id === parked.sourceTextId) return candidate;
+            } catch (e2) {}
+        }
+    }
+
+    if (textTargets) {
+        for (var j = 0; j < textTargets.length; j++) {
+            try {
+                if (textTargets[j] && textTargets[j].isValid) return textTargets[j];
+            } catch (e3) {}
+        }
+    }
+    return null;
+}
+
 function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
+    var unresolvedTableCount = 0;
+    var unresolvedImageCount = 0;
     try {
         app.findGrepPreferences = NothingEnum.nothing;
         app.changeGrepPreferences = NothingEnum.nothing;
@@ -4783,17 +4842,32 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
     try {
         for (var i = globalParkedTables.length - 1; i >= 0; i--) {
             var parked = globalParkedTables[i];
+            var tableRestored = false;
             app.findGrepPreferences.findWhat = "[ \t]*###TBL_\\s*" + parked.id + "\\s*###[ \t]*";
             var results = doc.findGrep();
             if (results.length > 0) {
                 try {
                     parked.frame.characters.item(0).move(LocationOptions.AFTER, results[0].insertionPoints.item(0));
-                    results[0].remove();
+                    tableRestored = true;
                 } catch (e1) {}
-            } else if (textTargets && textTargets.length > 0) {
-                try { parked.frame.characters.item(0).move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1)); } catch (e2) {}
+                if (tableRestored) {
+                    try { results[0].remove(); } catch (removeMarkerErr) {}
+                }
             }
-            try { if (parked.frame && parked.frame.isValid) parked.frame.remove(); } catch (e3) {}
+
+            if (!tableRestored) {
+                var fallbackTarget = findFallbackTextTargetForParkedTable(parked, textTargets);
+                var fallbackPoint = getSafeRestoreInsertionPoint(fallbackTarget, parked.sourceIndex);
+                tableRestored = tryRestoreParkedTableAtInsertionPoint(parked, fallbackPoint);
+                if (tableRestored) writeLog("Tabelle " + parked.id + " wurde ueber den Fallback im urspruenglichen Textfluss wiederhergestellt.", "WARNUNG");
+            }
+
+            if (tableRestored) {
+                try { if (parked.frame && parked.frame.isValid) parked.frame.remove(); } catch (e2) {}
+            } else {
+                unresolvedTableCount++;
+                writeLog("Tabelle " + parked.id + " konnte nicht automatisch wieder eingesetzt werden. Der Temp-Rahmen bleibt auf Ebene TEMP_TRANS_IMAGES erhalten.", "ERROR");
+            }
         }
 
         try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.itemLayer.visible = true; } catch (e4) {}
@@ -4841,15 +4915,28 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
                 } catch (e5) {}
             }
 
-            if (!restoredOne) break;
+            if (!restoredOne) {
+                unresolvedImageCount += allFoundImages.length;
+                break;
+            }
             restorePasses++;
         }
     } catch (restoreErr) {
+        writeLog("Fehler beim Wiederherstellen geparkter Tabellen/Bilder: " + (restoreErr.message || restoreErr), "ERROR");
     } finally {
         try { app.findGrepPreferences = NothingEnum.nothing; } catch (e6) {}
         try { app.changeGrepPreferences = NothingEnum.nothing; } catch (e7) {}
-        try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.remove(); } catch (e8) {}
-        try { doc.layers.itemByName("TEMP_TRANS_IMAGES").visible = false; } catch (e9) {}
+        try {
+            if (storageEnv.frame && storageEnv.frame.isValid) {
+                var storageHasItems = false;
+                try { storageHasItems = storageEnv.frame.allPageItems.length > 0 || storageEnv.frame.characters.length > 0; } catch (e8) { storageHasItems = true; }
+                if (!storageHasItems && unresolvedImageCount === 0 && unresolvedTableCount === 0) storageEnv.frame.remove();
+            }
+        } catch (e9) {}
+        try {
+            var tempLayer = doc.layers.itemByName("TEMP_TRANS_IMAGES");
+            if (tempLayer.isValid) tempLayer.visible = (unresolvedImageCount > 0 || unresolvedTableCount > 0);
+        } catch (e10) {}
     }
 }
 
@@ -4914,7 +5001,8 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                     
                     var p = tbl.storyOffset.parent; var idx = tbl.storyOffset.index;
                     p.characters.item(idx).move(LocationOptions.AFTER, tmpFrame.insertionPoints.item(0));
-                    globalParkedTables.push({ id: tblId, frame: tmpFrame });
+                    var sourceTextId = null; try { sourceTextId = p.id; } catch (idErr) {}
+                    globalParkedTables.push({ id: tblId, frame: tmpFrame, sourceText: p, sourceTextId: sourceTextId, sourceIndex: idx });
                     p.insertionPoints.item(idx).contents = marker;
                     
                     var pastedTbl = tmpFrame.tables[0];
