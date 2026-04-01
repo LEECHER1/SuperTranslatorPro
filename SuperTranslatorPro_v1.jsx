@@ -55,6 +55,9 @@ var UI_STRINGS = {
     spellcheck_error: { de: "Fehler bei der Rechtschreibprüfung:\n{message}", en: "Spell-check error:\n{message}" },
     settings_title: { de: "⚙️ Einstellungen", en: "⚙️ Settings" },
     log_file: { de: "📄 Logdatei", en: "📄 Log File" },
+    debug_log_file: { de: "Debug-Log", en: "Debug Log" },
+    debug_tables_images: { de: "Debug-Log für Tabellen/Bilder", en: "Debug log for tables/images" },
+    debug_tables_images_help: { de: "Schreibt einen ausführlichen Diagnose-Log für das Parken und Wiederherstellen von Tabellen/Bildern.", en: "Writes a detailed diagnostic log for parking and restoring tables/images." },
     info: { de: "ℹ️ Info", en: "ℹ️ Info" },
     deepl_api_key: { de: "DeepL Pro API-Key:", en: "DeepL Pro API key:" },
     glossary_path: { de: "Netzwerk-Wörterbuch (CSV Pfad):", en: "Network glossary (CSV path):" },
@@ -86,6 +89,7 @@ var UI_STRINGS = {
     clear_memory_confirm: { de: "Bist du sicher? Das aktuell ausgewählte Memory wird geleert.", en: "Are you sure? The currently selected memory file will be cleared." },
     clear_memory_done: { de: "Translation Memory wurde geleert.", en: "Translation memory has been cleared." },
     no_log_file: { de: "Es wurde noch keine Logdatei erstellt.", en: "No log file has been created yet." },
+    no_debug_log_file: { de: "Es wurde noch keine Debug-Logdatei erstellt.", en: "No debug log file has been created yet." },
     about_title: { de: "Über Super Translator Pro", en: "About Super Translator Pro" },
     memory_write_warning: { de: "Memory-Warnung: Datei konnte nicht geschrieben werden.", en: "Memory warning: the file could not be written." },
     legacy_missing_title: { de: "Fehlende Musterseiten erzeugen", en: "Create Missing Master Pages" },
@@ -682,8 +686,10 @@ var backPageTrackerSetting = normalizeBackPageTrackerSetting(app.extractLabel(BA
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
 var DNT_LABEL = "SuperTranslatorPRO_DNT_Styles";
+var DEBUG_TABLE_RESTORE_LABEL = "SuperTranslatorPRO_DebugTableRestore";
 var formalitySetting = app.extractLabel(FORMALITY_LABEL) || "default";
 var dntStyles = app.extractLabel(DNT_LABEL) || "";
+var tableRestoreDebugEnabled = (app.extractLabel(DEBUG_TABLE_RESTORE_LABEL) === "1");
 
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
 var progressWin, progressBar, progressText;
@@ -973,6 +979,8 @@ function ensureGlossaryPathConfigured(currentResolvedPath, storedPath) {
 }
 
 var logPath = Folder.temp + "/SuperTranslatorPRO_Log.txt";
+var debugLogPath = Folder.temp + "/SuperTranslatorPRO_DebugLog.txt";
+var debugSessionId = "";
 
 // --- 0A. PROTOKOLL (LOGGING) ---
 function writeLog(message, type) {
@@ -987,6 +995,85 @@ function writeLog(message, type) {
         f.writeln(timeStr + " " + prefix + " " + message);
         f.close();
     } catch(e) {}
+}
+
+function writeDebugLog(message, type) {
+    if (!tableRestoreDebugEnabled) return;
+    try {
+        var f = new File(debugLogPath);
+        var d = new Date();
+        var timeStr = d.getFullYear() + "-" + ("0"+(d.getMonth()+1)).slice(-2) + "-" + ("0"+d.getDate()).slice(-2) + " " + ("0"+d.getHours()).slice(-2) + ":" + ("0"+d.getMinutes()).slice(-2) + ":" + ("0"+d.getSeconds()).slice(-2);
+        var prefix = type ? "[" + type + "]" : "[DEBUG]";
+        var sessionStr = debugSessionId ? "[SESSION " + debugSessionId + "] " : "";
+        f.encoding = "UTF-8";
+        f.open(f.exists ? 'e' : 'w');
+        if (f.exists) f.seek(0, 2);
+        f.writeln(timeStr + " " + prefix + " " + sessionStr + message);
+        f.close();
+    } catch (e) {}
+}
+
+function beginDebugSession(doc, config) {
+    if (!tableRestoreDebugEnabled) return;
+    debugSessionId = String(new Date().getTime()) + "_" + String(Math.floor(Math.random() * 100000));
+    writeDebugLog("=== DEBUG-SESSION GESTARTET ===");
+    try {
+        writeDebugLog("Dokument: " + (doc && doc.name ? doc.name : "(unbekannt)") +
+            " | Modus: " + (config && config.mode ? config.mode : "") +
+            " | Zielsprache: " + (config && config.lang ? config.lang : "") +
+            " | Seitenmodus: " + ((config && config.sourcePages) ? config.sourcePages : "") +
+            " | BDA-Quelle: " + ((config && config.bdaSourcePages) ? config.bdaSourcePages : ""));
+    } catch (e1) {}
+    try {
+        writeDebugLog("CSV: " + (csvPath || "(leer)") + " | TM: " + (tmPath || "(leer)") + " | Debug-Log: " + debugLogPath);
+    } catch (e2) {}
+}
+
+function normalizeDebugSnippet(text, limit) {
+    var maxLen = limit || 120;
+    var normalized = String(text === null || text === undefined ? "" : text)
+        .replace(/[\r\n\t]+/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^\s+|\s+$/g, "");
+    if (normalized.length > maxLen) normalized = normalized.substring(0, maxLen) + "...";
+    return normalized;
+}
+
+function getDebugPageLabel(page) {
+    if (!page || !page.isValid) return "(keine Seite)";
+    var pageName = "";
+    var docOffset = "";
+    try { pageName = String(page.name || ""); } catch (e) { pageName = ""; }
+    try { docOffset = String(page.documentOffset); } catch (e2) { docOffset = ""; }
+    return pageName !== "" ? (pageName + (docOffset !== "" ? " [idx " + docOffset + "]" : "")) : ("idx " + docOffset);
+}
+
+function getDebugTextTargetLabel(textObj) {
+    if (!textObj || !textObj.isValid) return "(ungueltiges Textziel)";
+    var parts = [];
+    try {
+        var rangeKey = getTextObjectRangeKey(textObj);
+        if (rangeKey !== "") parts.push("key=" + rangeKey);
+    } catch (e) {}
+    try {
+        var page = getTextObjectParentPage(textObj);
+        if (page) parts.push("page=" + getDebugPageLabel(page));
+    } catch (e2) {}
+    try {
+        parts.push('text="' + normalizeDebugSnippet(textObj.contents, 90) + '"');
+    } catch (e3) {}
+    return parts.join(" | ");
+}
+
+function getTableDebugSummary(tbl) {
+    if (!tbl || !tbl.isValid) return "rows=? cols=? cells=?";
+    var rows = "?";
+    var cols = "?";
+    var cells = "?";
+    try { rows = String(tbl.rows.length); } catch (e) {}
+    try { cols = String(tbl.columns.length); } catch (e2) {}
+    try { cells = String(tbl.cells.length); } catch (e3) {}
+    return "rows=" + rows + " cols=" + cols + " cells=" + cells;
 }
 
 // --- 0B. TRANSLATION MEMORY & CSV LOGIK ---
@@ -1870,6 +1957,8 @@ btnSettings.onClick = function() {
     topGrp.alignChildren = ["right", "center"];
     var btnLog = topGrp.add("button", undefined, t("log_file"));
     btnLog.preferredSize = [90, 25];
+    var btnDebugLog = topGrp.add("button", undefined, t("debug_log_file"));
+    btnDebugLog.preferredSize = [90, 25];
     var btnInfo = topGrp.add("button", undefined, t("info"));
     btnInfo.preferredSize = [80, 25];
     
@@ -1928,6 +2017,9 @@ btnSettings.onClick = function() {
     var backPageTrackerInput = setWin.add("edittext", undefined, backPageTrackerSetting);
     backPageTrackerInput.characters = 40;
     backPageTrackerInput.helpTip = t("back_page_tracker_help");
+    var debugTableRestoreCheckbox = setWin.add("checkbox", undefined, t("debug_tables_images"));
+    debugTableRestoreCheckbox.value = tableRestoreDebugEnabled;
+    debugTableRestoreCheckbox.helpTip = t("debug_tables_images_help");
 
     var g = setWin.add("group");
     g.alignment = "fill";
@@ -1964,6 +2056,8 @@ btnSettings.onClick = function() {
         app.insertLabel(TM_PATH_LABEL, tmPath); 
         app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
         app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
+        tableRestoreDebugEnabled = !!debugTableRestoreCheckbox.value;
+        app.insertLabel(DEBUG_TABLE_RESTORE_LABEL, tableRestoreDebugEnabled ? "1" : "0");
         
         var selForm = "default";
         if (formDrop.selection.index === 1) selForm = "more"; else if (formDrop.selection.index === 2) selForm = "less";
@@ -1986,6 +2080,10 @@ btnSettings.onClick = function() {
     btnLog.onClick = function() {
         var f = new File(logPath);
         if (f.exists) { f.execute(); } else { alert(t("no_log_file")); }
+    };
+    btnDebugLog.onClick = function() {
+        var f = new File(debugLogPath);
+        if (f.exists) { f.execute(); } else { alert(t("no_debug_log_file")); }
     };
     btnInfo.onClick = function() {
         alert(buildAboutText(), t("about_title"));
@@ -3408,6 +3506,7 @@ btnTranslate.onClick = function() {
 
     writeLog("=== NEUER VORGANG GESTARTET ===");
     writeLog("Dokument: " + doc.name + " | Modus: " + config.mode + " | Zielsprache: " + config.lang);
+    beginDebugSession(doc, config);
 
     app.doScript(
         function() { 
@@ -4578,6 +4677,8 @@ function createFeedbackReport() {
             reportFile.writeln("Referenz-Symbole: " + (refSymbolsSetting || "[]"));
             reportFile.writeln("Formality: " + (formalitySetting || "default"));
             reportFile.writeln("DNT Styles: " + (dntStyles || "(leer)"));
+            reportFile.writeln("Debug Tabellen/Bilder: " + (tableRestoreDebugEnabled ? "Ja" : "Nein"));
+            reportFile.writeln("Debug-Log Pfad: " + debugLogPath);
             reportFile.writeln("\n--- Bitte hier beschreiben: \n");
             reportFile.close();
             alert(t("feedback_created", { path: reportFile.fsName }));
@@ -4796,6 +4897,16 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
     var unresolvedImageIds = {};
     var restoredImageIds = {};
     var leftoverMarkerCount = 0;
+    writeDebugLog("restore:start parkedTables=" + globalParkedTables.length +
+        " parkedImages=" + globalParkedImages.length +
+        " storagePage=" + getDebugPageLabel(storageEnv ? storageEnv.page : null));
+    try {
+        if (storageEnv && storageEnv.frame && storageEnv.frame.isValid) {
+            writeDebugLog("restore:storage frameValid=true storageItems=" + storageEnv.frame.allPageItems.length);
+        } else {
+            writeDebugLog("restore:storage frameValid=false", "WARNUNG");
+        }
+    } catch (storageInfoErr) {}
     try {
         app.findGrepPreferences = NothingEnum.nothing;
         app.changeGrepPreferences = NothingEnum.nothing;
@@ -4807,16 +4918,21 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
             var tableRestored = false;
             app.findGrepPreferences.findWhat = "###TBL_\\s*" + parked.id + "\\s*###";
             var results = doc.findGrep();
+            writeDebugLog("restore:table marker=" + parked.marker +
+                " sourceKey=" + (parked.sourceKey || "") +
+                " matches=" + results.length);
             if (results.length > 0) {
                 try {
                     parked.frame.characters.item(0).move(LocationOptions.AFTER, results[0].insertionPoints.item(0));
                     results[0].remove();
                     tableRestored = true;
+                    writeDebugLog("restore:table success marker=" + parked.marker);
                 } catch (e1) {}
             }
             if (!tableRestored) {
                 unresolvedTables.push(parked);
                 writeLog("Tabellen-Platzhalter konnte nicht sicher wiederhergestellt werden (" + parked.marker + "). Die Tabelle bleibt im Layer TEMP_TRANS_IMAGES.", "WARNUNG");
+                writeDebugLog("restore:table unresolved marker=" + parked.marker, "WARNUNG");
             } else {
                 try { if (parked.frame && parked.frame.isValid) parked.frame.remove(); } catch (e3) {}
             }
@@ -4830,6 +4946,7 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
             app.findGrepPreferences.findWhat = "###IMG_\\s*\\d+\\s*###";
             var allFoundImages = doc.findGrep();
             if (!allFoundImages || allFoundImages.length === 0) break;
+            writeDebugLog("restore:image pass=" + restorePasses + " placeholders=" + allFoundImages.length);
 
             var restoredOne = false;
             for (var f = allFoundImages.length - 1; f >= 0; f--) {
@@ -4848,6 +4965,7 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
                         break;
                     }
                 }
+                writeDebugLog("restore:image marker=###IMG_" + imgID + "### storageFound=" + (targetImageInStorage !== null));
                 if (targetImageInStorage === null) {
                     if (!unresolvedImageIds[imgID]) {
                         unresolvedImageIds[imgID] = true;
@@ -4864,12 +4982,14 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
                         placeholderRange.remove();
                         restoredImageIds[imgID] = true;
                         restoredOne = true;
+                        writeDebugLog("restore:image success marker=###IMG_" + imgID + "### via=character");
                         break;
                     } else if (targetImageInStorage.parent && targetImageInStorage.parent.isValid) {
                         targetImageInStorage.parent.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
                         placeholderRange.remove();
                         restoredImageIds[imgID] = true;
                         restoredOne = true;
+                        writeDebugLog("restore:image success marker=###IMG_" + imgID + "### via=parent");
                         break;
                     }
                 } catch (e5) {
@@ -4877,10 +4997,14 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
                         unresolvedImageIds[imgID] = true;
                         writeLog("Bild/Objekt konnte nicht wiederhergestellt werden (###IMG_" + imgID + "###).", "WARNUNG");
                     }
+                    writeDebugLog("restore:image failed marker=###IMG_" + imgID + "### error=" + (e5.message || e5), "WARNUNG");
                 }
             }
 
-            if (!restoredOne) break;
+            if (!restoredOne) {
+                writeDebugLog("restore:image stalled pass=" + restorePasses + " no placeholder could be restored.", "WARNUNG");
+                break;
+            }
             restorePasses++;
         }
 
@@ -4905,12 +5029,17 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
             var markerSamples = [];
             for (var lm = 0; lm < leftoverMarkers.length && lm < 10; lm++) markerSamples.push(leftoverMarkers[lm].contents);
             writeLog("Nach dem Restore verbleiben " + leftoverMarkerCount + " Platzhalter im Dokument" + (markerSamples.length ? ": " + markerSamples.join(", ") : "") + ".", "WARNUNG");
+            writeDebugLog("restore:leftoverMarkers count=" + leftoverMarkerCount + (markerSamples.length ? " samples=" + markerSamples.join(", ") : ""), "WARNUNG");
         }
     } catch (restoreErr) {
         writeLog("Fehler beim Wiederherstellen von Tabellen/Bildern: " + (restoreErr.message || restoreErr), "WARNUNG");
+        writeDebugLog("restore:error " + (restoreErr.message || restoreErr), "WARNUNG");
     } finally {
         try { app.findGrepPreferences = NothingEnum.nothing; } catch (e6) {}
         try { app.changeGrepPreferences = NothingEnum.nothing; } catch (e7) {}
+        writeDebugLog("restore:end unresolvedTables=" + unresolvedTables.length +
+            " unresolvedImages=" + unresolvedImages.length +
+            " leftoverMarkers=" + leftoverMarkerCount);
         if (unresolvedTables.length === 0 && unresolvedImages.length === 0 && leftoverMarkerCount === 0) {
             try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.remove(); } catch (e8) {}
             try { doc.layers.itemByName("TEMP_TRANS_IMAGES").visible = false; } catch (e9) {}
@@ -4965,6 +5094,16 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         for (var s = 0; s < textTargetsRaw.length; s++) addTarget(textTargetsRaw[s]);
     }
 
+    writeDebugLog("executeTranslation:start lang=" + selectedLang +
+        " pagesMode=" + pagesMode +
+        " rawTargets=" + textTargetsRaw.length +
+        " dedupedTargets=" + textTargets.length +
+        " pageSpec=" + (pagesMode ? pagesString : "(selection)"));
+    for (var targetDebugIndex = 0; targetDebugIndex < textTargets.length && targetDebugIndex < 20; targetDebugIndex++) {
+        writeDebugLog("executeTranslation:target[" + targetDebugIndex + "] " + getDebugTextTargetLabel(textTargets[targetDebugIndex]));
+    }
+    if (textTargets.length > 20) writeDebugLog("executeTranslation:weitere Ziele=" + (textTargets.length - 20));
+
     var globalParkedTables = []; var globalParkedImages = []; var tableCounter = 0; var imageCounter = 0;
 
     try {
@@ -4980,6 +5119,10 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                     var marker = "###TBL_" + tblId + "###";
                     var tmpFrame = storageEnv.page.textFrames.add({itemLayer: storageEnv.layer, geometricBounds: [0,-100, 50, -50]});
                     var sourceKey = getTextObjectRangeKey(currentText);
+                    writeDebugLog("table_park:start marker=" + marker +
+                        " sourceKey=" + sourceKey +
+                        " | " + getTableDebugSummary(tbl) +
+                        " | " + getDebugTextTargetLabel(currentText));
                     
                     var p = tbl.storyOffset.parent; var idx = tbl.storyOffset.index;
                     p.characters.item(idx).move(LocationOptions.AFTER, tmpFrame.insertionPoints.item(0));
@@ -4990,6 +5133,9 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                     if (pastedTbl) {
                         var cells = pastedTbl.cells.everyItem().getElements();
                         for (var c = 0; c < cells.length; c++) addTarget(cells[c].texts[0]);
+                        writeDebugLog("table_park:done marker=" + marker + " nestedCellTargets=" + cells.length);
+                    } else {
+                        writeDebugLog("table_park:warning marker=" + marker + " pastedTbl fehlt nach dem Parken.", "WARNUNG");
                     }
                 }
             }
@@ -5009,14 +5155,20 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                     } catch (anchorLookupErr) { anchoredItem = null; }
                     if (!anchoredItem || !anchoredItem.isValid) {
                         writeLog("Verankertes Objekt konnte nicht sicher geparkt werden (" + marker + ").", "WARNUNG");
+                        writeDebugLog("image_park:missing marker=" + marker + " | " + getDebugTextTargetLabel(currentText), "WARNUNG");
                         continue;
                     }
                     try {
                         anchoredItem.label = imgLabel;
                     } catch (anchorLabelErr) {
                         writeLog("Verankertes Objekt konnte nicht gelabelt werden (" + marker + ").", "WARNUNG");
+                        writeDebugLog("image_park:label_failed marker=" + marker + " error=" + (anchorLabelErr.message || anchorLabelErr), "WARNUNG");
                         continue;
                     }
+                    writeDebugLog("image_park:start marker=" + marker +
+                        " label=" + imgLabel +
+                        " type=" + anchoredItem.constructor.name +
+                        " | " + getDebugTextTargetLabel(currentText));
                     
                     var p = anchorChar.parent; var idx = anchorChar.index;
                     anchorChar.move(LocationOptions.AFTER, storageEnv.frame.insertionPoints.item(-1));
@@ -5035,9 +5187,12 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                             }
                         }
                     } catch(e) {}
+                    writeDebugLog("image_park:done marker=" + marker + " label=" + imgLabel);
                 }
             } catch (e) {}
         }
+
+        writeDebugLog("parking:summary tables=" + globalParkedTables.length + " images=" + globalParkedImages.length + " targetsNow=" + textTargets.length);
     
     var buildXMLWithGlossary = function(textObj) {
         var xmlString = "<root>"; var ranges = textObj.textStyleRanges;
@@ -5082,9 +5237,12 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
         var deepLQueue = [];
         var finalTranslations = new Array(textTargets.length);
+        var tmHitCount = 0;
+        var exactGlossaryHitCount = 0;
+        var emptyCount = 0;
 
         for (var i = 0; i < textTargets.length; i++) {
-            if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; continue; }
+            if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; emptyCount++; continue; }
 
             var sourceContents = "";
             try { sourceContents = String(textTargets[i].contents); } catch (e0) { sourceContents = ""; }
@@ -5094,6 +5252,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 var exactReplacement = (exactGlossaryOverride === "###DNT###") ? sourceContents : exactGlossaryOverride;
                 finalTranslations[i] = buildStyledPlainTextXML(textTargets[i], exactReplacement);
                 globalStats.savedChars += normalizeGlossaryLookupText(sourceContents).replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length;
+                exactGlossaryHitCount++;
                 continue;
             }
             
@@ -5102,14 +5261,20 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             
             if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
                 finalTranslations[i] = ""; 
+                emptyCount++;
             } else if (!glossaryMatchInText && tm[selectedLang][xml]) {
                 finalTranslations[i] = normalizeTranslatedXML(tm[selectedLang][xml]);
                 globalStats.savedChars += textOnlyLength;
+                tmHitCount++;
             } else {
                 deepLQueue.push({ index: i, xml: xml, len: textOnlyLength });
                 finalTranslations[i] = null;
             }
         }
+        writeDebugLog("translation:summary exactGlossaryHits=" + exactGlossaryHitCount +
+            " tmHits=" + tmHitCount +
+            " deepLQueue=" + deepLQueue.length +
+            " emptyTargets=" + emptyCount);
         
         if (deepLQueue.length > 0) {
             var justXMLs = [];
