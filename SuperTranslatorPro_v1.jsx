@@ -2323,9 +2323,11 @@ function promptLegacyTargetLanguageSelection(preselectedCodes, doc, sourceCode) 
     var dlg = new Window("dialog", t("legacy_missing_title"));
     dlg.orientation = "column";
     dlg.alignChildren = ["fill", "top"];
+    dlg.spacing = 10;
+    dlg.margins = 16;
 
     var info = dlg.add("statictext", undefined, t("legacy_missing_info"), { multiline: true });
-    info.preferredSize.width = 360;
+    info.preferredSize.width = 560;
 
     var normalizedSourceCode = String(sourceCode || getLegacyDetectedSourceCode(doc) || "de").toLowerCase();
     var sourceGroup = dlg.add("group");
@@ -2333,11 +2335,7 @@ function promptLegacyTargetLanguageSelection(preselectedCodes, doc, sourceCode) 
     sourceGroup.alignChildren = ["left", "center"];
     sourceGroup.add("statictext", undefined, t("legacy_source_label"));
     var sourceInput = sourceGroup.add("edittext", undefined, normalizedSourceCode.toUpperCase() + " (" + getLocalizedLanguageName(normalizedSourceCode) + ")", { readonly: true });
-    sourceInput.characters = 18;
-
-    var listGroup = dlg.add("group");
-    listGroup.orientation = "column";
-    listGroup.alignChildren = ["left", "top"];
+    sourceInput.characters = 16;
 
     var defaultMap = { en: true, fr: true, it: true, es: true, cs: true, hu: true };
     var selectedMap = {};
@@ -2352,39 +2350,58 @@ function promptLegacyTargetLanguageSelection(preselectedCodes, doc, sourceCode) 
         }
     }
     var orderMap = buildLegacyLanguageOrderMap(doc, normalizedSourceCode);
-    var headerRow = listGroup.add("group");
-    headerRow.orientation = "row";
-    headerRow.alignChildren = ["left", "center"];
-    var languageHeader = headerRow.add("statictext", undefined, t("legacy_language_label"));
-    languageHeader.preferredSize.width = 220;
-    var orderHeader = headerRow.add("statictext", undefined, t("legacy_order_label"));
-    orderHeader.preferredSize.width = 90;
-
     var rows = [];
-    var sourceRow = listGroup.add("group");
-    sourceRow.orientation = "row";
-    sourceRow.alignChildren = ["left", "center"];
-    var sourceCheckbox = sourceRow.add("checkbox", undefined, normalizedSourceCode.toUpperCase() + " (" + getLocalizedLanguageName(normalizedSourceCode) + ")");
-    sourceCheckbox.preferredSize.width = 220;
-    sourceCheckbox.value = true;
-    sourceCheckbox.onClick = function() { this.value = true; };
-    var sourceOrderInput = sourceRow.add("edittext", undefined, String(orderMap[normalizedSourceCode] || 1));
-    sourceOrderInput.characters = 4;
-    sourceOrderInput.justify = "center";
-    rows.push({ code: normalizedSourceCode, box: sourceCheckbox, orderField: sourceOrderInput, forced: true });
+    function addLegacyColumnHeader(parentGroup) {
+        var headerRow = parentGroup.add("group");
+        headerRow.orientation = "row";
+        headerRow.alignChildren = ["left", "center"];
+        var languageHeader = headerRow.add("statictext", undefined, t("legacy_language_label"));
+        languageHeader.preferredSize.width = 220;
+        var orderHeader = headerRow.add("statictext", undefined, t("legacy_order_label"));
+        orderHeader.preferredSize.width = 70;
+    }
 
-    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
-        var opt = LEGACY_BDA_LANGUAGE_OPTIONS[i];
-        var row = listGroup.add("group");
+    function addLegacyLanguageRow(parentGroup, code, enabledByDefault, forced, fallbackOrder) {
+        var row = parentGroup.add("group");
         row.orientation = "row";
         row.alignChildren = ["left", "center"];
-        var cb = row.add("checkbox", undefined, opt.code + " (" + getLocalizedLanguageName(opt.code) + ")");
+        var cb = row.add("checkbox", undefined, String(code).toUpperCase() + " (" + getLocalizedLanguageName(code) + ")");
         cb.preferredSize.width = 220;
-        cb.value = !!selectedMap[opt.code.toLowerCase()];
-        var orderInput = row.add("edittext", undefined, String(orderMap[opt.code.toLowerCase()] || (i + 1)));
-        orderInput.characters = 4;
+        cb.value = !!enabledByDefault;
+        if (forced) cb.onClick = function() { this.value = true; };
+        var orderInput = row.add("edittext", undefined, String(fallbackOrder));
+        orderInput.characters = 3;
         orderInput.justify = "center";
-        rows.push({ code: opt.code.toLowerCase(), box: cb, orderField: orderInput });
+        rows.push({ code: String(code).toLowerCase(), box: cb, orderField: orderInput, forced: !!forced });
+    }
+
+    var allCodes = [normalizedSourceCode];
+    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) allCodes.push(String(LEGACY_BDA_LANGUAGE_OPTIONS[i].code || "").toLowerCase());
+
+    var listGroup = dlg.add("group");
+    listGroup.orientation = "row";
+    listGroup.alignChildren = ["left", "top"];
+    listGroup.spacing = 18;
+
+    var listColumns = [];
+    for (var col = 0; col < 2; col++) {
+        var columnGroup = listGroup.add("group");
+        columnGroup.orientation = "column";
+        columnGroup.alignChildren = ["left", "top"];
+        addLegacyColumnHeader(columnGroup);
+        listColumns.push(columnGroup);
+    }
+
+    var rowsPerColumn = Math.ceil(allCodes.length / listColumns.length);
+    for (var codeIndex = 0; codeIndex < allCodes.length; codeIndex++) {
+        var code = allCodes[codeIndex];
+        var parentColumn = listColumns[Math.min(listColumns.length - 1, Math.floor(codeIndex / rowsPerColumn))];
+        var fallbackOrder = orderMap[code] || (codeIndex + 1);
+        if (code === normalizedSourceCode) {
+            addLegacyLanguageRow(parentColumn, code, true, true, fallbackOrder);
+        } else {
+            addLegacyLanguageRow(parentColumn, code, !!selectedMap[code], false, fallbackOrder);
+        }
     }
 
     var buttonRow = dlg.add("group");
