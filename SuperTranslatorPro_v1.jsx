@@ -1344,7 +1344,7 @@ function protectChunkNonTranslatables(chunk) {
         return '<nt>' + match + '</nt>';
     });
 
-    chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
+    chunk = chunk.replace(/###((?:TBL|IMG)_[0-9_]+)###/g, '<nt>###$1###</nt>');
     return chunk;
 }
 
@@ -4823,6 +4823,35 @@ function restoreInlineMarkerRange(placeholderRange, moveCallback) {
     }
 }
 
+function buildTranslationMarkerKey(runToken, localId) {
+    return String(runToken || "") + "_" + String(localId || 0);
+}
+
+function buildTranslationMarker(prefix, markerKey) {
+    return "###" + String(prefix || "") + "_" + String(markerKey || "") + "###";
+}
+
+function findTranslationMarkerMatches(doc, preferredScope, markerText, includeOuterWhitespace) {
+    var pattern = (includeOuterWhitespace ? "[ \\t]*" : "") + escapeGrepLiteral(markerText) + (includeOuterWhitespace ? "[ \\t]*" : "");
+    try {
+        app.findGrepPreferences = NothingEnum.nothing;
+        app.changeGrepPreferences = NothingEnum.nothing;
+        app.findGrepPreferences.findWhat = pattern;
+        if (preferredScope && preferredScope.isValid && preferredScope.findGrep) {
+            var scopedMatches = preferredScope.findGrep();
+            if (scopedMatches && scopedMatches.length > 0) return scopedMatches;
+        }
+    } catch (e) {}
+    try {
+        app.findGrepPreferences = NothingEnum.nothing;
+        app.changeGrepPreferences = NothingEnum.nothing;
+        app.findGrepPreferences.findWhat = pattern;
+        return doc.findGrep();
+    } catch (e2) {
+        return [];
+    }
+}
+
 function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
     try {
         app.findGrepPreferences = NothingEnum.nothing;
@@ -4832,8 +4861,7 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
     try {
         for (var i = globalParkedTables.length - 1; i >= 0; i--) {
             var parked = globalParkedTables[i];
-            app.findGrepPreferences.findWhat = "[ \t]*###TBL_\\s*" + parked.id + "\\s*###[ \t]*";
-            var results = doc.findGrep();
+            var results = findTranslationMarkerMatches(doc, parked.hostText, parked.marker, true);
             if (results.length > 0) {
                 var tableRestored = false;
                 try {
@@ -4844,17 +4872,11 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
                         });
                     }
                 } catch (e1) {}
-                if (!tableRestored && textTargets && textTargets.length > 0) {
-                    try {
-                        var fallbackAnchor = getParkedTableAnchorCharacter(parked.frame);
-                        if (fallbackAnchor && fallbackAnchor.isValid) fallbackAnchor.move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1));
-                    } catch (eFallback) {}
+                if (!tableRestored) {
+                    try { writeLog("Tabelle konnte nicht exakt wiederhergestellt werden: " + parked.marker, "WARNUNG"); } catch (eWarn) {}
                 }
-            } else if (textTargets && textTargets.length > 0) {
-                try {
-                    var detachedAnchor = getParkedTableAnchorCharacter(parked.frame);
-                    if (detachedAnchor && detachedAnchor.isValid) detachedAnchor.move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1));
-                } catch (e2) {}
+            } else {
+                try { writeLog("Tabellen-Marker nicht gefunden: " + parked.marker, "WARNUNG"); } catch (e2) {}
             }
             try { if (parked.frame && parked.frame.isValid) parked.frame.remove(); } catch (e3) {}
         }
@@ -4864,7 +4886,7 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
         var restorePasses = 0;
         var restoreLimit = 10000;
         while (restorePasses < restoreLimit) {
-            app.findGrepPreferences.findWhat = "###IMG_\\s*\\d+\\s*###";
+            app.findGrepPreferences.findWhat = "###IMG_[0-9_]+###";
             var allFoundImages = doc.findGrep();
             if (!allFoundImages || allFoundImages.length === 0) break;
 
@@ -4873,7 +4895,7 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
                 var placeholderRange = allFoundImages[f];
                 if (!placeholderRange || !placeholderRange.isValid) continue;
 
-                var match = placeholderRange.contents.match(/IMG_\s*(\d+)/);
+                var match = placeholderRange.contents.match(/IMG_([0-9_]+)/);
                 if (!match) continue;
 
                 var imgID = match[1];
@@ -4961,6 +4983,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
     }
 
     var globalParkedTables = []; var tableCounter = 0; var imageCounter = 0;
+    var markerRunToken = String(new Date().getTime()) + "_" + String(Math.floor(Math.random() * 1000000));
 
     try {
         for (var i = 0; i < textTargets.length; i++) {
@@ -4972,12 +4995,13 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 var tables = currentText.tables.everyItem().getElements();
                 for (var tableReverseIndex = tables.length - 1; tableReverseIndex >= 0; tableReverseIndex--) {
                     var tbl = tables[tableReverseIndex]; var tblId = ++tableCounter; 
-                    var marker = "###TBL_" + tblId + "###";
+                    var tblKey = buildTranslationMarkerKey(markerRunToken, tblId);
+                    var marker = buildTranslationMarker("TBL", tblKey);
                     var tmpFrame = storageEnv.page.textFrames.add({itemLayer: storageEnv.layer, geometricBounds: [0,-100, 50, -50]});
                     
                     var p = tbl.storyOffset.parent; var idx = tbl.storyOffset.index;
                     p.characters.item(idx).move(LocationOptions.AFTER, tmpFrame.insertionPoints.item(0));
-                    globalParkedTables.push({ id: tblId, frame: tmpFrame });
+                    globalParkedTables.push({ id: tblKey, marker: marker, frame: tmpFrame, hostText: currentText });
                     p.insertionPoints.item(idx).contents = marker;
                     
                     var pastedTbl = tmpFrame.tables[0];
@@ -4994,10 +5018,11 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 var foundAnchors = currentText.findText();
                 for (var a = foundAnchors.length - 1; a >= 0; a--) {
                     var anchorChar = foundAnchors[a].characters[0]; var imgID = ++imageCounter; 
-                    var marker = "###IMG_" + imgID + "###";
+                    var imgKey = buildTranslationMarkerKey(markerRunToken, imgID);
+                    var marker = buildTranslationMarker("IMG", imgKey);
                     
-                    if (anchorChar.pageItems.length > 0) anchorChar.pageItems[0].label = "TMP_IMG_" + imgID;
-                    else if (anchorChar.allPageItems.length > 0) anchorChar.allPageItems[0].label = "TMP_IMG_" + imgID;
+                    if (anchorChar.pageItems.length > 0) anchorChar.pageItems[0].label = "TMP_IMG_" + imgKey;
+                    else if (anchorChar.allPageItems.length > 0) anchorChar.allPageItems[0].label = "TMP_IMG_" + imgKey;
                     
                     var p = anchorChar.parent; var idx = anchorChar.index;
                     anchorChar.move(LocationOptions.AFTER, storageEnv.frame.insertionPoints.item(-1));
@@ -5005,7 +5030,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
                     try {
                         var sItems = storageEnv.frame.allPageItems; var movedItem = null;
-                        for(var j = sItems.length - 1; j >= 0; j--){ if(sItems[j].label === "TMP_IMG_" + imgID) { movedItem = sItems[j]; break; } }
+                        for(var j = sItems.length - 1; j >= 0; j--){ if(sItems[j].label === "TMP_IMG_" + imgKey) { movedItem = sItems[j]; break; } }
                         if (movedItem) {
                             var safeAddNestedTarget = function(tfItem) { var nStory; try { nStory = tfItem.parentStory; } catch(e) { nStory = tfItem.texts[0]; } addTarget(nStory); };
                             if (movedItem.constructor.name === "TextFrame") safeAddNestedTarget(movedItem);
@@ -5078,7 +5103,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             }
             
             var xml = buildXMLWithGlossary(textTargets[i]);
-            var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
+            var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_[0-9_]+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
             
             if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
                 finalTranslations[i] = ""; 
@@ -5835,7 +5860,7 @@ function buildTextObjectXML(textObj) {
             });
         }
 
-        chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
+        chunk = chunk.replace(/###((?:TBL|IMG)_[0-9_]+)###/g, '<nt>###$1###</nt>');
         chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
         if (chunk !== "") {
             xmlString += '<t f="' + fFamily + '" s="' + fStyle + '" z="' + pSize + '" p="' + pStyleName + '" l="' + ldingStr + '" c="' + fColor + '" k="' + cStyle + '" a="' + pAli + '" li="' + lInd + '" fi="' + fInd + '" b="' + bList + '">' + chunk + '</t>';
