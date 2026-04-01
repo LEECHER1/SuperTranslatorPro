@@ -2675,6 +2675,7 @@ function prepareLegacyMasterSpreads(doc, allowCreation) {
     setMasterSpreadLanguageNaming(germanMaster, "B", "de");
     replaceMasterLanguageBadgeText(germanMaster, "de");
 
+    var deferredMasterOrderCodes = [];
     var langTasks = collectLegacyBDALanguageTasks(doc);
     if (allowCreation) {
         var sourceCode = getLegacyDetectedSourceCode(doc);
@@ -2703,11 +2704,11 @@ function prepareLegacyMasterSpreads(doc, allowCreation) {
             var creationState = getLegacyMasterCreationState(germanMaster, langTasks);
             createLegacyTargetMasters(doc, germanMaster, missingCodes, creationState.anchor, creationState.nextPrefixIndex);
         }
-        reorderLegacyTargetMasters(doc, germanMaster, selection.orderedCodes || []);
+        deferredMasterOrderCodes = selection.orderedCodes || [];
         langTasks = collectLegacyBDALanguageTasks(doc, selection.selectedCodes);
     }
 
-    return { germanMaster: germanMaster, langTasks: langTasks };
+    return { germanMaster: germanMaster, langTasks: langTasks, deferredMasterOrderCodes: deferredMasterOrderCodes };
 }
 
 function shouldCheckGermanText(text) {
@@ -3687,7 +3688,11 @@ function runMainProcess(doc, config) {
     updateLanguageMasterVersionLabels(doc);
     syncMasterTextChanges(doc);
     if (config.mode === "BDA") {
-        return runBDAMode(doc, config, preparedLegacy);
+        var bdaResultMsg = runBDAMode(doc, config, preparedLegacy);
+        if (preparedLegacy && preparedLegacy.germanMaster && preparedLegacy.deferredMasterOrderCodes && preparedLegacy.deferredMasterOrderCodes.length > 0) {
+            reorderLegacyTargetMasters(doc, preparedLegacy.germanMaster, preparedLegacy.deferredMasterOrderCodes);
+        }
+        return bdaResultMsg;
     } else {
         updateProgress(5, t("read_textframes"), 5, t("preparation"));
         var targetTextObjArray = [];
