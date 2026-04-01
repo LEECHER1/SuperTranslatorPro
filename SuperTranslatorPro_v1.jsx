@@ -6,6 +6,9 @@
 
 // --- 0. EINSTELLUNGEN (API-KEY, CSV-PFAD & TM-PFAD) ---
 var DEEPL_KEY_LABEL = "SuperTranslatorPRO_DeepL_API_Key";
+var OPENAI_KEY_LABEL = "SuperTranslatorPRO_OpenAI_API_Key";
+var OPENAI_MODEL_LABEL = "SuperTranslatorPRO_OpenAI_Model";
+var TRANSLATION_PROVIDER_LABEL = "SuperTranslatorPRO_TranslationProvider";
 var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
 var REF_SYMBOLS_LABEL = "SuperTranslatorPRO_RefSymbols";
@@ -59,7 +62,12 @@ var UI_STRINGS = {
     debug_tables_images: { de: "Debug-Log für Tabellen/Bilder", en: "Debug log for tables/images" },
     debug_tables_images_help: { de: "Schreibt einen ausführlichen Diagnose-Log für das Parken und Wiederherstellen von Tabellen/Bildern.", en: "Writes a detailed diagnostic log for parking and restoring tables/images." },
     info: { de: "ℹ️ Info", en: "ℹ️ Info" },
+    translation_provider: { de: "Übersetzungsanbieter:", en: "Translation provider:" },
+    provider_deepl: { de: "DeepL (Standard)", en: "DeepL (default)" },
+    provider_openai: { de: "ChatGPT / OpenAI", en: "ChatGPT / OpenAI" },
     deepl_api_key: { de: "DeepL Pro API-Key:", en: "DeepL Pro API key:" },
+    openai_api_key: { de: "OpenAI API-Key:", en: "OpenAI API key:" },
+    openai_model: { de: "OpenAI Modell:", en: "OpenAI model:" },
     glossary_path: { de: "Netzwerk-Wörterbuch (CSV Pfad):", en: "Network glossary (CSV path):" },
     browse: { de: "Durchsuchen...", en: "Browse..." },
     glossary_select: { de: "Bitte wähle die Wörterbuch CSV-Datei aus", en: "Please choose the glossary CSV file" },
@@ -73,7 +81,7 @@ var UI_STRINGS = {
     glossary_template_created: { de: "Wörterbuch-Template erstellt:\n{path}", en: "Glossary template created:\n{path}" },
     glossary_template_failed: { de: "Wörterbuch-Template konnte nicht erstellt werden:\n{message}", en: "Glossary template could not be created:\n{message}" },
     formality: { de: "Anrede-Form (für unterstützte Sprachen):", en: "Formality (for supported languages):" },
-    formality_default: { de: "Standard (DeepL entscheidet)", en: "Default (DeepL decides)" },
+    formality_default: { de: "Standard", en: "Default" },
     formality_formal: { de: "Formell (Sie)", en: "Formal" },
     formality_informal: { de: "Informell (Du)", en: "Informal" },
     ignored_styles: { de: "Ignorierte Absatz-/Zeichenformate (DNT, kommagetrennt):", en: "Ignored paragraph/character styles (DNT, comma-separated):" },
@@ -166,7 +174,9 @@ var UI_STRINGS = {
     validation_select_something: { de: "Bitte markiere zuerst etwas im Dokument.", en: "Please select something in the document first." },
     validation_enter_pages: { de: "Bitte Seitenzahlen eintragen.", en: "Please enter page numbers." },
     validation_enter_pages_or_auto: { de: "Bitte gib die Seiten an oder nutze AUTO.", en: "Please enter pages or use AUTO." },
-    validation_enter_api_key: { de: "Bitte trage zuerst deinen DeepL API-Key in den Einstellungen (⚙️) ein.", en: "Please enter your DeepL API key in the settings (⚙️) first." },
+    validation_enter_api_key: { de: "Bitte trage zuerst den API-Key für den aktiven Übersetzungsanbieter in den Einstellungen (⚙️) ein.", en: "Please enter the API key for the active translation provider in the settings (⚙️) first." },
+    validation_enter_deepl_key: { de: "Bitte trage zuerst deinen DeepL API-Key in den Einstellungen (⚙️) ein.", en: "Please enter your DeepL API key in the settings (⚙️) first." },
+    validation_enter_openai_key: { de: "Bitte trage zuerst deinen OpenAI API-Key in den Einstellungen (⚙️) ein.", en: "Please enter your OpenAI API key in the settings (⚙️) first." },
     process_cancelled: { de: "⚠️ Vorgang abgebrochen!\n\nTipp: Drücke jetzt Cmd+Z (Rückgängig), um alle bisherigen Änderungen in einem Rutsch zu verwerfen.", en: "⚠️ Process cancelled.\n\nTip: press Cmd+Z (Undo) now to revert all changes made so far in one step." },
     process_error: { de: "Ein Fehler ist aufgetreten:\n{message}", en: "An error occurred:\n{message}" },
     undo_translation: { de: "Super Übersetzer: {mode}", en: "Super Translator: {mode}" },
@@ -208,6 +218,14 @@ var UI_STRINGS = {
     deepl_incomplete: { de: "DeepL lieferte unvollständige Ergebnisse zurück.", en: "DeepL returned incomplete results." },
     deepl_connection_error: { de: "DeepL-Verbindungsfehler: {message}", en: "DeepL connection error: {message}" },
     deepl_windows_plain_not_implemented: { de: "DeepL Plain Batch ist unter Windows nicht implementiert.", en: "DeepL plain batch is not implemented on Windows." },
+    openai_unknown_response: { de: "Unbekannte Antwort von OpenAI.", en: "Unknown response from OpenAI." },
+    openai_request_blocks: { de: "OpenAI Anfrage: Sende Blöcke {start} bis {end} von {total}...", en: "OpenAI request: sending blocks {start} to {end} of {total}..." },
+    openai_parse_error: { de: "OpenAI-Antwort konnte nicht gelesen werden.", en: "The OpenAI response could not be read." },
+    openai_error_prefix: { de: "OpenAI-Fehler: {message}", en: "OpenAI error: {message}" },
+    openai_incomplete: { de: "OpenAI lieferte unvollständige Ergebnisse zurück.", en: "OpenAI returned incomplete results." },
+    openai_connection_error: { de: "OpenAI-Verbindungsfehler: {message}", en: "OpenAI connection error: {message}" },
+    openai_refusal: { de: "OpenAI hat die Anfrage abgelehnt: {message}", en: "OpenAI refused the request: {message}" },
+    openai_invalid_xml: { de: "OpenAI lieferte für Block {index} ein ungültiges XML-/Tag-Ergebnis zurück.", en: "OpenAI returned an invalid XML/tag result for block {index}." },
     applying_formatting: { de: "Wende Formatierungen an...", en: "Applying formatting..." },
     restoring_tables_images: { de: "Stelle Tabellen und Bilder wieder her...", en: "Restoring tables and images..." },
     checking_overflow: { de: "Prüfe auf Textübersatz (Auto-Fit)...", en: "Checking for overset text (auto-fit)..." }
@@ -228,7 +246,7 @@ function buildAboutText() {
     var infoText = SCRIPT_NAME + " v" + SCRIPT_VERSION + "\n";
     infoText += "© " + new Date().getFullYear() + " Andreas Schwarz\n\n";
     if (UI_IS_GERMAN) {
-        infoText += "Ein professionelles Übersetzungstool für InDesign in Verbindung mit der DeepL API.\n\n";
+        infoText += "Ein professionelles Übersetzungstool für InDesign mit DeepL als Standard und optionalem OpenAI-Provider.\n\n";
         infoText += "Kernfunktionen:\n";
         infoText += "• Nahtloser Erhalt von Textformatierungen, Tabellen und verankerten Bildern\n";
         infoText += "• Integriertes Translation Memory (JSON) zur API-Kostenersparnis\n";
@@ -237,7 +255,7 @@ function buildAboutText() {
         infoText += "• Cross-Platform (macOS & Windows) API-Anbindung\n";
         infoText += "• Intelligente Auto-Fit Korrektur gegen Textrahmen-Übersatz";
     } else {
-        infoText += "A professional translation tool for InDesign powered by the DeepL API.\n\n";
+        infoText += "A professional translation tool for InDesign powered by DeepL by default with an optional OpenAI provider.\n\n";
         infoText += "Core features:\n";
         infoText += "• Preserves text formatting, tables, and anchored images\n";
         infoText += "• Integrated translation memory (JSON) to reduce API costs\n";
@@ -247,6 +265,41 @@ function buildAboutText() {
         infoText += "• Smart auto-fit correction for overset text frames";
     }
     return infoText;
+}
+
+function normalizeTranslationProvider(providerId) {
+    var normalized = String(providerId || "").replace(/^\s+|\s+$/g, "").toLowerCase();
+    if (normalized === "openai" || normalized === "chatgpt") return "openai";
+    return "deepl";
+}
+
+function normalizeOpenAIModel(modelName) {
+    var normalized = String(modelName || "").replace(/^\s+|\s+$/g, "");
+    return normalized !== "" ? normalized : "gpt-5.4-mini";
+}
+
+function getTranslationProviderDisplayName(providerId) {
+    var normalized = normalizeTranslationProvider(providerId);
+    return normalized === "openai" ? t("provider_openai") : t("provider_deepl");
+}
+
+function getActiveTranslationProvider() {
+    return normalizeTranslationProvider(translationProviderSetting);
+}
+
+function getProviderValidationMessage(providerId) {
+    var normalized = normalizeTranslationProvider(providerId);
+    if (normalized === "openai") {
+        return (!openAIKey || openAIKey === "") ? t("validation_enter_openai_key") : "";
+    }
+    return (!apiKey || apiKey === "") ? t("validation_enter_deepl_key") : "";
+}
+
+function getDefaultProviderTargetLangCode(code) {
+    var normalized = String(code || "").toUpperCase();
+    if (normalized === "EN") return "EN-GB";
+    if (normalized === "PT") return "PT-PT";
+    return normalized;
 }
 
 function normalizeRefSymbols(symbols) {
@@ -675,6 +728,9 @@ var apiKey = app.extractLabel(DEEPL_KEY_LABEL);
 if (!apiKey || apiKey === "") {
     apiKey = ""; // HIER WURDE DER FALLBACK-KEY ENTFERNT
 }
+var openAIKey = app.extractLabel(OPENAI_KEY_LABEL) || "";
+var openAIModel = normalizeOpenAIModel(app.extractLabel(OPENAI_MODEL_LABEL) || "gpt-5.4-mini");
+var translationProviderSetting = normalizeTranslationProvider(app.extractLabel(TRANSLATION_PROVIDER_LABEL) || "deepl");
 
 var csvPathSettingRaw = app.extractLabel(CSV_PATH_LABEL) || "";
 var csvPath = resolveCSVPath(csvPathSettingRaw);
@@ -1994,9 +2050,22 @@ btnSettings.onClick = function() {
     var btnInfo = topGrp.add("button", undefined, t("info"));
     btnInfo.preferredSize = [80, 25];
     
+    setWin.add("statictext", undefined, t("translation_provider"));
+    var providerLabels = [t("provider_deepl"), t("provider_openai")];
+    var providerDrop = setWin.add("dropdownlist", undefined, providerLabels);
+    providerDrop.selection = (getActiveTranslationProvider() === "openai") ? 1 : 0;
+
     setWin.add("statictext", undefined, t("deepl_api_key"));
     var keyInput = setWin.add("edittext", undefined, apiKey);
     keyInput.characters = 40;
+
+    setWin.add("statictext", undefined, t("openai_api_key"));
+    var openAIKeyInput = setWin.add("edittext", undefined, openAIKey);
+    openAIKeyInput.characters = 40;
+
+    setWin.add("statictext", undefined, t("openai_model"));
+    var openAIModelInput = setWin.add("edittext", undefined, openAIModel);
+    openAIModelInput.characters = 30;
     
     setWin.add("panel", undefined, ""); 
     
@@ -2077,13 +2146,19 @@ btnSettings.onClick = function() {
     var btnCancelSet = rightGrp.add("button", undefined, t("cancel"));
     
     btnSave.onClick = function() {
-        apiKey = keyInput.text;
+        translationProviderSetting = normalizeTranslationProvider(providerDrop.selection && providerDrop.selection.index === 1 ? "openai" : "deepl");
+        apiKey = String(keyInput.text || "").replace(/^\s+|\s+$/g, "");
+        openAIKey = String(openAIKeyInput.text || "").replace(/^\s+|\s+$/g, "");
+        openAIModel = normalizeOpenAIModel(openAIModelInput.text);
         csvPath = csvInput.text;
         csvPathSettingRaw = csvPath;
         tmPath = tmInput.text;
         refSymbolsSetting = normalizeRefSymbols(autoHyperlinkSymbolsInput.text);
         backPageTrackerSetting = normalizeBackPageTrackerSetting(backPageTrackerInput.text);
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
+        app.insertLabel(OPENAI_KEY_LABEL, openAIKey);
+        app.insertLabel(OPENAI_MODEL_LABEL, openAIModel);
+        app.insertLabel(TRANSLATION_PROVIDER_LABEL, translationProviderSetting);
         app.insertLabel(CSV_PATH_LABEL, csvPath); 
         app.insertLabel(TM_PATH_LABEL, tmPath); 
         app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
@@ -3517,9 +3592,10 @@ btnTranslate.onClick = function() {
     if (config.mode === "PAGES" && config.sourcePages.replace(/\s/g, "") === "") { alert(t("validation_enter_pages")); return; }
     if (config.mode === "BDA" && config.bdaSourcePages.replace(/\s/g, "") === "") { alert(t("validation_enter_pages_or_auto")); return; }
     
-    // Prüfen, ob API-Key hinterlegt ist
-    if (!apiKey || apiKey === "") {
-        alert(t("validation_enter_api_key"));
+    // Prüfen, ob API-Key des aktiven Providers hinterlegt ist
+    var providerValidationMessage = getProviderValidationMessage(getActiveTranslationProvider());
+    if (providerValidationMessage !== "") {
+        alert(providerValidationMessage || t("validation_enter_api_key"));
         return;
     }
 
@@ -3540,7 +3616,7 @@ btnTranslate.onClick = function() {
     createProgressWindow();
 
     writeLog("=== NEUER VORGANG GESTARTET ===");
-    writeLog("Dokument: " + doc.name + " | Modus: " + config.mode + " | Zielsprache: " + config.lang);
+    writeLog("Dokument: " + doc.name + " | Modus: " + config.mode + " | Zielsprache: " + config.lang + " | Provider: " + getTranslationProviderDisplayName(getActiveTranslationProvider()));
     beginDebugSession(doc, config);
 
     app.doScript(
@@ -4706,7 +4782,10 @@ function createFeedbackReport() {
             reportFile.writeln("OS: " + ($.os || "unbekannt"));
             try { reportFile.writeln("InDesign-Version: " + app.version); } catch (e) { reportFile.writeln("InDesign-Version: unbekannt"); }
             try { reportFile.writeln("Dokument: " + (app.activeDocument ? app.activeDocument.name : "Kein Dokument offen")); } catch (e) { reportFile.writeln("Dokument: unbekannt"); }
-            reportFile.writeln("API-Key gesetzt: " + ((apiKey && apiKey !== "") ? "Ja" : "Nein"));
+            reportFile.writeln("Übersetzungsanbieter: " + getTranslationProviderDisplayName(getActiveTranslationProvider()));
+            reportFile.writeln("DeepL-Key gesetzt: " + ((apiKey && apiKey !== "") ? "Ja" : "Nein"));
+            reportFile.writeln("OpenAI-Key gesetzt: " + ((openAIKey && openAIKey !== "") ? "Ja" : "Nein"));
+            reportFile.writeln("OpenAI-Modell: " + (openAIModel || "(leer)"));
             reportFile.writeln("CSV-Pfad: " + (csvPath || "(leer)"));
             reportFile.writeln("TM-Pfad: " + (tmPath || "(leer)"));
             reportFile.writeln("Referenz-Symbole: " + (refSymbolsSetting || "[]"));
@@ -4795,10 +4874,7 @@ function getRelatedTargetMasterSpreads(doc, sourceMasterName) {
 }
 
 function getDeepLLangCode(code) {
-    var deepLLang = code.toUpperCase();
-    if (deepLLang === "EN") return "EN-GB";
-    if (deepLLang === "PT") return "PT-PT";
-    return deepLLang;
+    return getDefaultProviderTargetLangCode(code);
 }
 
 function replaceMasterFrameText(masterSpread, pageIndex, frameIndex, contents) {
@@ -4867,7 +4943,7 @@ function syncMasterTextChanges(doc) {
         var glossaryRuntime = glossaryRuntimeByLang[deepLLang];
         var texts = [];
         for (var b = 0; b < blocks.length; b++) texts.push(buildPlainTranslationXML(blocks[b].text, glossaryRuntime));
-        var translated = translateBatchDeepL(texts, deepLLang, 10, 20);
+        var translated = translateBatchWithProvider(texts, deepLLang, 10, 20);
         if (!translated) continue;
         for (var b = 0; b < blocks.length; b++) {
             if (!translated[b]) continue;
@@ -5274,7 +5350,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         return xmlString + "</root>";
     };
 
-        var deepLQueue = [];
+        var translationQueue = [];
         var finalTranslations = new Array(textTargets.length);
         var tmHitCount = 0;
         var exactGlossaryHitCount = 0;
@@ -5306,33 +5382,34 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 globalStats.savedChars += textOnlyLength;
                 tmHitCount++;
             } else {
-                deepLQueue.push({ index: i, xml: xml, len: textOnlyLength });
+                translationQueue.push({ index: i, xml: xml, len: textOnlyLength });
                 finalTranslations[i] = null;
             }
         }
         writeDebugLog("translation:summary exactGlossaryHits=" + exactGlossaryHitCount +
             " tmHits=" + tmHitCount +
-            " deepLQueue=" + deepLQueue.length +
+            " provider=" + getActiveTranslationProvider() +
+            " translationQueue=" + translationQueue.length +
             " emptyTargets=" + emptyCount);
         
-        if (deepLQueue.length > 0) {
+        if (translationQueue.length > 0) {
             var justXMLs = [];
-            for(var q=0; q < deepLQueue.length; q++) justXMLs.push(deepLQueue[q].xml);
+            for(var q=0; q < translationQueue.length; q++) justXMLs.push(translationQueue[q].xml);
             
-            var translatedBatch = translateBatchDeepL(justXMLs, selectedLang, overStartPct, overEndPct);
-            if (!translatedBatch || translatedBatch.length !== deepLQueue.length) {
-                throw new Error(t("deepl_incomplete"));
+            var translatedBatch = translateBatchWithProvider(justXMLs, selectedLang, overStartPct, overEndPct);
+            if (!translatedBatch || translatedBatch.length !== translationQueue.length) {
+                throw new Error(t(getActiveTranslationProvider() === "openai" ? "openai_incomplete" : "deepl_incomplete"));
             }
 
             var tmUpdated = false;
-            for(var q=0; q < deepLQueue.length; q++) {
+            for(var q=0; q < translationQueue.length; q++) {
                 var trXML = translatedBatch[q];
                 if (trXML) { 
                     trXML = normalizeTranslatedXML(trXML);
-                    finalTranslations[deepLQueue[q].index] = trXML;
-                    tm[selectedLang][deepLQueue[q].xml] = trXML;
+                    finalTranslations[translationQueue[q].index] = trXML;
+                    tm[selectedLang][translationQueue[q].xml] = trXML;
                     tmUpdated = true;
-                    globalStats.apiChars += deepLQueue[q].len;
+                    globalStats.apiChars += translationQueue[q].len;
                 }
             }
             if (tmUpdated) saveTM(tm); 
@@ -5395,6 +5472,109 @@ function extractDeepLFailureMessage(resultJSON, parsedObj) {
     }
     if (msg === "") msg = t("deepl_unknown_response");
     return msg;
+}
+
+function compareStringArrays(arrA, arrB) {
+    if (arrA.length !== arrB.length) return false;
+    for (var i = 0; i < arrA.length; i++) {
+        if (String(arrA[i]) !== String(arrB[i])) return false;
+    }
+    return true;
+}
+
+function getXMLTagTokens(xml) {
+    var matches = String(xml || "").match(/<[^>]+>/g);
+    return matches ? matches : [];
+}
+
+function getNoTranslateSegments(xml) {
+    var matches = [];
+    var regex = /<nt>([\s\S]*?)<\/nt>/g;
+    var match = null;
+    var raw = String(xml || "");
+    while ((match = regex.exec(raw)) !== null) matches.push(match[1]);
+    return matches;
+}
+
+function getProtectedMarkerTokens(xml) {
+    var matches = String(xml || "").match(/###(?:IMG|TBL)_\d+###/g);
+    return matches ? matches : [];
+}
+
+function validateStructuredXMLTranslation(sourceXML, translatedXML) {
+    var sourceNorm = normalizeTranslatedXML(sourceXML);
+    var translatedNorm = normalizeTranslatedXML(translatedXML);
+    if (sourceNorm === "" || translatedNorm === "") return false;
+    if (!compareStringArrays(getXMLTagTokens(sourceNorm), getXMLTagTokens(translatedNorm))) return false;
+    if (!compareStringArrays(getNoTranslateSegments(sourceNorm), getNoTranslateSegments(translatedNorm))) return false;
+    if (!compareStringArrays(getProtectedMarkerTokens(sourceNorm), getProtectedMarkerTokens(translatedNorm))) return false;
+    return true;
+}
+
+function extractOpenAIFailureMessage(resultJSON, parsedObj) {
+    var msg = "";
+    try {
+        if (parsedObj && parsedObj.error && parsedObj.error.message) msg = parsedObj.error.message;
+        else if (parsedObj && parsedObj.message) msg = parsedObj.message;
+        else if (parsedObj && parsedObj.status && parsedObj.status !== "completed") msg = "status=" + parsedObj.status;
+    } catch (e) {}
+    if (msg === "" && resultJSON && resultJSON !== "") {
+        msg = String(resultJSON).replace(/[\r\n]+/g, " ").replace(/^\s+|\s+$/g, "");
+        if (msg.length > 220) msg = msg.substring(0, 220) + "...";
+    }
+    if (msg === "") msg = t("openai_unknown_response");
+    return msg;
+}
+
+function extractOpenAIOutputText(parsedObj) {
+    try {
+        if (parsedObj && parsedObj.output_text) return String(parsedObj.output_text);
+    } catch (e) {}
+
+    var parts = [];
+    var output = (parsedObj && parsedObj.output) ? parsedObj.output : [];
+    for (var i = 0; i < output.length; i++) {
+        var message = output[i];
+        var content = (message && message.content) ? message.content : [];
+        for (var j = 0; j < content.length; j++) {
+            var item = content[j];
+            if (!item) continue;
+            if (item.type === "refusal") {
+                throw new Error(t("openai_refusal", { message: (item.refusal || t("openai_unknown_response")) }));
+            }
+            if (item.type === "output_text" && item.text !== undefined && item.text !== null) {
+                parts.push(String(item.text));
+            }
+        }
+    }
+    return parts.join("");
+}
+
+function buildOpenAITranslationPrompt(textsArray, targetLangCode) {
+    var prompt = "";
+    prompt += "Target language code: " + targetLangCode + "\n";
+    prompt += "Translate each XML fragment into the target language.\n";
+    prompt += "Preserve every XML tag and every attribute exactly as provided.\n";
+    prompt += "Only translate human-readable text nodes.\n";
+    prompt += "Do not translate or alter text inside <nt>...</nt>.\n";
+    prompt += "Do not change placeholders like ###IMG_1### or ###TBL_1###.\n";
+    prompt += "Keep entities and structure such as <root>, <t>, <tab/>, <pbr/>, and <lbr/> unchanged.\n";
+    if (formalitySetting === "more") prompt += "Use a formal and polite register where the target language supports it.\n";
+    else if (formalitySetting === "less") prompt += "Use an informal and direct register where the target language supports it.\n";
+    else prompt += "Use the most natural default register for the target language.\n";
+    prompt += "Return JSON only with a translations array that has the same order and length as the input.\n\n";
+    for (var i = 0; i < textsArray.length; i++) {
+        prompt += "[" + (i + 1) + "]\n" + String(textsArray[i] || "") + "\n\n";
+    }
+    return prompt;
+}
+
+function translateBatchWithProvider(textsArray, targetLangCode, overStartPct, overEndPct, providerId) {
+    var activeProvider = normalizeTranslationProvider(providerId || getActiveTranslationProvider());
+    if (activeProvider === "openai") {
+        return translateBatchOpenAI(textsArray, targetLangCode, overStartPct, overEndPct);
+    }
+    return translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPct);
 }
 
 function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPct) {
@@ -5462,6 +5642,120 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
         }
         finally { try { payloadFile.remove(); } catch(e){} }
     }
+    return translated;
+}
+
+function translateBatchOpenAI(textsArray, targetLangCode, overStartPct, overEndPct) {
+    var endpoint = "https://api.openai.com/v1/responses";
+    var translated = [];
+    var batchSize = 8;
+    var modelName = normalizeOpenAIModel(openAIModel);
+
+    for (var b = 0; b < textsArray.length; b += batchSize) {
+        if (cancelFlag) throw new Error("CANCELLED");
+
+        var batchPct = (b / textsArray.length);
+        var currentTaskPct = 20 + Math.round(batchPct * 60);
+        var currentOverPct = overStartPct ? (overStartPct + (batchPct * (overEndPct - overStartPct) * 0.8)) : null;
+        var endBatch = Math.min(b + batchSize, textsArray.length);
+        updateProgress(currentTaskPct, t("openai_request_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
+
+        var batchTexts = [];
+        for (var j = b; j < endBatch; j++) batchTexts.push(String(textsArray[j] || ""));
+
+        var payloadObj = {
+            model: modelName,
+            instructions: "You are a translation engine for Adobe InDesign XML fragments. Preserve XML tags and attributes exactly. Output only JSON that matches the requested schema.",
+            input: buildOpenAITranslationPrompt(batchTexts, targetLangCode),
+            text: {
+                format: {
+                    type: "json_schema",
+                    name: "translation_batch",
+                    schema: {
+                        type: "object",
+                        properties: {
+                            translations: {
+                                type: "array",
+                                items: { type: "string" }
+                            }
+                        },
+                        required: ["translations"],
+                        additionalProperties: false
+                    }
+                }
+            }
+        };
+
+        var payloadFile = new File(Folder.temp + "/oai_pay_" + new Date().getTime() + ".json");
+        var outFile = null;
+        payloadFile.encoding = "UTF-8";
+        payloadFile.open("w");
+        payloadFile.write(serializeJSON(payloadObj));
+        payloadFile.close();
+
+        try {
+            var resultJSON = "";
+            if (File.fs === "Macintosh") {
+                var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Content-Type: application/json' -H 'Authorization: Bearer " + openAIKey + "' --data-binary @'" + payloadFile.fsName + "'";
+                resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+            } else {
+                outFile = new File(Folder.temp + "/oai_out_" + new Date().getTime() + ".json");
+                var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
+                          'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Content-Type: application/json"" -H ""Authorization: Bearer ' + openAIKey + '"" --data-binary @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
+                app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
+                if (outFile.exists) {
+                    outFile.encoding = "UTF-8";
+                    outFile.open("r");
+                    resultJSON = outFile.read();
+                    outFile.close();
+                    try { outFile.remove(); } catch (outRemoveErr) {}
+                    outFile = null;
+                }
+            }
+
+            var parsedObj = null;
+            try {
+                parsedObj = eval("(" + resultJSON + ")");
+            } catch (parseError) {
+                throw new Error(t("openai_parse_error"));
+            }
+            if (!parsedObj || parsedObj.error) {
+                throw new Error(t("openai_error_prefix", { message: extractOpenAIFailureMessage(resultJSON, parsedObj) }));
+            }
+
+            var outputText = extractOpenAIOutputText(parsedObj);
+            if (!outputText || outputText === "") {
+                throw new Error(t("openai_error_prefix", { message: extractOpenAIFailureMessage(resultJSON, parsedObj) }));
+            }
+
+            var structuredObj = null;
+            try {
+                structuredObj = eval("(" + outputText + ")");
+            } catch (structuredParseError) {
+                throw new Error(t("openai_parse_error"));
+            }
+
+            if (!structuredObj || !structuredObj.translations || structuredObj.translations.length !== batchTexts.length) {
+                throw new Error(t("openai_incomplete"));
+            }
+
+            for (var k = 0; k < structuredObj.translations.length; k++) {
+                var translatedXML = normalizeTranslatedXML(structuredObj.translations[k]);
+                if (!validateStructuredXMLTranslation(batchTexts[k], translatedXML)) {
+                    throw new Error(t("openai_invalid_xml", { index: (b + k + 1) }));
+                }
+                translated.push(translatedXML);
+            }
+        } catch (e) {
+            if (e.message === "CANCELLED") throw e;
+            throw new Error(e.message && e.message.indexOf("OpenAI") === 0 ? e.message : t("openai_connection_error", { message: (e.message || "Request failed.") }));
+        }
+        finally {
+            try { payloadFile.remove(); } catch (payloadRemoveErr) {}
+            try { if (outFile && outFile.exists) outFile.remove(); } catch (outCleanupErr) {}
+        }
+    }
+
     return translated;
 }
 

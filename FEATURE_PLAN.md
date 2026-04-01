@@ -4,7 +4,7 @@
 
 ## Aktueller Status
 - **Version:** 28.2
-- **Datum:** 31. März 2026
+- **Datum:** 1. April 2026
 - **Status:** Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Copyfit, Provider-Erweiterung und UXP-Planung.
 
 ---
@@ -19,6 +19,7 @@
 - [x] Wörterbuch-/Glossar-System inkl. Erststart-Setup, Template, Migration und verständlicher Erklärungen
 - [x] Dynamische UI-Sprache DE/EN über `app.locale`
 - [x] Nachbearbeitung technischer Tokens wie `M5*15`, damit Leerzeichen sauber bleiben
+- [x] Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider
 
 ### Noch offen
 - [ ] Intelligente Copyfitting-Logik
@@ -84,13 +85,16 @@
 ---
 
 ## 4. Andere LLMs (ChatGPT / Gemini / Claude)
-- [ ] Provider-Interface für Übersetzungen definieren
+- [x] Provider-Interface für Übersetzungen definieren
 - [x] DeepL als Default behalten
-- [ ] Adapter für andere Anbieter vorbereiten (OpenAI, Google, Anthropic)
-- [ ] UI für Provider-Auswahl und API-Key-Felder hinzufügen
+- [x] OpenAI-Adapter für XML-/Tag-sichere Übersetzungen ergänzen
+- [ ] Adapter für Google / Gemini vorbereiten
+- [ ] Adapter für Anthropic / Claude vorbereiten
+- [x] UI für Provider-Auswahl und API-Key-Felder hinzufügen
 
 **Notizen:**
-- Noch nicht begonnen, außer dass DeepL weiterhin die Standardbasis bleibt.
+- Phase 1 ist umgesetzt: DeepL bleibt Standard, OpenAI ist auswählbar und nutzt eine strikte XML-/Tag-Validierung.
+- Offen bleiben Gemini und Claude sowie später ein optionaler Hybrid-/Polish-Modus.
 
 ---
 
@@ -158,8 +162,8 @@
 - [ ] `applySmartCopyfit(textFrame)` mit Tracking/Scale/Frame bauen
 - [ ] Overflow-Fix in `executeTranslation` ersetzen
 - [ ] Legacy-BDA, Auto-Hyperlinks und Glossar-Flow in echten Projekten breit testen
-- [ ] Provider-Abstraktion für andere LLMs definieren
-- [ ] UI für Provider-Auswahl und zusätzliche API-Keys erweitern
+- [ ] Gemini-/Claude-Adapter auf das neue Provider-Interface hängen
+- [ ] Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren
 - [ ] UXP-Refactoring-Plan erstellen
 - [ ] Glossar-Validator für fehlerhafte CSV-Struktur ergänzen
 - [ ] Erweiterte Cross-Reference-Logik für Spezialfälle ausbauen
@@ -167,6 +171,7 @@
 ---
 
 ## Änderungslog
+- 1. April 2026: Phase 1 der Provider-Erweiterung umgesetzt (Provider-Interface, OpenAI-Adapter, UI für Provider- und API-Key-Auswahl)
 - 31. März 2026: Plan auf realen Entwicklungsstand aktualisiert, Glossar-System ergänzt, Hyperlink- und Legacy-Fallback-Fortschritt eingetragen
 - 31. März 2026: UI/UX-Optimierung und Verlinken als neue Hauptpunkte ergänzt
 - 29. März 2026: Checkliste erstellt und als `FEATURE_PLAN.md` abgelegt
