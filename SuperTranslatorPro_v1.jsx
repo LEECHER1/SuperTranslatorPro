@@ -4774,7 +4774,12 @@ function runAutomaticHyperlinksForBDA(doc, config) {
     return null;
 }
 
-function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
+function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globalParkedImages) {
+    var unresolvedTables = [];
+    var unresolvedImages = [];
+    var unresolvedImageIds = {};
+    var restoredImageIds = {};
+    var leftoverMarkerCount = 0;
     try {
         app.findGrepPreferences = NothingEnum.nothing;
         app.changeGrepPreferences = NothingEnum.nothing;
@@ -4783,23 +4788,28 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
     try {
         for (var i = globalParkedTables.length - 1; i >= 0; i--) {
             var parked = globalParkedTables[i];
-            app.findGrepPreferences.findWhat = "[ \t]*###TBL_\\s*" + parked.id + "\\s*###[ \t]*";
+            var tableRestored = false;
+            app.findGrepPreferences.findWhat = "###TBL_\\s*" + parked.id + "\\s*###";
             var results = doc.findGrep();
             if (results.length > 0) {
                 try {
                     parked.frame.characters.item(0).move(LocationOptions.AFTER, results[0].insertionPoints.item(0));
                     results[0].remove();
+                    tableRestored = true;
                 } catch (e1) {}
-            } else if (textTargets && textTargets.length > 0) {
-                try { parked.frame.characters.item(0).move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1)); } catch (e2) {}
             }
-            try { if (parked.frame && parked.frame.isValid) parked.frame.remove(); } catch (e3) {}
+            if (!tableRestored) {
+                unresolvedTables.push(parked);
+                writeLog("Tabellen-Platzhalter konnte nicht sicher wiederhergestellt werden (" + parked.marker + "). Die Tabelle bleibt im Layer TEMP_TRANS_IMAGES.", "WARNUNG");
+            } else {
+                try { if (parked.frame && parked.frame.isValid) parked.frame.remove(); } catch (e3) {}
+            }
         }
 
         try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.itemLayer.visible = true; } catch (e4) {}
 
         var restorePasses = 0;
-        var restoreLimit = 10000;
+        var restoreLimit = Math.max(10000, (globalParkedImages && globalParkedImages.length ? globalParkedImages.length * 4 : 0));
         while (restorePasses < restoreLimit) {
             app.findGrepPreferences.findWhat = "###IMG_\\s*\\d+\\s*###";
             var allFoundImages = doc.findGrep();
@@ -4822,7 +4832,13 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
                         break;
                     }
                 }
-                if (targetImageInStorage === null) continue;
+                if (targetImageInStorage === null) {
+                    if (!unresolvedImageIds[imgID]) {
+                        unresolvedImageIds[imgID] = true;
+                        writeLog("Geparktes Bild/Objekt wurde im Temp-Speicher nicht gefunden (###IMG_" + imgID + "###).", "WARNUNG");
+                    }
+                    continue;
+                }
 
                 try {
                     var targetChar = targetImageInStorage.parent;
@@ -4830,26 +4846,62 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
                     if (targetChar && targetChar.constructor.name === "Character") {
                         targetChar.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
                         placeholderRange.remove();
+                        restoredImageIds[imgID] = true;
                         restoredOne = true;
                         break;
                     } else if (targetImageInStorage.parent && targetImageInStorage.parent.isValid) {
                         targetImageInStorage.parent.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
                         placeholderRange.remove();
+                        restoredImageIds[imgID] = true;
                         restoredOne = true;
                         break;
                     }
-                } catch (e5) {}
+                } catch (e5) {
+                    if (!unresolvedImageIds[imgID]) {
+                        unresolvedImageIds[imgID] = true;
+                        writeLog("Bild/Objekt konnte nicht wiederhergestellt werden (###IMG_" + imgID + "###).", "WARNUNG");
+                    }
+                }
             }
 
             if (!restoredOne) break;
             restorePasses++;
         }
+
+        if (globalParkedImages && globalParkedImages.length > 0) {
+            for (var p = 0; p < globalParkedImages.length; p++) {
+                var parkedImage = globalParkedImages[p];
+                if (!parkedImage) continue;
+                if (!restoredImageIds[parkedImage.id]) {
+                    unresolvedImages.push(parkedImage);
+                    if (!unresolvedImageIds[parkedImage.id]) {
+                        unresolvedImageIds[parkedImage.id] = true;
+                        writeLog("Bild/Objekt konnte nicht vollstaendig wiederhergestellt werden (" + parkedImage.marker + "). Es bleibt im Layer TEMP_TRANS_IMAGES.", "WARNUNG");
+                    }
+                }
+            }
+        }
+
+        app.findGrepPreferences.findWhat = "###(?:IMG|TBL)_\\s*\\d+\\s*###";
+        var leftoverMarkers = doc.findGrep();
+        leftoverMarkerCount = leftoverMarkers ? leftoverMarkers.length : 0;
+        if (leftoverMarkerCount > 0) {
+            var markerSamples = [];
+            for (var lm = 0; lm < leftoverMarkers.length && lm < 10; lm++) markerSamples.push(leftoverMarkers[lm].contents);
+            writeLog("Nach dem Restore verbleiben " + leftoverMarkerCount + " Platzhalter im Dokument" + (markerSamples.length ? ": " + markerSamples.join(", ") : "") + ".", "WARNUNG");
+        }
     } catch (restoreErr) {
+        writeLog("Fehler beim Wiederherstellen von Tabellen/Bildern: " + (restoreErr.message || restoreErr), "WARNUNG");
     } finally {
         try { app.findGrepPreferences = NothingEnum.nothing; } catch (e6) {}
         try { app.changeGrepPreferences = NothingEnum.nothing; } catch (e7) {}
-        try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.remove(); } catch (e8) {}
-        try { doc.layers.itemByName("TEMP_TRANS_IMAGES").visible = false; } catch (e9) {}
+        if (unresolvedTables.length === 0 && unresolvedImages.length === 0 && leftoverMarkerCount === 0) {
+            try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.remove(); } catch (e8) {}
+            try { doc.layers.itemByName("TEMP_TRANS_IMAGES").visible = false; } catch (e9) {}
+        } else {
+            try { if (storageEnv.frame && storageEnv.frame.isValid) storageEnv.frame.itemLayer.visible = true; } catch (e10) {}
+            writeLog("TEMP_TRANS_IMAGES wurde beibehalten, da " + unresolvedTables.length + " Tabellen, " + unresolvedImages.length + " Bilder/Objekte und " + leftoverMarkerCount + " Platzhalter offen sind.", "WARNUNG");
+        }
     }
 }
 
@@ -4897,7 +4949,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         for (var s = 0; s < textTargetsRaw.length; s++) addTarget(textTargetsRaw[s]);
     }
 
-    var globalParkedTables = []; var tableCounter = 0; var imageCounter = 0;
+    var globalParkedTables = []; var globalParkedImages = []; var tableCounter = 0; var imageCounter = 0;
 
     try {
         for (var i = 0; i < textTargets.length; i++) {
@@ -4911,16 +4963,17 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                     var tbl = tables[tableReverseIndex]; var tblId = ++tableCounter; 
                     var marker = "###TBL_" + tblId + "###";
                     var tmpFrame = storageEnv.page.textFrames.add({itemLayer: storageEnv.layer, geometricBounds: [0,-100, 50, -50]});
+                    var sourceKey = getTextObjectRangeKey(currentText);
                     
                     var p = tbl.storyOffset.parent; var idx = tbl.storyOffset.index;
                     p.characters.item(idx).move(LocationOptions.AFTER, tmpFrame.insertionPoints.item(0));
-                    globalParkedTables.push({ id: tblId, frame: tmpFrame });
+                    globalParkedTables.push({ id: tblId, marker: marker, frame: tmpFrame, sourceKey: sourceKey });
                     p.insertionPoints.item(idx).contents = marker;
                     
                     var pastedTbl = tmpFrame.tables[0];
                     if (pastedTbl) {
                         var cells = pastedTbl.cells.everyItem().getElements();
-                        for (var c = 0; c < cells.length; c++) textTargets.push(cells[c].texts[0]);
+                        for (var c = 0; c < cells.length; c++) addTarget(cells[c].texts[0]);
                     }
                 }
             }
@@ -4932,17 +4985,31 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 for (var a = foundAnchors.length - 1; a >= 0; a--) {
                     var anchorChar = foundAnchors[a].characters[0]; var imgID = ++imageCounter; 
                     var marker = "###IMG_" + imgID + "###";
-                    
-                    if (anchorChar.pageItems.length > 0) anchorChar.pageItems[0].label = "TMP_IMG_" + imgID;
-                    else if (anchorChar.allPageItems.length > 0) anchorChar.allPageItems[0].label = "TMP_IMG_" + imgID;
+                    var imgLabel = "TMP_IMG_" + imgID;
+                    var anchoredItem = null;
+                    try {
+                        if (anchorChar.pageItems.length > 0) anchoredItem = anchorChar.pageItems[0];
+                        else if (anchorChar.allPageItems.length > 0) anchoredItem = anchorChar.allPageItems[0];
+                    } catch (anchorLookupErr) { anchoredItem = null; }
+                    if (!anchoredItem || !anchoredItem.isValid) {
+                        writeLog("Verankertes Objekt konnte nicht sicher geparkt werden (" + marker + ").", "WARNUNG");
+                        continue;
+                    }
+                    try {
+                        anchoredItem.label = imgLabel;
+                    } catch (anchorLabelErr) {
+                        writeLog("Verankertes Objekt konnte nicht gelabelt werden (" + marker + ").", "WARNUNG");
+                        continue;
+                    }
                     
                     var p = anchorChar.parent; var idx = anchorChar.index;
                     anchorChar.move(LocationOptions.AFTER, storageEnv.frame.insertionPoints.item(-1));
                     p.insertionPoints.item(idx).contents = marker;
+                    globalParkedImages.push({ id: imgID, marker: marker, label: imgLabel, sourceKey: getTextObjectRangeKey(currentText) });
 
                     try {
                         var sItems = storageEnv.frame.allPageItems; var movedItem = null;
-                        for(var j = sItems.length - 1; j >= 0; j--){ if(sItems[j].label === "TMP_IMG_" + imgID) { movedItem = sItems[j]; break; } }
+                        for(var j = sItems.length - 1; j >= 0; j--){ if(sItems[j].label === imgLabel) { movedItem = sItems[j]; break; } }
                         if (movedItem) {
                             var safeAddNestedTarget = function(tfItem) { var nStory; try { nStory = tfItem.parentStory; } catch(e) { nStory = tfItem.texts[0]; } addTarget(nStory); };
                             if (movedItem.constructor.name === "TextFrame") safeAddNestedTarget(movedItem);
@@ -5060,7 +5127,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
         updateProgress(95, t("restoring_tables_images"), overEndPct, null);
     } finally {
-        restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets);
+        restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globalParkedImages);
     }
 
     updateProgress(98, t("checking_overflow"), overEndPct, null);
@@ -5873,6 +5940,7 @@ function setupTempImageStorage(doc) {
     else { tempLayer.locked = false; tempLayer.visible = true; }
     var currentPage = doc.pages[0]; try { if (app.activeWindow.activePage) currentPage = app.activeWindow.activePage; } catch(e) {}
     var storageFrame = currentPage.textFrames.add({itemLayer: tempLayer, geometricBounds: [0,-2000, 2000, -50], contents: ""});
+    try { storageFrame.label = "TEMP_TRANS_STORAGE"; } catch (e2) {}
     return { layer: tempLayer, page: currentPage, frame: storageFrame };
 }
 
