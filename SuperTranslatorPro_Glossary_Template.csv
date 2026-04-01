@@ -15,4 +15,4 @@ _SOURCE;_INFO;_FLAGS;_ALIASES;DE;EN;FR;IT;ES;CS;HU;BG;DA;EL;ET;FI;LT;LV;NL;PL;PT
 ;Produktbegriff, bei Bedarf manuell fuer weitere Sprachen pflegen;;;Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;
 ;Technischer Code, in allen Sprachen unveraendert lassen;DNT;;M5*15;;;;;;;;;;;;;;;;;;;;;
 ;Beispiel mit Aliasen;;Duschwanne|Duschtasse;Duschunterteil;Shower base;;;;;;;;;;;;;;;;;;;;
-EN;Beispiel: Quelle ist Englisch, Ziel kann z. B. DE sein;;;Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;
+DE;Beispiel: Quelle ist Englisch, Ziel kann z. B. DE sein;;;Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;

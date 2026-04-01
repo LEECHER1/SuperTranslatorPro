@@ -1076,6 +1076,38 @@ function getTableDebugSummary(tbl) {
     return "rows=" + rows + " cols=" + cols + " cells=" + cells;
 }
 
+function isValidDocumentPage(page) {
+    if (!page || !page.isValid) return false;
+    try {
+        if (page.documentOffset !== undefined && page.documentOffset !== null && page.documentOffset >= 0) return true;
+    } catch (e) {}
+    try {
+        if (page.parent && page.parent.isValid && page.parent.constructor && page.parent.constructor.name === "Spread") return true;
+    } catch (e2) {}
+    return false;
+}
+
+function getDebugMarkerLocation(textObj) {
+    if (!textObj || !textObj.isValid) return "(ungueltige Position)";
+    var parts = [];
+    try {
+        var parentPage = getTextObjectParentPage(textObj);
+        if (parentPage) parts.push("page=" + getDebugPageLabel(parentPage));
+    } catch (e) {}
+    try {
+        var parentFrames = textObj.parentTextFrames;
+        if (parentFrames && parentFrames.length > 0 && parentFrames[0] && parentFrames[0].isValid) {
+            var layerName = "";
+            try { layerName = String(parentFrames[0].itemLayer.name || ""); } catch (layerErr) { layerName = ""; }
+            if (layerName !== "") parts.push("layer=" + layerName);
+        }
+    } catch (e2) {}
+    try {
+        parts.push('text="' + normalizeDebugSnippet(textObj.contents, 80) + '"');
+    } catch (e3) {}
+    return parts.join(" | ");
+}
+
 // --- 0B. TRANSLATION MEMORY & CSV LOGIK ---
 function getTMFile() { 
     if (tmPath && tmPath !== "") return new File(tmPath);
@@ -5027,7 +5059,11 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
         leftoverMarkerCount = leftoverMarkers ? leftoverMarkers.length : 0;
         if (leftoverMarkerCount > 0) {
             var markerSamples = [];
-            for (var lm = 0; lm < leftoverMarkers.length && lm < 10; lm++) markerSamples.push(leftoverMarkers[lm].contents);
+            for (var lm = 0; lm < leftoverMarkers.length && lm < 10; lm++) {
+                var markerInfo = leftoverMarkers[lm].contents;
+                try { markerInfo += " {" + getDebugMarkerLocation(leftoverMarkers[lm]) + "}"; } catch (markerInfoErr) {}
+                markerSamples.push(markerInfo);
+            }
             writeLog("Nach dem Restore verbleiben " + leftoverMarkerCount + " Platzhalter im Dokument" + (markerSamples.length ? ": " + markerSamples.join(", ") : "") + ".", "WARNUNG");
             writeDebugLog("restore:leftoverMarkers count=" + leftoverMarkerCount + (markerSamples.length ? " samples=" + markerSamples.join(", ") : ""), "WARNUNG");
         }
@@ -5556,12 +5592,22 @@ function getStoryRangeSignature(textObj) {
     if (!textObj || !textObj.isValid) return null;
     var story = null;
     try { story = textObj.parentStory; } catch (e) { story = null; }
+    if ((!story || !story.isValid) && textObj.constructor && textObj.constructor.name === "Story") story = textObj;
     if (!story || !story.isValid) return null;
     try {
+        var startIndex = 0;
+        var endIndex = 0;
+        if (textObj.constructor && textObj.constructor.name === "Story") {
+            startIndex = 0;
+            endIndex = story.insertionPoints.length > 0 ? story.insertionPoints[story.insertionPoints.length - 1].index : 0;
+        } else {
+            startIndex = textObj.insertionPoints[0].index;
+            endIndex = textObj.insertionPoints[textObj.insertionPoints.length - 1].index;
+        }
         return {
             storyId: story.id,
-            start: textObj.insertionPoints[0].index,
-            end: textObj.insertionPoints[textObj.insertionPoints.length - 1].index
+            start: startIndex,
+            end: endIndex
         };
     } catch (e2) {
         return null;
@@ -6119,7 +6165,11 @@ function setupTempImageStorage(doc) {
     var tempLayer = doc.layers.itemByName("TEMP_TRANS_IMAGES");
     if (!tempLayer.isValid) tempLayer = doc.layers.add({name: "TEMP_TRANS_IMAGES", visible: true, locked: false});
     else { tempLayer.locked = false; tempLayer.visible = true; }
-    var currentPage = doc.pages[0]; try { if (app.activeWindow.activePage) currentPage = app.activeWindow.activePage; } catch(e) {}
+    var currentPage = doc.pages[0];
+    try {
+        if (app.activeWindow.activePage && isValidDocumentPage(app.activeWindow.activePage)) currentPage = app.activeWindow.activePage;
+    } catch(e) {}
+    writeDebugLog("storage:setup page=" + getDebugPageLabel(currentPage) + " layer=" + tempLayer.name);
     var storageFrame = currentPage.textFrames.add({itemLayer: tempLayer, geometricBounds: [0,-2000, 2000, -50], contents: ""});
     try { storageFrame.label = "TEMP_TRANS_STORAGE"; } catch (e2) {}
     return { layer: tempLayer, page: currentPage, frame: storageFrame };
