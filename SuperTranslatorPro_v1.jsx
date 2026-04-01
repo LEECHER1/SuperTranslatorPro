@@ -2563,6 +2563,17 @@ function getLegacyMasterCreationState(germanMaster, langTasks) {
     return { anchor: anchor, nextPrefixIndex: maxIndex + 1 };
 }
 
+function refreshLegacyMasterPrefixes(orderedMasters) {
+    if (!orderedMasters || orderedMasters.length === 0) return;
+    for (var i = 0; i < orderedMasters.length; i++) {
+        var master = orderedMasters[i];
+        if (!master || !master.isValid) continue;
+        var code = getMasterLang(master.name);
+        if (!code || !isSupportedLegacyLanguageCode(code)) continue;
+        setMasterSpreadLanguageNaming(master, makeAlphabeticIndex(i + 1), code);
+    }
+}
+
 function reorderLegacyTargetMasters(doc, germanMaster, orderedCodes) {
     if (!doc || !doc.isValid || !germanMaster || !germanMaster.isValid) return;
 
@@ -2621,6 +2632,8 @@ function reorderLegacyTargetMasters(doc, germanMaster, orderedCodes) {
         anchor = targetMaster;
         insertBefore = null;
     }
+
+    refreshLegacyMasterPrefixes(orderedMasters);
 }
 
 function createLegacyTargetMasters(doc, germanMaster, selectedCodes, anchorMaster, startPrefixIndex) {
