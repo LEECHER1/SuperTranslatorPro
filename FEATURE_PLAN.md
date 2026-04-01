@@ -4,8 +4,8 @@
 
 ## Aktueller Status
 - **Version:** 28.2
-- **Datum:** 1. April 2026
-- **Status:** Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Copyfit, Provider-Erweiterung und UXP-Planung.
+- **Datum:** 2. April 2026
+- **Status:** Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Copyfit, Provider-Stabilisierung, Hybrid-Modus und UXP-Planung.
 
 ---
 
@@ -23,7 +23,7 @@
 
 ### Noch offen
 - [ ] Intelligente Copyfitting-Logik
-- [ ] Weitere LLM-Anbieter neben DeepL
+- [ ] Optionaler Hybrid-Modus zwischen DeepL und LLMs
 - [ ] Migration auf UXP / Plugin-Architektur
 - [ ] Erweiterte End-to-End-Tests mit echten InDesign-Dokumenten
 
@@ -33,7 +33,7 @@
 - [x] Rechtschreibprüfung in der Mastersprache
 - [ ] Intelligente Copyfitting-Logik
 - [x] Automatische Musterseiten-Generierung (Legacy-Fallback)
-- [ ] Andere LLMs (ChatGPT / Gemini / Claude)
+- [x] Andere LLMs (ChatGPT / Gemini / Claude)
 - [ ] Migration auf UXP
 - [ ] UI/UX Optimierung
 - [x] Verlinken (Linking Features)
@@ -88,13 +88,13 @@
 - [x] Provider-Interface für Übersetzungen definieren
 - [x] DeepL als Default behalten
 - [x] OpenAI-Adapter für XML-/Tag-sichere Übersetzungen ergänzen
-- [ ] Adapter für Google / Gemini vorbereiten
-- [ ] Adapter für Anthropic / Claude vorbereiten
+- [x] Adapter für Google / Gemini ergänzen
+- [x] Adapter für Anthropic / Claude ergänzen
 - [x] UI für Provider-Auswahl und API-Key-Felder hinzufügen
 
 **Notizen:**
-- Phase 1 ist umgesetzt: DeepL bleibt Standard, OpenAI ist auswählbar und nutzt eine strikte XML-/Tag-Validierung.
-- Offen bleiben Gemini und Claude sowie später ein optionaler Hybrid-/Polish-Modus.
+- DeepL bleibt Standard; OpenAI, Gemini und Claude hängen jetzt an derselben XML-/Tag-validierten Provider-Schicht.
+- Offene Folgeschritte sind vor allem Live-Tests in echten InDesign-Dokumenten sowie später ein optionaler Hybrid-/Polish-Modus.
 
 ---
 
@@ -162,7 +162,7 @@
 - [ ] `applySmartCopyfit(textFrame)` mit Tracking/Scale/Frame bauen
 - [ ] Overflow-Fix in `executeTranslation` ersetzen
 - [ ] Legacy-BDA, Auto-Hyperlinks und Glossar-Flow in echten Projekten breit testen
-- [ ] Gemini-/Claude-Adapter auf das neue Provider-Interface hängen
+- [ ] Gemini-/Claude-Live-Tests inkl. Grenzfällen mit XML, Tabellen und langen BDA-Läufen durchführen
 - [ ] Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren
 - [ ] UXP-Refactoring-Plan erstellen
 - [ ] Glossar-Validator für fehlerhafte CSV-Struktur ergänzen
@@ -171,6 +171,7 @@
 ---
 
 ## Änderungslog
+- 2. April 2026: Gemini- und Claude-Adapter auf die gemeinsame XML-/Tag-sichere Provider-Schicht gehängt, inklusive UI-Feldern für Keys/Modelle und DeepL-Fallback
 - 1. April 2026: Phase 1 der Provider-Erweiterung umgesetzt (Provider-Interface, OpenAI-Adapter, UI für Provider- und API-Key-Auswahl)
 - 31. März 2026: Plan auf realen Entwicklungsstand aktualisiert, Glossar-System ergänzt, Hyperlink- und Legacy-Fallback-Fortschritt eingetragen
 - 31. März 2026: UI/UX-Optimierung und Verlinken als neue Hauptpunkte ergänzt
