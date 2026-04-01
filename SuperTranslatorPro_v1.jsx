@@ -3688,11 +3688,7 @@ function runMainProcess(doc, config) {
     updateLanguageMasterVersionLabels(doc);
     syncMasterTextChanges(doc);
     if (config.mode === "BDA") {
-        var bdaResultMsg = runBDAMode(doc, config, preparedLegacy);
-        if (preparedLegacy && preparedLegacy.germanMaster && preparedLegacy.deferredMasterOrderCodes && preparedLegacy.deferredMasterOrderCodes.length > 0) {
-            reorderLegacyTargetMasters(doc, preparedLegacy.germanMaster, preparedLegacy.deferredMasterOrderCodes);
-        }
-        return bdaResultMsg;
+        return runBDAMode(doc, config, preparedLegacy);
     } else {
         updateProgress(5, t("read_textframes"), 5, t("preparation"));
         var targetTextObjArray = [];
@@ -4169,6 +4165,10 @@ function runBDAMode(doc, config, preparedLegacy) {
             saveBDASnapshot(doc, buildBDASnapshotPayload(snapshotPages));
         }
     } catch (e) {}
+
+    if (preparedLegacy && preparedLegacy.germanMaster && preparedLegacy.deferredMasterOrderCodes && preparedLegacy.deferredMasterOrderCodes.length > 0) {
+        reorderLegacyTargetMasters(doc, preparedLegacy.germanMaster, preparedLegacy.deferredMasterOrderCodes);
+    }
 
     runAutomaticHyperlinksForBDA(doc, config);
 
