@@ -1,17 +1,16 @@
 _SOURCE;_INFO;_FLAGS;_ALIASES;DE;EN;FR;IT;ES;CS;HU;BG;DA;EL;ET;FI;LT;LV;NL;PL;PT;RO;RU;SK;SL;SV
-# SO WIRD DIE DATEI VERWENDET:
-# EN / FR / IT / ES ... = gewuenschte Zieluebersetzung fuer genau diese Sprache.
-# Leere Sprachzellen bedeuten: kein Glossar-Eintrag fuer diese Sprache, DeepL darf normal uebersetzen.
-# DNT in einer Sprachzelle bedeutet: in genau dieser Sprache nicht uebersetzen, Originaltext beibehalten.
-# _FLAGS=DNT (DNT = Do Not Translate) bedeutet: in allen Sprachen nicht uebersetzen, z. B. bei technischen Codes wie M5*15.
-# _ALIASES = alternative Schreibweisen in der Quellsprache dieser Zeile, mit | trennen.
-# _SOURCE = Quellsprache dieser Zeile. Leer = Standard DE. Wenn die Quelle z. B. Englisch ist, hier EN eintragen.
-# _INFO = Infos & Erklaerung
-
-;Warnhinweis;;;Warnung!;Warning!;Avertissement !;Avvertimento!;Advertencia!;;;;;;;;;;;;;;;;;;;
-;Sicherheitshinweis;;;Vorsicht!;Caution!;Attention !;Attenzione!;Precaucion!;;;;;;;;;;;;;;;;;;;
-;Informationshinweis;;;Hinweis!;Note!;Remarque !;Avviso!;Aviso!;;;;;;;;;;;;;;;;;;;
-;Begriff im Dokument;;;Lieferumfang;Scope of delivery;Contenu de la livraison;Contenuto della fornitura;Alcance de la entrega;Rozsah dodavky;Szallitasi terjedelem;;;;;;;;;;;;;;;;;
-;Produktbegriff;;;Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;;;
-;Technischer Code;DNT;;M5*15;;;;;;;;;;;;;;;;;;;;;;
-EN;Beispiel: Quelle ist Englisch, Ziel kann z. B. DE sein;;;Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;;;
+# SO WIRD DIE DATEI VERWENDET:;;;;;;;;;;;;;;;;;;;;;;;;;
+# EN / FR / IT / ES ... = gewuenschte Zieluebersetzung fuer genau diese Sprache.;;;;;;;;;;;;;;;;;;;;;;;;;
+# Leere Sprachzellen bedeuten: kein Glossar-Eintrag fuer diese Sprache, DeepL darf normal uebersetzen.;;;;;;;;;;;;;;;;;;;;;;;;;
+# DNT in einer Sprachzelle bedeutet: in genau dieser Sprache nicht uebersetzen, Originaltext beibehalten.;;;;;;;;;;;;;;;;;;;;;;;;;
+# _FLAGS=DNT (DNT = Do Not Translate) bedeutet: in allen Sprachen nicht uebersetzen, z. B. bei technischen Codes wie M5*15.;;;;;;;;;;;;;;;;;;;;;;;;;
+# _ALIASES = alternative Schreibweisen in der Quellsprache dieser Zeile, mit | trennen.;;;;;;;;;;;;;;;;;;;;;;;;;
+# _SOURCE = Quellsprache dieser Zeile. Leer = Standard DE. Wenn die Quelle z. B. Englisch ist, hier EN eintragen.;;;;;;;;;;;;;;;;;;;;;;;;;
+# _INFO = Infos & Erklaerung;;;;;;;;;;;;;;;;;;;;;;;;;
+;Warnhinweis;;;Warnung!;Warning!;Avertissement !;Avvertimento!;Advertencia!;;;;;;;;;;;;;;;;;
+;Sicherheitshinweis;;;Vorsicht!;Caution!;Attention !;Attenzione!;Precaucion!;;;;;;;;;;;;;;;;;
+;Informationshinweis;;;Hinweis!;Note!;Remarque !;Avviso!;Aviso!;;;;;;;;;;;;;;;;;
+;Begriff im Dokument;;;Lieferumfang;Scope of delivery;Contenu de la livraison;Contenuto della fornitura;Alcance de la entrega;Rozsah dodavky;Szallitasi terjedelem;;;;;;;;;;;;;;;
+;Produktbegriff;;;Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;
+;Technischer Code;DNT;;M5*15;;;;;;;;;;;;;;;;;;;;;
+EN;Beispiel: Quelle ist Englisch, Ziel kann z. B. DE sein;;;Montagebox;Mounting box;;;;;;;;;;;;;;;;;;;;
