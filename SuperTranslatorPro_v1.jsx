@@ -4865,7 +4865,11 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
             if (results.length > 0) {
                 var tableRestored = false;
                 try {
-                    var tableAnchor = getParkedTableAnchorCharacter(parked.frame);
+                    var tableAnchor = null;
+                    try {
+                        if (parked.anchorChar && parked.anchorChar.isValid) tableAnchor = parked.anchorChar;
+                    } catch (anchorErr) { tableAnchor = null; }
+                    if (!tableAnchor) tableAnchor = getParkedTableAnchorCharacter(parked.frame);
                     if (tableAnchor && tableAnchor.isValid) {
                         tableRestored = restoreInlineMarkerRange(results[0], function(targetInsertionPoint) {
                             tableAnchor.move(LocationOptions.AFTER, targetInsertionPoint);
@@ -5000,8 +5004,9 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                     var tmpFrame = storageEnv.page.textFrames.add({itemLayer: storageEnv.layer, geometricBounds: [0,-100, 50, -50]});
                     
                     var p = tbl.storyOffset.parent; var idx = tbl.storyOffset.index;
-                    p.characters.item(idx).move(LocationOptions.AFTER, tmpFrame.insertionPoints.item(0));
-                    globalParkedTables.push({ id: tblKey, marker: marker, frame: tmpFrame, hostText: currentText });
+                    var tableAnchorChar = p.characters.item(idx);
+                    tableAnchorChar.move(LocationOptions.AFTER, tmpFrame.insertionPoints.item(0));
+                    globalParkedTables.push({ id: tblKey, marker: marker, frame: tmpFrame, hostText: currentText, anchorChar: tableAnchorChar });
                     p.insertionPoints.item(idx).contents = marker;
                     
                     var pastedTbl = tmpFrame.tables[0];
