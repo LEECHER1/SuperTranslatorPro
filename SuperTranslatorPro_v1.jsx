@@ -2663,6 +2663,34 @@ function collectValidBDAPages(pages) {
     return validPages;
 }
 
+function isSameDocumentPage(a, b) {
+    if (!a || !a.isValid || !b || !b.isValid) return false;
+    try {
+        if (a.id !== undefined && b.id !== undefined) return a.id === b.id;
+    } catch (e) {}
+    return a === b;
+}
+
+function collectBDAPageBlocksFromDocument(doc, excludedPage) {
+    var blocksByLang = {};
+    if (!doc || !doc.isValid) return blocksByLang;
+
+    for (var i = 0; i < doc.pages.length; i++) {
+        var page = doc.pages[i];
+        if (!page || !page.isValid) continue;
+        if (page.documentOffset === 0) continue;
+        if (excludedPage && isSameDocumentPage(page, excludedPage)) continue;
+
+        var langCode = getPageLanguageCode(page);
+        if (!langCode || !isSupportedLegacyLanguageCode(langCode)) continue;
+        langCode = String(langCode).toLowerCase();
+        if (!blocksByLang[langCode]) blocksByLang[langCode] = [];
+        blocksByLang[langCode].push(page);
+    }
+
+    return blocksByLang;
+}
+
 function reorderBDALanguagePageBlocks(doc, pageBlocksByLang, orderedCodes) {
     if (!doc || !doc.isValid || !pageBlocksByLang) return;
 
@@ -4268,10 +4296,14 @@ function runBDAMode(doc, config, preparedLegacy) {
         if (preparedLegacy && preparedLegacy.germanMaster && finalOrderCodes.length > 0) {
             reorderLegacyTargetMasters(doc, preparedLegacy.germanMaster, finalOrderCodes, sourceCode);
         }
-        reorderBDALanguagePageBlocks(doc, pageBlocksByLang, finalOrderCodes);
-        if (config.updateTOC) {
+
+        var livePageBlocksByLang = collectBDAPageBlocksFromDocument(doc, originalBackPage);
+        reorderBDALanguagePageBlocks(doc, livePageBlocksByLang, finalOrderCodes);
+
+        if (config.updateTOC || config.autoReferenceLinks) {
             updateProgress(99, t("bda_update_cover"), 99, t("bda_adjust_toc"));
-            updateTOCForLanguageBlocks(doc, pageBlocksByLang, finalOrderCodes);
+            livePageBlocksByLang = collectBDAPageBlocksFromDocument(doc, originalBackPage);
+            updateTOCForLanguageBlocks(doc, livePageBlocksByLang, finalOrderCodes);
         }
     } catch (e) {}
 
