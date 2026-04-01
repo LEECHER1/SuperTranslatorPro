@@ -1202,13 +1202,17 @@ function loadCSVGlossary(path) {
         for (var i = 1; i < rows.length; i++) {
             var cols = rows[i];
             if (!cols || cols.length === 0) continue;
-            var original = sanitizeCSVContent(cols[0]).replace(/^\s+|\s+$/g, '');
-            if (original === "") continue;
-            if (isGlossaryCommentRow(original)) continue;
+            var firstNonEmpty = "";
+            for (var firstIdx = 0; firstIdx < cols.length; firstIdx++) {
+                firstNonEmpty = sanitizeCSVContent(cols[firstIdx]).replace(/^\s+|\s+$/g, '');
+                if (firstNonEmpty !== "") break;
+            }
+            if (firstNonEmpty === "") continue;
+            if (isGlossaryCommentRow(firstNonEmpty)) continue;
 
             var entry = {};
             var meta = {};
-            for (var j = 1; j < cols.length; j++) {
+            for (var j = 0; j < cols.length; j++) {
                 if (j >= headers.length) continue;
                 var val = sanitizeCSVContent(cols[j]).replace(/^\s+|\s+$/g, '');
                 if (val === "") continue;
@@ -1234,11 +1238,23 @@ function loadCSVGlossary(path) {
             }
             if (hasOwnMappings(meta)) entry.__meta = meta;
 
-            var sourceText = original;
-            if (entry.__sourceLang !== "DE" && entry.hasOwnProperty(entry.__sourceLang)) {
+            var sourceText = "";
+            if (entry.hasOwnProperty(entry.__sourceLang)) {
                 sourceText = String(entry[entry.__sourceLang] || "").replace(/^\s+|\s+$/g, "");
             }
-            if (sourceText === "") sourceText = original;
+            if (sourceText === "" && entry.__sourceLang !== "DE" && entry.hasOwnProperty("DE")) {
+                sourceText = String(entry.DE || "").replace(/^\s+|\s+$/g, "");
+            }
+            if (sourceText === "") {
+                for (var headerIdx = 0; headerIdx < headers.length; headerIdx++) {
+                    if (columnKinds[headerIdx] !== "lang") continue;
+                    if (entry.hasOwnProperty(headers[headerIdx])) {
+                        sourceText = String(entry[headers[headerIdx]] || "").replace(/^\s+|\s+$/g, "");
+                        if (sourceText !== "") break;
+                    }
+                }
+            }
+            if (sourceText === "") continue;
             entry.__sourceText = sourceText;
 
             glossary[sourceText] = entry;
