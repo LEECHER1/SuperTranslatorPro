@@ -4863,8 +4863,27 @@ function getFirstParkedTable(frame) {
     return null;
 }
 
+function getParkedTableTextRange(frame) {
+    if (!frame || !frame.isValid) return null;
+    try {
+        var parentStory = frame.parentStory;
+        if (parentStory && parentStory.isValid && parentStory.texts && parentStory.texts.length > 0) {
+            var fullText = parentStory.texts[0];
+            if (fullText && fullText.isValid && fullText.contents !== "") return fullText;
+        }
+    } catch (e) {}
+    try {
+        if (frame.texts && frame.texts.length > 0) {
+            var frameText = frame.texts[0];
+            if (frameText && frameText.isValid && frameText.contents !== "") return frameText;
+        }
+    } catch (e2) {}
+    return null;
+}
+
 function restoreParkedTableAtMarker(parked, placeholderRange) {
     var parkedTable = getFirstParkedTable(parked ? parked.frame : null);
+    var parkedTextRange = getParkedTableTextRange(parked ? parked.frame : null);
     var anchorChar = null;
     try {
         if (parked && parked.anchorChar && parked.anchorChar.isValid) anchorChar = parked.anchorChar;
@@ -4873,6 +4892,18 @@ function restoreParkedTableAtMarker(parked, placeholderRange) {
 
     return restoreInlineMarkerRange(placeholderRange, function(targetInsertionPoint) {
         var restored = false;
+        if (parkedTextRange && parkedTextRange.isValid) {
+            try {
+                parkedTextRange.duplicate(LocationOptions.AFTER, targetInsertionPoint);
+                restored = true;
+            } catch (textDupErr) {}
+            if (!restored) {
+                try {
+                    parkedTextRange.move(LocationOptions.AFTER, targetInsertionPoint);
+                    restored = true;
+                } catch (textMoveErr) {}
+            }
+        }
         if (parkedTable && parkedTable.isValid) {
             try {
                 parkedTable.duplicate(LocationOptions.AFTER, targetInsertionPoint);
