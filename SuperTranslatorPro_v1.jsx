@@ -4774,6 +4774,55 @@ function runAutomaticHyperlinksForBDA(doc, config) {
     return null;
 }
 
+function getParkedTableAnchorCharacter(frame) {
+    if (!frame || !frame.isValid) return null;
+    try {
+        if (frame.tables && frame.tables.length > 0) {
+            var table = frame.tables[0];
+            if (table && table.isValid && table.storyOffset && table.storyOffset.isValid) {
+                var parentText = table.storyOffset.parent;
+                var anchorIndex = table.storyOffset.index;
+                if (parentText && parentText.isValid && anchorIndex !== undefined && anchorIndex !== null) {
+                    var anchorChar = parentText.characters.item(anchorIndex);
+                    if (anchorChar && anchorChar.isValid) return anchorChar;
+                }
+            }
+        }
+    } catch (e) {}
+    try {
+        var fallbackChar = frame.characters.item(0);
+        if (fallbackChar && fallbackChar.isValid) return fallbackChar;
+    } catch (e2) {}
+    return null;
+}
+
+function restoreInlineMarkerRange(placeholderRange, moveCallback) {
+    if (!placeholderRange || !placeholderRange.isValid || !moveCallback) return false;
+
+    var targetStory = null;
+    var startIndex = -1;
+    var endIndex = -1;
+    try {
+        targetStory = placeholderRange.parentStory;
+        if (!targetStory || !targetStory.isValid) return false;
+        startIndex = placeholderRange.characters.item(0).index;
+        endIndex = placeholderRange.characters.item(-1).index;
+    } catch (e) {
+        return false;
+    }
+
+    if (startIndex < 0 || endIndex < startIndex) return false;
+
+    try {
+        var targetInsertionPoint = targetStory.insertionPoints.item(endIndex + 1);
+        moveCallback(targetInsertionPoint);
+        targetStory.characters.itemByRange(startIndex, endIndex).remove();
+        return true;
+    } catch (e2) {
+        return false;
+    }
+}
+
 function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textTargets) {
     try {
         app.findGrepPreferences = NothingEnum.nothing;
@@ -4786,12 +4835,26 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
             app.findGrepPreferences.findWhat = "[ \t]*###TBL_\\s*" + parked.id + "\\s*###[ \t]*";
             var results = doc.findGrep();
             if (results.length > 0) {
+                var tableRestored = false;
                 try {
-                    parked.frame.characters.item(0).move(LocationOptions.AFTER, results[0].insertionPoints.item(0));
-                    results[0].remove();
+                    var tableAnchor = getParkedTableAnchorCharacter(parked.frame);
+                    if (tableAnchor && tableAnchor.isValid) {
+                        tableRestored = restoreInlineMarkerRange(results[0], function(targetInsertionPoint) {
+                            tableAnchor.move(LocationOptions.AFTER, targetInsertionPoint);
+                        });
+                    }
                 } catch (e1) {}
+                if (!tableRestored && textTargets && textTargets.length > 0) {
+                    try {
+                        var fallbackAnchor = getParkedTableAnchorCharacter(parked.frame);
+                        if (fallbackAnchor && fallbackAnchor.isValid) fallbackAnchor.move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1));
+                    } catch (eFallback) {}
+                }
             } else if (textTargets && textTargets.length > 0) {
-                try { parked.frame.characters.item(0).move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1)); } catch (e2) {}
+                try {
+                    var detachedAnchor = getParkedTableAnchorCharacter(parked.frame);
+                    if (detachedAnchor && detachedAnchor.isValid) detachedAnchor.move(LocationOptions.AFTER, textTargets[0].insertionPoints.item(-1));
+                } catch (e2) {}
             }
             try { if (parked.frame && parked.frame.isValid) parked.frame.remove(); } catch (e3) {}
         }
@@ -4828,14 +4891,14 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, textT
                     var targetChar = targetImageInStorage.parent;
                     while (targetChar && targetChar.constructor.name !== "Character" && targetChar.constructor.name !== "Story" && targetChar.constructor.name !== "Application") targetChar = targetChar.parent;
                     if (targetChar && targetChar.constructor.name === "Character") {
-                        targetChar.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
-                        placeholderRange.remove();
-                        restoredOne = true;
+                        restoredOne = restoreInlineMarkerRange(placeholderRange, function(targetInsertionPoint) {
+                            targetChar.move(LocationOptions.AFTER, targetInsertionPoint);
+                        });
                         break;
                     } else if (targetImageInStorage.parent && targetImageInStorage.parent.isValid) {
-                        targetImageInStorage.parent.move(LocationOptions.AFTER, placeholderRange.insertionPoints.item(0));
-                        placeholderRange.remove();
-                        restoredOne = true;
+                        restoredOne = restoreInlineMarkerRange(placeholderRange, function(targetInsertionPoint) {
+                            targetImageInStorage.parent.move(LocationOptions.AFTER, targetInsertionPoint);
+                        });
                         break;
                     }
                 } catch (e5) {}
