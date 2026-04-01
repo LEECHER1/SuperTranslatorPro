@@ -72,6 +72,7 @@ var UI_STRINGS = {
     provider_gemini: { de: "Google / Gemini", en: "Google / Gemini" },
     provider_claude: { de: "Anthropic / Claude", en: "Anthropic / Claude" },
     deepl_api_key: { de: "DeepL Pro API-Key:", en: "DeepL Pro API key:" },
+    deepl_fallback_api_key: { de: "DeepL Fallback API-Key (optional):", en: "DeepL fallback API key (optional):" },
     openai_api_key: { de: "OpenAI API-Key:", en: "OpenAI API key:" },
     openai_model: { de: "OpenAI Modell:", en: "OpenAI model:" },
     gemini_api_key: { de: "Gemini API-Key:", en: "Gemini API key:" },
@@ -2157,33 +2158,90 @@ btnSettings.onClick = function() {
     }
     providerDrop.selection = activeProviderIndex;
 
-    setWin.add("statictext", undefined, t("deepl_api_key"));
-    var keyInput = setWin.add("edittext", undefined, apiKey);
-    keyInput.characters = 40;
+    function createSettingsField(parent, labelText, value, chars) {
+        var fieldGroup = parent.add("group");
+        fieldGroup.orientation = "column";
+        fieldGroup.alignChildren = ["fill", "top"];
+        fieldGroup.alignment = "fill";
+        var label = fieldGroup.add("statictext", undefined, labelText);
+        var input = fieldGroup.add("edittext", undefined, value);
+        input.characters = chars;
+        return { group: fieldGroup, label: label, input: input };
+    }
 
-    setWin.add("statictext", undefined, t("openai_api_key"));
-    var openAIKeyInput = setWin.add("edittext", undefined, openAIKey);
-    openAIKeyInput.characters = 40;
+    function createProviderFieldsGroup(parent, fields) {
+        var group = parent.add("group");
+        group.orientation = "column";
+        group.alignChildren = ["fill", "top"];
+        group.alignment = "fill";
+        var inputs = {};
+        for (var i = 0; i < fields.length; i++) {
+            var field = createSettingsField(group, fields[i].label, fields[i].value, fields[i].chars);
+            inputs[fields[i].name] = field.input;
+        }
+        return { group: group, inputs: inputs };
+    }
 
-    setWin.add("statictext", undefined, t("openai_model"));
-    var openAIModelInput = setWin.add("edittext", undefined, openAIModel);
-    openAIModelInput.characters = 30;
+    function setSettingsGroupVisible(group, isVisible) {
+        group.visible = !!isVisible;
+        if (isVisible) {
+            group.maximumSize = [10000, 10000];
+            group.minimumSize = [0, 0];
+            group.preferredSize = [-1, -1];
+        } else {
+            group.maximumSize = [0, 0];
+            group.minimumSize = [0, 0];
+            group.preferredSize = [0, 0];
+        }
+    }
 
-    setWin.add("statictext", undefined, t("gemini_api_key"));
-    var geminiKeyInput = setWin.add("edittext", undefined, geminiKey);
-    geminiKeyInput.characters = 40;
+    var providerSettingsGroup = setWin.add("group");
+    providerSettingsGroup.orientation = "column";
+    providerSettingsGroup.alignChildren = ["fill", "top"];
+    providerSettingsGroup.alignment = "fill";
 
-    setWin.add("statictext", undefined, t("gemini_model"));
-    var geminiModelInput = setWin.add("edittext", undefined, geminiModel);
-    geminiModelInput.characters = 30;
+    var deepLField = createSettingsField(providerSettingsGroup, t("deepl_api_key"), apiKey, 40);
 
-    setWin.add("statictext", undefined, t("claude_api_key"));
-    var claudeKeyInput = setWin.add("edittext", undefined, claudeKey);
-    claudeKeyInput.characters = 40;
+    var providerSpecificGroup = providerSettingsGroup.add("group");
+    providerSpecificGroup.orientation = "column";
+    providerSpecificGroup.alignChildren = ["fill", "top"];
+    providerSpecificGroup.alignment = "fill";
 
-    setWin.add("statictext", undefined, t("claude_model"));
-    var claudeModelInput = setWin.add("edittext", undefined, claudeModel);
-    claudeModelInput.characters = 30;
+    var openAIProviderFields = createProviderFieldsGroup(providerSpecificGroup, [
+        { name: "openAIKey", label: t("openai_api_key"), value: openAIKey, chars: 40 },
+        { name: "openAIModel", label: t("openai_model"), value: openAIModel, chars: 30 }
+    ]);
+    var geminiProviderFields = createProviderFieldsGroup(providerSpecificGroup, [
+        { name: "geminiKey", label: t("gemini_api_key"), value: geminiKey, chars: 40 },
+        { name: "geminiModel", label: t("gemini_model"), value: geminiModel, chars: 30 }
+    ]);
+    var claudeProviderFields = createProviderFieldsGroup(providerSpecificGroup, [
+        { name: "claudeKey", label: t("claude_api_key"), value: claudeKey, chars: 40 },
+        { name: "claudeModel", label: t("claude_model"), value: claudeModel, chars: 30 }
+    ]);
+
+    var keyInput = deepLField.input;
+    var openAIKeyInput = openAIProviderFields.inputs.openAIKey;
+    var openAIModelInput = openAIProviderFields.inputs.openAIModel;
+    var geminiKeyInput = geminiProviderFields.inputs.geminiKey;
+    var geminiModelInput = geminiProviderFields.inputs.geminiModel;
+    var claudeKeyInput = claudeProviderFields.inputs.claudeKey;
+    var claudeModelInput = claudeProviderFields.inputs.claudeModel;
+
+    function refreshProviderSettingsUI() {
+        var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
+        var selectedProviderId = providerIds[selectedProviderIndex] || "deepl";
+        deepLField.label.text = (selectedProviderId === "deepl") ? t("deepl_api_key") : t("deepl_fallback_api_key");
+        setSettingsGroupVisible(providerSpecificGroup, selectedProviderId !== "deepl");
+        setSettingsGroupVisible(openAIProviderFields.group, selectedProviderId === "openai");
+        setSettingsGroupVisible(geminiProviderFields.group, selectedProviderId === "gemini");
+        setSettingsGroupVisible(claudeProviderFields.group, selectedProviderId === "claude");
+        try { providerSettingsGroup.layout.layout(true); } catch (layoutErr) {}
+        try { setWin.layout.layout(true); } catch (winLayoutErr) {}
+    }
+
+    providerDrop.onChange = refreshProviderSettingsUI;
+    refreshProviderSettingsUI();
     
     setWin.add("panel", undefined, ""); 
     
