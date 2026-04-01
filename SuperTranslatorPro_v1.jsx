@@ -225,6 +225,7 @@ var UI_STRINGS = {
     openai_incomplete: { de: "OpenAI lieferte unvollständige Ergebnisse zurück.", en: "OpenAI returned incomplete results." },
     openai_connection_error: { de: "OpenAI-Verbindungsfehler: {message}", en: "OpenAI connection error: {message}" },
     openai_refusal: { de: "OpenAI hat die Anfrage abgelehnt: {message}", en: "OpenAI refused the request: {message}" },
+    openai_repair_block: { de: "OpenAI Reparatur: Korrigiere XML-Struktur für Block {index}...", en: "OpenAI repair: fixing XML structure for block {index}..." },
     openai_invalid_xml: { de: "OpenAI lieferte für Block {index} ein ungültiges XML-/Tag-Ergebnis zurück.", en: "OpenAI returned an invalid XML/tag result for block {index}." },
     applying_formatting: { de: "Wende Formatierungen an...", en: "Applying formatting..." },
     restoring_tables_images: { de: "Stelle Tabellen und Bilder wieder her...", en: "Restoring tables and images..." },
@@ -5482,6 +5483,61 @@ function compareStringArrays(arrA, arrB) {
     return true;
 }
 
+function stripMarkdownCodeFence(text) {
+    var raw = String(text || "").replace(/^\s+|\s+$/g, "");
+    if (/^```/.test(raw)) {
+        raw = raw.replace(/^```[a-z0-9_-]*\s*/i, "").replace(/\s*```$/i, "");
+    }
+    return raw.replace(/^\s+|\s+$/g, "");
+}
+
+function canonicalizeTTagAttributes(xml) {
+    var order = { f: 0, s: 1, z: 2, p: 3, l: 4, c: 5, k: 6, a: 7, li: 8, fi: 9, b: 10 };
+    return String(xml || "").replace(/<t\b([^>]*)>/gi, function(fullMatch, attrText) {
+        var attrs = [];
+        var match = null;
+        var regex = /([a-z]+)\s*=\s*"([^"]*)"/gi;
+        while ((match = regex.exec(attrText)) !== null) {
+            attrs.push({ name: String(match[1] || "").toLowerCase(), value: String(match[2] || "") });
+        }
+        if (attrs.length === 0) return "<t>";
+        attrs.sort(function(a, b) {
+            var aOrder = order.hasOwnProperty(a.name) ? order[a.name] : 100;
+            var bOrder = order.hasOwnProperty(b.name) ? order[b.name] : 100;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0);
+        });
+        var parts = [];
+        for (var i = 0; i < attrs.length; i++) {
+            parts.push(attrs[i].name + '="' + attrs[i].value + '"');
+        }
+        return "<t " + parts.join(" ") + ">";
+    });
+}
+
+function normalizeStructuredXMLCandidate(xml, sourceXML) {
+    var raw = stripMarkdownCodeFence(xml);
+    raw = raw.replace(/<\?xml[\s\S]*?\?>/gi, "");
+    raw = raw.replace(/<(tab|pbr|lbr)\s*>\s*<\/\1>/gi, function(fullMatch, tagName) {
+        return "<" + String(tagName || "").toLowerCase() + "/>";
+    });
+    raw = raw.replace(/<(tab|pbr|lbr)\s*\/\s*>/gi, function(fullMatch, tagName) {
+        return "<" + String(tagName || "").toLowerCase() + "/>";
+    });
+    raw = raw.replace(/<(\/?)root\b[^>]*>/gi, function(fullMatch, slash) {
+        return slash ? "</root>" : "<root>";
+    });
+    raw = raw.replace(/<(\/?)nt\b[^>]*>/gi, function(fullMatch, slash) {
+        return slash ? "</nt>" : "<nt>";
+    });
+    raw = raw.replace(/<\/t\b[^>]*>/gi, "</t>");
+    raw = canonicalizeTTagAttributes(raw);
+    if (sourceXML && /<root>/i.test(String(sourceXML)) && !/<root>/i.test(raw) && /<t\b/i.test(raw)) {
+        raw = "<root>" + raw + "</root>";
+    }
+    return normalizeTranslatedXML(raw);
+}
+
 function getXMLTagTokens(xml) {
     var matches = String(xml || "").match(/<[^>]+>/g);
     return matches ? matches : [];
@@ -5502,8 +5558,8 @@ function getProtectedMarkerTokens(xml) {
 }
 
 function validateStructuredXMLTranslation(sourceXML, translatedXML) {
-    var sourceNorm = normalizeTranslatedXML(sourceXML);
-    var translatedNorm = normalizeTranslatedXML(translatedXML);
+    var sourceNorm = normalizeStructuredXMLCandidate(sourceXML, sourceXML);
+    var translatedNorm = normalizeStructuredXMLCandidate(translatedXML, sourceXML);
     if (sourceNorm === "" || translatedNorm === "") return false;
     if (!compareStringArrays(getXMLTagTokens(sourceNorm), getXMLTagTokens(translatedNorm))) return false;
     if (!compareStringArrays(getNoTranslateSegments(sourceNorm), getNoTranslateSegments(translatedNorm))) return false;
@@ -5567,6 +5623,126 @@ function buildOpenAITranslationPrompt(textsArray, targetLangCode) {
         prompt += "[" + (i + 1) + "]\n" + String(textsArray[i] || "") + "\n\n";
     }
     return prompt;
+}
+
+function buildOpenAIRepairPrompt(sourceXML, candidateXML, targetLangCode) {
+    var prompt = "";
+    prompt += "Target language code: " + targetLangCode + "\n";
+    prompt += "You will receive a source XML fragment and a candidate translation.\n";
+    prompt += "Repair the candidate so that it matches the exact XML/tag/attribute structure of the source.\n";
+    prompt += "Keep the translated wording from the candidate where possible.\n";
+    prompt += "Do not translate or alter text inside <nt>...</nt>.\n";
+    prompt += "Do not change placeholders like ###IMG_1### or ###TBL_1###.\n";
+    prompt += "Use exactly the same tags and attributes as the source, including <root>, <t>, <tab/>, <pbr/>, and <lbr/>.\n";
+    prompt += "Return JSON only with one property named translation.\n\n";
+    prompt += "[SOURCE]\n" + String(sourceXML || "") + "\n\n";
+    prompt += "[CANDIDATE]\n" + String(candidateXML || "") + "\n";
+    return prompt;
+}
+
+function requestOpenAIResponseObject(payloadObj) {
+    var endpoint = "https://api.openai.com/v1/responses";
+    var payloadFile = new File(Folder.temp + "/oai_pay_" + new Date().getTime() + ".json");
+    var outFile = null;
+    payloadFile.encoding = "UTF-8";
+    payloadFile.open("w");
+    payloadFile.write(serializeJSON(payloadObj));
+    payloadFile.close();
+
+    try {
+        var resultJSON = "";
+        if (File.fs === "Macintosh") {
+            var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Content-Type: application/json' -H 'Authorization: Bearer " + openAIKey + "' --data-binary @'" + payloadFile.fsName + "'";
+            resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+        } else {
+            outFile = new File(Folder.temp + "/oai_out_" + new Date().getTime() + ".json");
+            var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
+                      'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Content-Type: application/json"" -H ""Authorization: Bearer ' + openAIKey + '"" --data-binary @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
+            app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
+            if (outFile.exists) {
+                outFile.encoding = "UTF-8";
+                outFile.open("r");
+                resultJSON = outFile.read();
+                outFile.close();
+                try { outFile.remove(); } catch (outRemoveErr) {}
+                outFile = null;
+            }
+        }
+
+        var parsedObj = null;
+        try {
+            parsedObj = eval("(" + resultJSON + ")");
+        } catch (parseError) {
+            throw new Error(t("openai_parse_error"));
+        }
+        if (!parsedObj || parsedObj.error) {
+            throw new Error(t("openai_error_prefix", { message: extractOpenAIFailureMessage(resultJSON, parsedObj) }));
+        }
+        return parsedObj;
+    } finally {
+        try { payloadFile.remove(); } catch (payloadRemoveErr) {}
+        try { if (outFile && outFile.exists) outFile.remove(); } catch (outCleanupErr) {}
+    }
+}
+
+function parseOpenAIStructuredOutput(parsedObj) {
+    var outputText = stripMarkdownCodeFence(extractOpenAIOutputText(parsedObj));
+    if (!outputText || outputText === "") {
+        throw new Error(t("openai_error_prefix", { message: extractOpenAIFailureMessage("", parsedObj) }));
+    }
+
+    var structuredObj = null;
+    try {
+        structuredObj = eval("(" + outputText + ")");
+    } catch (structuredParseError) {
+        throw new Error(t("openai_parse_error"));
+    }
+    return structuredObj;
+}
+
+function repairOpenAIInvalidTranslation(sourceXML, candidateXML, targetLangCode, blockIndex, overPct) {
+    if (overPct !== null && overPct !== undefined) {
+        updateProgress(null, t("openai_repair_block", { index: blockIndex }), overPct, null);
+    }
+    writeDebugLog("openai:repair:start block=" + blockIndex +
+        " source=" + String(sourceXML || "").substring(0, 500) +
+        " candidate=" + String(candidateXML || "").substring(0, 500), "WARNUNG");
+
+    var payloadObj = {
+        model: normalizeOpenAIModel(openAIModel),
+        instructions: "You repair XML structure for Adobe InDesign translation fragments. Preserve the exact source XML/tag/attribute structure and output only JSON that matches the requested schema.",
+        input: buildOpenAIRepairPrompt(sourceXML, candidateXML, targetLangCode),
+        text: {
+            format: {
+                type: "json_schema",
+                name: "translation_repair",
+                schema: {
+                    type: "object",
+                    properties: {
+                        translation: { type: "string" }
+                    },
+                    required: ["translation"],
+                    additionalProperties: false
+                }
+            }
+        }
+    };
+
+    var parsedObj = requestOpenAIResponseObject(payloadObj);
+    var structuredObj = parseOpenAIStructuredOutput(parsedObj);
+    if (!structuredObj || typeof structuredObj.translation !== "string") {
+        throw new Error(t("openai_invalid_xml", { index: blockIndex }));
+    }
+
+    var repairedXML = normalizeStructuredXMLCandidate(structuredObj.translation, sourceXML);
+    if (!validateStructuredXMLTranslation(sourceXML, repairedXML)) {
+        writeDebugLog("openai:repair:failed block=" + blockIndex +
+            " repaired=" + String(repairedXML || "").substring(0, 500), "WARNUNG");
+        throw new Error(t("openai_invalid_xml", { index: blockIndex }));
+    }
+
+    writeDebugLog("openai:repair:success block=" + blockIndex);
+    return repairedXML;
 }
 
 function translateBatchWithProvider(textsArray, targetLangCode, overStartPct, overEndPct, providerId) {
@@ -5646,7 +5822,6 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
 }
 
 function translateBatchOpenAI(textsArray, targetLangCode, overStartPct, overEndPct) {
-    var endpoint = "https://api.openai.com/v1/responses";
     var translated = [];
     var batchSize = 8;
     var modelName = normalizeOpenAIModel(openAIModel);
@@ -5686,73 +5861,28 @@ function translateBatchOpenAI(textsArray, targetLangCode, overStartPct, overEndP
             }
         };
 
-        var payloadFile = new File(Folder.temp + "/oai_pay_" + new Date().getTime() + ".json");
-        var outFile = null;
-        payloadFile.encoding = "UTF-8";
-        payloadFile.open("w");
-        payloadFile.write(serializeJSON(payloadObj));
-        payloadFile.close();
-
         try {
-            var resultJSON = "";
-            if (File.fs === "Macintosh") {
-                var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Content-Type: application/json' -H 'Authorization: Bearer " + openAIKey + "' --data-binary @'" + payloadFile.fsName + "'";
-                resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
-            } else {
-                outFile = new File(Folder.temp + "/oai_out_" + new Date().getTime() + ".json");
-                var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
-                          'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Content-Type: application/json"" -H ""Authorization: Bearer ' + openAIKey + '"" --data-binary @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
-                app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
-                if (outFile.exists) {
-                    outFile.encoding = "UTF-8";
-                    outFile.open("r");
-                    resultJSON = outFile.read();
-                    outFile.close();
-                    try { outFile.remove(); } catch (outRemoveErr) {}
-                    outFile = null;
-                }
-            }
-
-            var parsedObj = null;
-            try {
-                parsedObj = eval("(" + resultJSON + ")");
-            } catch (parseError) {
-                throw new Error(t("openai_parse_error"));
-            }
-            if (!parsedObj || parsedObj.error) {
-                throw new Error(t("openai_error_prefix", { message: extractOpenAIFailureMessage(resultJSON, parsedObj) }));
-            }
-
-            var outputText = extractOpenAIOutputText(parsedObj);
-            if (!outputText || outputText === "") {
-                throw new Error(t("openai_error_prefix", { message: extractOpenAIFailureMessage(resultJSON, parsedObj) }));
-            }
-
-            var structuredObj = null;
-            try {
-                structuredObj = eval("(" + outputText + ")");
-            } catch (structuredParseError) {
-                throw new Error(t("openai_parse_error"));
-            }
+            var parsedObj = requestOpenAIResponseObject(payloadObj);
+            var structuredObj = parseOpenAIStructuredOutput(parsedObj);
 
             if (!structuredObj || !structuredObj.translations || structuredObj.translations.length !== batchTexts.length) {
                 throw new Error(t("openai_incomplete"));
             }
 
             for (var k = 0; k < structuredObj.translations.length; k++) {
-                var translatedXML = normalizeTranslatedXML(structuredObj.translations[k]);
+                var blockIndex = b + k + 1;
+                var translatedXML = normalizeStructuredXMLCandidate(structuredObj.translations[k], batchTexts[k]);
                 if (!validateStructuredXMLTranslation(batchTexts[k], translatedXML)) {
-                    throw new Error(t("openai_invalid_xml", { index: (b + k + 1) }));
+                    writeDebugLog("openai:invalid_xml block=" + blockIndex +
+                        " source=" + String(batchTexts[k] || "").substring(0, 500) +
+                        " candidate=" + String(translatedXML || "").substring(0, 500), "WARNUNG");
+                    translatedXML = repairOpenAIInvalidTranslation(batchTexts[k], translatedXML, targetLangCode, blockIndex, currentOverPct);
                 }
                 translated.push(translatedXML);
             }
         } catch (e) {
             if (e.message === "CANCELLED") throw e;
             throw new Error(e.message && e.message.indexOf("OpenAI") === 0 ? e.message : t("openai_connection_error", { message: (e.message || "Request failed.") }));
-        }
-        finally {
-            try { payloadFile.remove(); } catch (payloadRemoveErr) {}
-            try { if (outFile && outFile.exists) outFile.remove(); } catch (outCleanupErr) {}
         }
     }
 
