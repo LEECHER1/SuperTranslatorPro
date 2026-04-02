@@ -2184,7 +2184,7 @@ btnSettings.onClick = function() {
     setWin.orientation = "column";
     setWin.alignChildren = ["fill", "top"];
     setWin.spacing = 10;
-    setWin.minimumSize = [760, 620];
+    setWin.minimumSize = [760, 520];
     
     var topGrp = setWin.add("group");
     topGrp.alignment = "fill";
@@ -2197,9 +2197,9 @@ btnSettings.onClick = function() {
     btnInfo.preferredSize = [80, 25];
 
     var tabs = setWin.add("tabbedpanel");
-    tabs.alignment = ["fill", "fill"];
+    tabs.alignment = ["fill", "top"];
     tabs.alignChildren = ["fill", "fill"];
-    tabs.preferredSize = [700, 470];
+    tabs.preferredSize = [700, 320];
 
     var dataTab = tabs.add("tab", undefined, t("settings_tab_data"));
     dataTab.orientation = "column";
@@ -2385,7 +2385,7 @@ btnSettings.onClick = function() {
     var g = setWin.add("group");
     g.alignment = "fill";
     g.alignChildren = ["fill", "center"];
-    g.margins.top = 15;
+    g.margins.top = 8;
     
     var leftGrp = g.add("group");
     leftGrp.alignment = "left";
