@@ -12,6 +12,9 @@ var GEMINI_KEY_LABEL = "SuperTranslatorPRO_Gemini_API_Key";
 var GEMINI_MODEL_LABEL = "SuperTranslatorPRO_Gemini_Model";
 var CLAUDE_KEY_LABEL = "SuperTranslatorPRO_Claude_API_Key";
 var CLAUDE_MODEL_LABEL = "SuperTranslatorPRO_Claude_Model";
+var LOCAL_LLM_BASE_URL_LABEL = "SuperTranslatorPRO_LocalLLM_BaseURL";
+var LOCAL_LLM_API_KEY_LABEL = "SuperTranslatorPRO_LocalLLM_API_Key";
+var LOCAL_LLM_MODEL_LABEL = "SuperTranslatorPRO_LocalLLM_Model";
 var TRANSLATION_PROVIDER_LABEL = "SuperTranslatorPRO_TranslationProvider";
 var CSV_PATH_LABEL = "SuperTranslatorPRO_CSV_Path";
 var TM_PATH_LABEL = "SuperTranslatorPRO_TM_Path"; 
@@ -71,6 +74,7 @@ var UI_STRINGS = {
     provider_openai: { de: "ChatGPT / OpenAI", en: "ChatGPT / OpenAI" },
     provider_gemini: { de: "Google / Gemini", en: "Google / Gemini" },
     provider_claude: { de: "Anthropic / Claude", en: "Anthropic / Claude" },
+    provider_local: { de: "Lokales LLM (LM Studio / Ollama)", en: "Local LLM (LM Studio / Ollama)" },
     deepl_api_key: { de: "DeepL Pro API-Key:", en: "DeepL Pro API key:" },
     deepl_fallback_api_key: { de: "DeepL Fallback API-Key (optional):", en: "DeepL fallback API key (optional):" },
     openai_api_key: { de: "OpenAI API-Key:", en: "OpenAI API key:" },
@@ -79,6 +83,9 @@ var UI_STRINGS = {
     gemini_model: { de: "Gemini Modell:", en: "Gemini model:" },
     claude_api_key: { de: "Claude API-Key:", en: "Claude API key:" },
     claude_model: { de: "Claude Modell:", en: "Claude model:" },
+    local_llm_base_url: { de: "Lokale Base URL:", en: "Local base URL:" },
+    local_llm_api_key: { de: "Lokaler API-Key (optional):", en: "Local API key (optional):" },
+    local_llm_model: { de: "Lokales Modell:", en: "Local model:" },
     glossary_path: { de: "Netzwerk-Wörterbuch (CSV Pfad):", en: "Network glossary (CSV path):" },
     browse: { de: "Durchsuchen...", en: "Browse..." },
     glossary_select: { de: "Bitte wähle die Wörterbuch CSV-Datei aus", en: "Please choose the glossary CSV file" },
@@ -190,6 +197,8 @@ var UI_STRINGS = {
     validation_enter_openai_key: { de: "Bitte trage zuerst deinen OpenAI API-Key in den Einstellungen (⚙️) ein.", en: "Please enter your OpenAI API key in the settings (⚙️) first." },
     validation_enter_gemini_key: { de: "Bitte trage zuerst deinen Gemini API-Key in den Einstellungen (⚙️) ein.", en: "Please enter your Gemini API key in the settings (⚙️) first." },
     validation_enter_claude_key: { de: "Bitte trage zuerst deinen Claude API-Key in den Einstellungen (⚙️) ein.", en: "Please enter your Claude API key in the settings (⚙️) first." },
+    validation_enter_local_llm_base_url: { de: "Bitte trage zuerst die lokale Base URL in den Einstellungen (⚙️) ein.", en: "Please enter the local base URL in the settings (⚙️) first." },
+    validation_enter_local_llm_model: { de: "Bitte trage zuerst den lokalen Modellnamen in den Einstellungen (⚙️) ein.", en: "Please enter the local model name in the settings (⚙️) first." },
     process_cancelled: { de: "⚠️ Vorgang abgebrochen!\n\nTipp: Drücke jetzt Cmd+Z (Rückgängig), um alle bisherigen Änderungen in einem Rutsch zu verwerfen.", en: "⚠️ Process cancelled.\n\nTip: press Cmd+Z (Undo) now to revert all changes made so far in one step." },
     process_error: { de: "Ein Fehler ist aufgetreten:\n{message}", en: "An error occurred:\n{message}" },
     undo_translation: { de: "Super Übersetzer: {mode}", en: "Super Translator: {mode}" },
@@ -264,6 +273,17 @@ var UI_STRINGS = {
     claude_retry_block: { de: "Claude Retry: Übersetze Block {index} einzeln neu...", en: "Claude retry: retranslating block {index} individually..." },
     claude_fallback_deepl_block: { de: "Fallback: Übersetze Block {index} mit DeepL...", en: "Fallback: translating block {index} with DeepL..." },
     claude_invalid_xml: { de: "Claude lieferte für Block {index} ein ungültiges XML-/Tag-Ergebnis zurück.", en: "Claude returned an invalid XML/tag result for block {index}." },
+    local_unknown_response: { de: "Unbekannte Antwort vom lokalen LLM.", en: "Unknown response from the local LLM." },
+    local_request_blocks: { de: "Lokales LLM: Sende Blöcke {start} bis {end} von {total}...", en: "Local LLM: sending blocks {start} to {end} of {total}..." },
+    local_parse_error: { de: "Die Antwort des lokalen LLM konnte nicht gelesen werden.", en: "The local LLM response could not be read." },
+    local_error_prefix: { de: "Lokales LLM-Fehler: {message}", en: "Local LLM error: {message}" },
+    local_incomplete: { de: "Das lokale LLM lieferte unvollständige Ergebnisse zurück.", en: "The local LLM returned incomplete results." },
+    local_connection_error: { de: "Lokales LLM-Verbindungsfehler: {message}", en: "Local LLM connection error: {message}" },
+    local_refusal: { de: "Das lokale LLM hat die Anfrage abgelehnt: {message}", en: "The local LLM refused the request: {message}" },
+    local_repair_block: { de: "Lokales LLM Reparatur: Korrigiere XML-Struktur für Block {index}...", en: "Local LLM repair: fixing XML structure for block {index}..." },
+    local_retry_block: { de: "Lokales LLM Retry: Übersetze Block {index} einzeln neu...", en: "Local LLM retry: retranslating block {index} individually..." },
+    local_fallback_deepl_block: { de: "Fallback: Übersetze Block {index} mit DeepL...", en: "Fallback: translating block {index} with DeepL..." },
+    local_invalid_xml: { de: "Das lokale LLM lieferte für Block {index} ein ungültiges XML-/Tag-Ergebnis zurück.", en: "The local LLM returned an invalid XML/tag result for block {index}." },
     applying_formatting: { de: "Wende Formatierungen an...", en: "Applying formatting..." },
     restoring_tables_images: { de: "Stelle Tabellen und Bilder wieder her...", en: "Restoring tables and images..." },
     checking_overflow: { de: "Prüfe auf Textübersatz (Auto-Fit)...", en: "Checking for overset text (auto-fit)..." }
@@ -284,7 +304,7 @@ function buildAboutText() {
     var infoText = SCRIPT_NAME + " v" + SCRIPT_VERSION + "\n";
     infoText += "© " + new Date().getFullYear() + " Andreas Schwarz\n\n";
     if (UI_IS_GERMAN) {
-        infoText += "Ein professionelles Übersetzungstool für InDesign mit DeepL als Standard und optionalen Providern für OpenAI, Gemini und Claude.\n\n";
+        infoText += "Ein professionelles Übersetzungstool für InDesign mit DeepL als Standard und optionalen Providern für OpenAI, Gemini, Claude und lokale OpenAI-kompatible Server.\n\n";
         infoText += "Kernfunktionen:\n";
         infoText += "• Nahtloser Erhalt von Textformatierungen, Tabellen und verankerten Bildern\n";
         infoText += "• Integriertes Translation Memory (JSON) zur API-Kostenersparnis\n";
@@ -293,7 +313,7 @@ function buildAboutText() {
         infoText += "• Cross-Platform (macOS & Windows) API-Anbindung\n";
         infoText += "• Intelligente Auto-Fit Korrektur gegen Textrahmen-Übersatz";
     } else {
-        infoText += "A professional translation tool for InDesign powered by DeepL by default with optional OpenAI, Gemini, and Claude providers.\n\n";
+        infoText += "A professional translation tool for InDesign powered by DeepL by default with optional OpenAI, Gemini, Claude, and local OpenAI-compatible providers.\n\n";
         infoText += "Core features:\n";
         infoText += "• Preserves text formatting, tables, and anchored images\n";
         infoText += "• Integrated translation memory (JSON) to reduce API costs\n";
@@ -307,6 +327,7 @@ function buildAboutText() {
 
 function normalizeTranslationProvider(providerId) {
     var normalized = String(providerId || "").replace(/^\s+|\s+$/g, "").toLowerCase();
+    if (normalized === "local" || normalized === "local_llm" || normalized.indexOf("lm studio") !== -1 || normalized.indexOf("ollama") !== -1) return "local";
     if (normalized === "gemini" || normalized === "google" || normalized.indexOf("gemini") !== -1) return "gemini";
     if (normalized === "claude" || normalized === "anthropic" || normalized.indexOf("claude") !== -1) return "claude";
     if (normalized === "openai" || normalized === "chatgpt") return "openai";
@@ -328,8 +349,23 @@ function normalizeClaudeModel(modelName) {
     return normalized !== "" ? normalized : "claude-sonnet-4-6";
 }
 
+function normalizeLocalLLMModel(modelName) {
+    return String(modelName || "").replace(/^\s+|\s+$/g, "");
+}
+
+function normalizeLocalLLMBaseURL(url) {
+    var normalized = String(url || "").replace(/^\s+|\s+$/g, "");
+    if (normalized === "") return "";
+    normalized = normalized.replace(/\/+$/g, "");
+    normalized = normalized.replace(/\/(responses|chat\/completions)$/i, "");
+    normalized = normalized.replace(/\/api$/i, "");
+    if (!/\/v\d+$/i.test(normalized)) normalized += "/v1";
+    return normalized;
+}
+
 function getTranslationProviderDisplayName(providerId) {
     var normalized = normalizeTranslationProvider(providerId);
+    if (normalized === "local") return t("provider_local");
     if (normalized === "openai") return t("provider_openai");
     if (normalized === "gemini") return t("provider_gemini");
     if (normalized === "claude") return t("provider_claude");
@@ -351,11 +387,17 @@ function getProviderValidationMessage(providerId) {
     if (normalized === "claude") {
         return (!claudeKey || claudeKey === "") ? t("validation_enter_claude_key") : "";
     }
+    if (normalized === "local") {
+        if (!localLLMBaseURL || localLLMBaseURL === "") return t("validation_enter_local_llm_base_url");
+        if (!localLLMModel || localLLMModel === "") return t("validation_enter_local_llm_model");
+        return "";
+    }
     return (!apiKey || apiKey === "") ? t("validation_enter_deepl_key") : "";
 }
 
 function getStructuredProviderModel(providerId) {
     var normalized = normalizeTranslationProvider(providerId);
+    if (normalized === "local") return normalizeLocalLLMModel(localLLMModel);
     if (normalized === "openai") return normalizeOpenAIModel(openAIModel);
     if (normalized === "gemini") return normalizeGeminiModel(geminiModel);
     if (normalized === "claude") return normalizeClaudeModel(claudeModel);
@@ -373,13 +415,15 @@ function getProviderDebugPrefix(providerId) {
 
 function isStructuredLLMProvider(providerId) {
     var normalized = normalizeTranslationProvider(providerId);
-    return normalized === "openai" || normalized === "gemini" || normalized === "claude";
+    return normalized === "local" || normalized === "openai" || normalized === "gemini" || normalized === "claude";
 }
 
 function isProviderBrandedError(providerId, message) {
     var providerName = getTranslationProviderDisplayName(providerId);
     var raw = String(message || "");
     return raw.indexOf(providerName) === 0 ||
+        raw.indexOf("Local LLM") === 0 ||
+        raw.indexOf("Lokales LLM") === 0 ||
         raw.indexOf("OpenAI") === 0 ||
         raw.indexOf("Gemini") === 0 ||
         raw.indexOf("Claude") === 0;
@@ -824,6 +868,9 @@ var geminiKey = app.extractLabel(GEMINI_KEY_LABEL) || "";
 var geminiModel = normalizeGeminiModel(app.extractLabel(GEMINI_MODEL_LABEL) || "gemini-2.5-flash");
 var claudeKey = app.extractLabel(CLAUDE_KEY_LABEL) || "";
 var claudeModel = normalizeClaudeModel(app.extractLabel(CLAUDE_MODEL_LABEL) || "claude-sonnet-4-6");
+var localLLMBaseURL = normalizeLocalLLMBaseURL(app.extractLabel(LOCAL_LLM_BASE_URL_LABEL) || "");
+var localLLMApiKey = app.extractLabel(LOCAL_LLM_API_KEY_LABEL) || "";
+var localLLMModel = normalizeLocalLLMModel(app.extractLabel(LOCAL_LLM_MODEL_LABEL) || "");
 var translationProviderSetting = normalizeTranslationProvider(app.extractLabel(TRANSLATION_PROVIDER_LABEL) || "deepl");
 
 var csvPathSettingRaw = app.extractLabel(CSV_PATH_LABEL) || "";
@@ -2145,8 +2192,8 @@ btnSettings.onClick = function() {
     btnInfo.preferredSize = [80, 25];
     
     setWin.add("statictext", undefined, t("translation_provider"));
-    var providerIds = ["deepl", "openai", "gemini", "claude"];
-    var providerLabels = [t("provider_deepl"), t("provider_openai"), t("provider_gemini"), t("provider_claude")];
+    var providerIds = ["deepl", "openai", "gemini", "claude", "local"];
+    var providerLabels = [t("provider_deepl"), t("provider_openai"), t("provider_gemini"), t("provider_claude"), t("provider_local")];
     var providerDrop = setWin.add("dropdownlist", undefined, providerLabels);
     var activeProviderId = getActiveTranslationProvider();
     var activeProviderIndex = 0;
@@ -2219,6 +2266,11 @@ btnSettings.onClick = function() {
         { name: "claudeKey", label: t("claude_api_key"), value: claudeKey, chars: 40 },
         { name: "claudeModel", label: t("claude_model"), value: claudeModel, chars: 30 }
     ]);
+    var localProviderFields = createProviderFieldsGroup(providerSpecificGroup, [
+        { name: "localLLMBaseURL", label: t("local_llm_base_url"), value: localLLMBaseURL, chars: 40 },
+        { name: "localLLMApiKey", label: t("local_llm_api_key"), value: localLLMApiKey, chars: 40 },
+        { name: "localLLMModel", label: t("local_llm_model"), value: localLLMModel, chars: 30 }
+    ]);
 
     var keyInput = deepLField.input;
     var openAIKeyInput = openAIProviderFields.inputs.openAIKey;
@@ -2227,6 +2279,9 @@ btnSettings.onClick = function() {
     var geminiModelInput = geminiProviderFields.inputs.geminiModel;
     var claudeKeyInput = claudeProviderFields.inputs.claudeKey;
     var claudeModelInput = claudeProviderFields.inputs.claudeModel;
+    var localLLMBaseURLInput = localProviderFields.inputs.localLLMBaseURL;
+    var localLLMApiKeyInput = localProviderFields.inputs.localLLMApiKey;
+    var localLLMModelInput = localProviderFields.inputs.localLLMModel;
 
     function refreshProviderSettingsUI() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
@@ -2236,6 +2291,7 @@ btnSettings.onClick = function() {
         setSettingsGroupVisible(openAIProviderFields.group, selectedProviderId === "openai");
         setSettingsGroupVisible(geminiProviderFields.group, selectedProviderId === "gemini");
         setSettingsGroupVisible(claudeProviderFields.group, selectedProviderId === "claude");
+        setSettingsGroupVisible(localProviderFields.group, selectedProviderId === "local");
         try { providerSettingsGroup.layout.layout(true); } catch (layoutErr) {}
         try { setWin.layout.layout(true); } catch (winLayoutErr) {}
     }
@@ -2331,6 +2387,9 @@ btnSettings.onClick = function() {
         geminiModel = normalizeGeminiModel(geminiModelInput.text);
         claudeKey = String(claudeKeyInput.text || "").replace(/^\s+|\s+$/g, "");
         claudeModel = normalizeClaudeModel(claudeModelInput.text);
+        localLLMBaseURL = normalizeLocalLLMBaseURL(localLLMBaseURLInput.text);
+        localLLMApiKey = String(localLLMApiKeyInput.text || "").replace(/^\s+|\s+$/g, "");
+        localLLMModel = normalizeLocalLLMModel(localLLMModelInput.text);
         csvPath = csvInput.text;
         csvPathSettingRaw = csvPath;
         tmPath = tmInput.text;
@@ -2343,6 +2402,9 @@ btnSettings.onClick = function() {
         app.insertLabel(GEMINI_MODEL_LABEL, geminiModel);
         app.insertLabel(CLAUDE_KEY_LABEL, claudeKey);
         app.insertLabel(CLAUDE_MODEL_LABEL, claudeModel);
+        app.insertLabel(LOCAL_LLM_BASE_URL_LABEL, localLLMBaseURL);
+        app.insertLabel(LOCAL_LLM_API_KEY_LABEL, localLLMApiKey);
+        app.insertLabel(LOCAL_LLM_MODEL_LABEL, localLLMModel);
         app.insertLabel(TRANSLATION_PROVIDER_LABEL, translationProviderSetting);
         app.insertLabel(CSV_PATH_LABEL, csvPath); 
         app.insertLabel(TM_PATH_LABEL, tmPath); 
@@ -4975,6 +5037,9 @@ function createFeedbackReport() {
             reportFile.writeln("Gemini-Modell: " + (geminiModel || "(leer)"));
             reportFile.writeln("Claude-Key gesetzt: " + ((claudeKey && claudeKey !== "") ? "Ja" : "Nein"));
             reportFile.writeln("Claude-Modell: " + (claudeModel || "(leer)"));
+            reportFile.writeln("Lokale Base URL: " + (localLLMBaseURL || "(leer)"));
+            reportFile.writeln("Lokaler API-Key gesetzt: " + ((localLLMApiKey && localLLMApiKey !== "") ? "Ja" : "Nein"));
+            reportFile.writeln("Lokales Modell: " + (localLLMModel || "(leer)"));
             reportFile.writeln("CSV-Pfad: " + (csvPath || "(leer)"));
             reportFile.writeln("TM-Pfad: " + (tmPath || "(leer)"));
             reportFile.writeln("Referenz-Symbole: " + (refSymbolsSetting || "[]"));
@@ -5587,7 +5652,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             
             var translatedBatch = translateBatchWithProvider(justXMLs, selectedLang, overStartPct, overEndPct);
             if (!translatedBatch || translatedBatch.length !== translationQueue.length) {
-                throw new Error(t(getActiveTranslationProvider() === "openai" ? "openai_incomplete" : "deepl_incomplete"));
+                throw new Error(t(getProviderStringKey(getActiveTranslationProvider(), "incomplete")));
             }
 
             var tmUpdated = false;
@@ -5927,6 +5992,92 @@ function requestOpenAIResponseObject(payloadObj) {
     }
 }
 
+function extractLocalLLMFailureMessage(resultJSON, parsedObj) {
+    var msg = "";
+    try {
+        if (parsedObj && parsedObj.error && parsedObj.error.message) msg = parsedObj.error.message;
+        else if (parsedObj && parsedObj.message) msg = parsedObj.message;
+    } catch (e) {}
+    if (msg === "" && resultJSON && resultJSON !== "") {
+        msg = String(resultJSON).replace(/[\r\n]+/g, " ").replace(/^\s+|\s+$/g, "");
+        if (msg.length > 220) msg = msg.substring(0, 220) + "...";
+    }
+    if (msg === "") msg = t("local_unknown_response");
+    return msg;
+}
+
+function requestLocalLLMChatCompletionObject(payloadObj) {
+    var baseURL = normalizeLocalLLMBaseURL(localLLMBaseURL);
+    var endpoint = baseURL + "/chat/completions";
+    var payloadFile = new File(Folder.temp + "/loc_pay_" + new Date().getTime() + ".json");
+    var outFile = null;
+    payloadFile.encoding = "UTF-8";
+    payloadFile.open("w");
+    payloadFile.write(serializeJSON(payloadObj));
+    payloadFile.close();
+
+    try {
+        var resultJSON = "";
+        if (File.fs === "Macintosh") {
+            var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Content-Type: application/json'";
+            if (localLLMApiKey && localLLMApiKey !== "") curlCmd += " -H 'Authorization: Bearer " + localLLMApiKey + "'";
+            curlCmd += " --data-binary @'" + payloadFile.fsName + "'";
+            resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+        } else {
+            outFile = new File(Folder.temp + "/loc_out_" + new Date().getTime() + ".json");
+            var authHeaderPart = (localLLMApiKey && localLLMApiKey !== "") ? ' -H ""Authorization: Bearer ' + localLLMApiKey + '""' : '';
+            var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
+                      'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Content-Type: application/json""' + authHeaderPart + ' --data-binary @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
+            app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
+            if (outFile.exists) {
+                outFile.encoding = "UTF-8";
+                outFile.open("r");
+                resultJSON = outFile.read();
+                outFile.close();
+                try { outFile.remove(); } catch (outRemoveErr) {}
+                outFile = null;
+            }
+        }
+
+        var parsedObj = null;
+        try {
+            parsedObj = eval("(" + resultJSON + ")");
+        } catch (parseError) {
+            throw new Error(t("local_parse_error"));
+        }
+        if (!parsedObj || parsedObj.error) {
+            throw new Error(t("local_error_prefix", { message: extractLocalLLMFailureMessage(resultJSON, parsedObj) }));
+        }
+        return parsedObj;
+    } finally {
+        try { payloadFile.remove(); } catch (payloadRemoveErr) {}
+        try { if (outFile && outFile.exists) outFile.remove(); } catch (outCleanupErr) {}
+    }
+}
+
+function parseLocalLLMStructuredOutput(parsedObj) {
+    var outputText = "";
+    try {
+        if (parsedObj && parsedObj.choices && parsedObj.choices.length > 0 &&
+            parsedObj.choices[0].message && parsedObj.choices[0].message.content !== undefined &&
+            parsedObj.choices[0].message.content !== null) {
+            outputText = String(parsedObj.choices[0].message.content);
+        }
+    } catch (e) {}
+    outputText = stripMarkdownCodeFence(outputText);
+    if (!outputText || outputText === "") {
+        throw new Error(t("local_error_prefix", { message: extractLocalLLMFailureMessage("", parsedObj) }));
+    }
+
+    var structuredObj = null;
+    try {
+        structuredObj = eval("(" + outputText + ")");
+    } catch (structuredParseError) {
+        throw new Error(t("local_parse_error"));
+    }
+    return structuredObj;
+}
+
 function parseOpenAIStructuredOutput(parsedObj) {
     var outputText = stripMarkdownCodeFence(extractOpenAIOutputText(parsedObj));
     if (!outputText || outputText === "") {
@@ -6116,6 +6267,27 @@ function requestClaudeResponseObject(payloadObj) {
 
 function requestStructuredProviderObject(providerId, schemaName, schemaDef, promptText, systemInstruction) {
     var normalized = normalizeTranslationProvider(providerId);
+    if (normalized === "local") {
+        var localPayloadObj = {
+            model: getStructuredProviderModel(normalized),
+            messages: [
+                { role: "system", content: systemInstruction + " Output only valid JSON that matches the requested schema." },
+                { role: "user", content: promptText }
+            ],
+            response_format: {
+                type: "json_schema",
+                json_schema: {
+                    name: schemaName,
+                    strict: true,
+                    schema: schemaDef
+                }
+            },
+            stream: false,
+            temperature: 0
+        };
+        return parseLocalLLMStructuredOutput(requestLocalLLMChatCompletionObject(localPayloadObj));
+    }
+
     if (normalized === "openai") {
         var openAIPayloadObj = {
             model: getStructuredProviderModel(normalized),
@@ -6268,6 +6440,9 @@ function translateSingleBlockDeepLFallback(sourceXML, targetLangCode, blockIndex
 
 function translateBatchWithProvider(textsArray, targetLangCode, overStartPct, overEndPct, providerId) {
     var activeProvider = normalizeTranslationProvider(providerId || getActiveTranslationProvider());
+    if (activeProvider === "local") {
+        return translateBatchLocalLLM(textsArray, targetLangCode, overStartPct, overEndPct);
+    }
     if (activeProvider === "openai") {
         return translateBatchOpenAI(textsArray, targetLangCode, overStartPct, overEndPct);
     }
@@ -6350,6 +6525,7 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
 
 function getStructuredProviderBatchSize(providerId) {
     var normalized = normalizeTranslationProvider(providerId);
+    if (normalized === "local") return 6;
     if (normalized === "claude") return 6;
     if (normalized === "gemini") return 10;
     return 8;
@@ -6425,6 +6601,10 @@ function translateBatchStructuredLLM(providerId, textsArray, targetLangCode, ove
 
 function translateBatchOpenAI(textsArray, targetLangCode, overStartPct, overEndPct) {
     return translateBatchStructuredLLM("openai", textsArray, targetLangCode, overStartPct, overEndPct);
+}
+
+function translateBatchLocalLLM(textsArray, targetLangCode, overStartPct, overEndPct) {
+    return translateBatchStructuredLLM("local", textsArray, targetLangCode, overStartPct, overEndPct);
 }
 
 function translateBatchGemini(textsArray, targetLangCode, overStartPct, overEndPct) {

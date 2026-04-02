@@ -90,10 +90,11 @@
 - [x] OpenAI-Adapter für XML-/Tag-sichere Übersetzungen ergänzen
 - [x] Adapter für Google / Gemini ergänzen
 - [x] Adapter für Anthropic / Claude ergänzen
+- [x] Lokalen OpenAI-kompatiblen Provider für LM Studio / Ollama ergänzen
 - [x] UI für Provider-Auswahl und API-Key-Felder hinzufügen
 
 **Notizen:**
-- DeepL bleibt Standard; OpenAI, Gemini und Claude hängen jetzt an derselben XML-/Tag-validierten Provider-Schicht.
+- DeepL bleibt Standard; OpenAI, Gemini, Claude und lokale OpenAI-kompatible Server hängen jetzt an derselben XML-/Tag-validierten Provider-Schicht.
 - Offene Folgeschritte sind vor allem Live-Tests in echten InDesign-Dokumenten sowie später ein optionaler Hybrid-/Polish-Modus.
 
 ---
@@ -163,6 +164,7 @@
 - [ ] Overflow-Fix in `executeTranslation` ersetzen
 - [ ] Legacy-BDA, Auto-Hyperlinks und Glossar-Flow in echten Projekten breit testen
 - [ ] Gemini-/Claude-Live-Tests inkl. Grenzfällen mit XML, Tabellen und langen BDA-Läufen durchführen
+- [ ] Lokale LLM-Live-Tests mit LM Studio und Ollama durchführen
 - [ ] Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren
 - [ ] UXP-Refactoring-Plan erstellen
 - [ ] Glossar-Validator für fehlerhafte CSV-Struktur ergänzen
@@ -172,6 +174,7 @@
 
 ## Änderungslog
 - 2. April 2026: Gemini- und Claude-Adapter auf die gemeinsame XML-/Tag-sichere Provider-Schicht gehängt, inklusive UI-Feldern für Keys/Modelle und DeepL-Fallback
+- 2. April 2026: Lokalen OpenAI-kompatiblen Provider für LM Studio/Ollama ergänzt (Base URL, Modell, optionaler Key)
 - 1. April 2026: Phase 1 der Provider-Erweiterung umgesetzt (Provider-Interface, OpenAI-Adapter, UI für Provider- und API-Key-Auswahl)
 - 31. März 2026: Plan auf realen Entwicklungsstand aktualisiert, Glossar-System ergänzt, Hyperlink- und Legacy-Fallback-Fortschritt eingetragen
 - 31. März 2026: UI/UX-Optimierung und Verlinken als neue Hauptpunkte ergänzt
