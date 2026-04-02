@@ -64,6 +64,9 @@ var UI_STRINGS = {
     no_document_open: { de: "Kein Dokument offen!", en: "No document is open." },
     spellcheck_error: { de: "Fehler bei der Rechtschreibprüfung:\n{message}", en: "Spell-check error:\n{message}" },
     settings_title: { de: "⚙️ Einstellungen", en: "⚙️ Settings" },
+    settings_tab_provider: { de: "Provider", en: "Provider" },
+    settings_tab_data: { de: "Daten", en: "Data" },
+    settings_tab_auto: { de: "Auto", en: "Auto" },
     log_file: { de: "📄 Logdatei", en: "📄 Log File" },
     debug_log_file: { de: "Debug-Log", en: "Debug Log" },
     debug_tables_images: { de: "Debug-Log für Tabellen/Bilder", en: "Debug log for tables/images" },
@@ -2180,6 +2183,7 @@ btnSettings.onClick = function() {
     var setWin = new Window("dialog", t("settings_title"));
     setWin.orientation = "column";
     setWin.alignChildren = ["fill", "top"];
+    setWin.spacing = 10;
     
     var topGrp = setWin.add("group");
     topGrp.alignment = "fill";
@@ -2190,20 +2194,23 @@ btnSettings.onClick = function() {
     btnDebugLog.preferredSize = [90, 25];
     var btnInfo = topGrp.add("button", undefined, t("info"));
     btnInfo.preferredSize = [80, 25];
-    
-    setWin.add("statictext", undefined, t("translation_provider"));
-    var providerIds = ["deepl", "openai", "gemini", "claude", "local"];
-    var providerLabels = [t("provider_deepl"), t("provider_openai"), t("provider_gemini"), t("provider_claude"), t("provider_local")];
-    var providerDrop = setWin.add("dropdownlist", undefined, providerLabels);
-    var activeProviderId = getActiveTranslationProvider();
-    var activeProviderIndex = 0;
-    for (var providerIndex = 0; providerIndex < providerIds.length; providerIndex++) {
-        if (providerIds[providerIndex] === activeProviderId) {
-            activeProviderIndex = providerIndex;
-            break;
-        }
-    }
-    providerDrop.selection = activeProviderIndex;
+
+    var tabs = setWin.add("tabbedpanel");
+    tabs.alignment = ["fill", "fill"];
+    tabs.alignChildren = ["fill", "fill"];
+    tabs.preferredSize = [660, 380];
+
+    var providerTab = tabs.add("tab", undefined, t("settings_tab_provider"));
+    providerTab.orientation = "column";
+    providerTab.alignChildren = ["fill", "top"];
+
+    var dataTab = tabs.add("tab", undefined, t("settings_tab_data"));
+    dataTab.orientation = "column";
+    dataTab.alignChildren = ["fill", "top"];
+
+    var autoTab = tabs.add("tab", undefined, t("settings_tab_auto"));
+    autoTab.orientation = "column";
+    autoTab.alignChildren = ["fill", "top"];
 
     function createSettingsField(parent, labelText, value, chars) {
         var fieldGroup = parent.add("group");
@@ -2213,6 +2220,7 @@ btnSettings.onClick = function() {
         var label = fieldGroup.add("statictext", undefined, labelText);
         var input = fieldGroup.add("edittext", undefined, value);
         input.characters = chars;
+        input.alignment = ["fill", "top"];
         return { group: fieldGroup, label: label, input: input };
     }
 
@@ -2242,7 +2250,36 @@ btnSettings.onClick = function() {
         }
     }
 
-    var providerSettingsGroup = setWin.add("group");
+    function createPathInputRow(parent, labelText, value, browseHandler) {
+        parent.add("statictext", undefined, labelText);
+        var row = parent.add("group");
+        row.alignment = "fill";
+        row.alignChildren = ["fill", "center"];
+        var input = row.add("edittext", undefined, value);
+        input.alignment = ["fill", "center"];
+        input.characters = 34;
+        var button = row.add("button", undefined, t("browse"));
+        button.preferredSize = [120, 25];
+        button.onClick = browseHandler;
+        return input;
+    }
+
+    providerTab.add("statictext", undefined, t("translation_provider"));
+    var providerIds = ["deepl", "openai", "gemini", "claude", "local"];
+    var providerLabels = [t("provider_deepl"), t("provider_openai"), t("provider_gemini"), t("provider_claude"), t("provider_local")];
+    var providerDrop = providerTab.add("dropdownlist", undefined, providerLabels);
+    providerDrop.alignment = "fill";
+    var activeProviderId = getActiveTranslationProvider();
+    var activeProviderIndex = 0;
+    for (var providerIndex = 0; providerIndex < providerIds.length; providerIndex++) {
+        if (providerIds[providerIndex] === activeProviderId) {
+            activeProviderIndex = providerIndex;
+            break;
+        }
+    }
+    providerDrop.selection = activeProviderIndex;
+
+    var providerSettingsGroup = providerTab.add("group");
     providerSettingsGroup.orientation = "column";
     providerSettingsGroup.alignChildren = ["fill", "top"];
     providerSettingsGroup.alignment = "fill";
@@ -2298,38 +2335,27 @@ btnSettings.onClick = function() {
 
     providerDrop.onChange = refreshProviderSettingsUI;
     refreshProviderSettingsUI();
-    
-    setWin.add("panel", undefined, ""); 
-    
-    setWin.add("statictext", undefined, t("glossary_path"));
-    var grpCSV = setWin.add("group");
-    var csvInput = grpCSV.add("edittext", undefined, csvPath);
-    csvInput.characters = 30;
-    var btnBrowse = grpCSV.add("button", undefined, t("browse"));
-    
-    btnBrowse.onClick = function() {
+
+    tabs.selection = providerTab;
+
+    var csvInput = createPathInputRow(dataTab, t("glossary_path"), csvPath, function() {
         var chosenGlossaryPath = promptForGlossaryPath(csvInput.text, true);
         if (chosenGlossaryPath && chosenGlossaryPath !== "") csvInput.text = chosenGlossaryPath;
-    };
+    });
 
-    setWin.add("panel", undefined, "");
-    setWin.add("statictext", undefined, t("formality"));
-    var formDrop = setWin.add("dropdownlist", undefined, buildFormalityOptions());
+    dataTab.add("panel", undefined, "");
+    dataTab.add("statictext", undefined, t("formality"));
+    var formDrop = dataTab.add("dropdownlist", undefined, buildFormalityOptions());
+    formDrop.alignment = "fill";
     if (formalitySetting === "more") formDrop.selection = 1; else if (formalitySetting === "less") formDrop.selection = 2; else formDrop.selection = 0;
     
-    setWin.add("statictext", undefined, t("ignored_styles"));
-    var dntInput = setWin.add("edittext", undefined, dntStyles);
+    dataTab.add("statictext", undefined, t("ignored_styles"));
+    var dntInput = dataTab.add("edittext", undefined, dntStyles);
     dntInput.characters = 40;
+    dntInput.alignment = "fill";
 
-    setWin.add("panel", undefined, ""); 
-
-    setWin.add("statictext", undefined, t("memory_path"));
-    var grpTM = setWin.add("group");
-    var tmInput = grpTM.add("edittext", undefined, tmPath);
-    tmInput.characters = 30;
-    var btnBrowseTM = grpTM.add("button", undefined, t("browse"));
-    
-    btnBrowseTM.onClick = function() {
+    dataTab.add("panel", undefined, "");
+    var tmInput = createPathInputRow(dataTab, t("memory_path"), tmPath, function() {
         var f = File.openDialog(t("memory_select"), "*.json");
         if (f) {
             tmInput.text = f.fsName;
@@ -2337,20 +2363,21 @@ btnSettings.onClick = function() {
             var saveF = File.saveDialog(t("memory_save_new"), "*.json");
             if (saveF) tmInput.text = saveF.fsName;
         }
-    };
+    });
 
-    setWin.add("panel", undefined, "");
-    var autoSettingsLabel = setWin.add("statictext", undefined, t("auto_settings"));
+    var autoSettingsLabel = autoTab.add("statictext", undefined, t("auto_settings"));
     autoSettingsLabel.graphics.font = ScriptUI.newFont(autoSettingsLabel.graphics.font.family, "BOLD", autoSettingsLabel.graphics.font.size);
-    setWin.add("statictext", undefined, t("auto_hyperlink_symbols"));
-    var autoHyperlinkSymbolsInput = setWin.add("edittext", undefined, refSymbolsSetting);
+    autoTab.add("statictext", undefined, t("auto_hyperlink_symbols"));
+    var autoHyperlinkSymbolsInput = autoTab.add("edittext", undefined, refSymbolsSetting);
     autoHyperlinkSymbolsInput.characters = 20;
+    autoHyperlinkSymbolsInput.alignment = "fill";
     autoHyperlinkSymbolsInput.helpTip = t("reference_symbols");
-    setWin.add("statictext", undefined, t("back_page_tracker_label"));
-    var backPageTrackerInput = setWin.add("edittext", undefined, backPageTrackerSetting);
+    autoTab.add("statictext", undefined, t("back_page_tracker_label"));
+    var backPageTrackerInput = autoTab.add("edittext", undefined, backPageTrackerSetting);
     backPageTrackerInput.characters = 40;
+    backPageTrackerInput.alignment = "fill";
     backPageTrackerInput.helpTip = t("back_page_tracker_help");
-    var debugTableRestoreCheckbox = setWin.add("checkbox", undefined, t("debug_tables_images"));
+    var debugTableRestoreCheckbox = autoTab.add("checkbox", undefined, t("debug_tables_images"));
     debugTableRestoreCheckbox.value = tableRestoreDebugEnabled;
     debugTableRestoreCheckbox.helpTip = t("debug_tables_images_help");
 
