@@ -2184,6 +2184,7 @@ btnSettings.onClick = function() {
     setWin.orientation = "column";
     setWin.alignChildren = ["fill", "top"];
     setWin.spacing = 10;
+    setWin.minimumSize = [760, 620];
     
     var topGrp = setWin.add("group");
     topGrp.alignment = "fill";
@@ -2198,7 +2199,7 @@ btnSettings.onClick = function() {
     var tabs = setWin.add("tabbedpanel");
     tabs.alignment = ["fill", "fill"];
     tabs.alignChildren = ["fill", "fill"];
-    tabs.preferredSize = [660, 380];
+    tabs.preferredSize = [700, 470];
 
     var dataTab = tabs.add("tab", undefined, t("settings_tab_data"));
     dataTab.orientation = "column";
@@ -2257,9 +2258,9 @@ btnSettings.onClick = function() {
         row.alignChildren = ["fill", "center"];
         var input = row.add("edittext", undefined, value);
         input.alignment = ["fill", "center"];
-        input.characters = 34;
+        input.characters = 40;
         var button = row.add("button", undefined, t("browse"));
-        button.preferredSize = [120, 25];
+        button.preferredSize = [140, 28];
         button.onClick = browseHandler;
         return input;
     }
