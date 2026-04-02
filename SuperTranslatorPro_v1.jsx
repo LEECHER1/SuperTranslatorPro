@@ -2200,10 +2200,6 @@ btnSettings.onClick = function() {
     tabs.alignChildren = ["fill", "fill"];
     tabs.preferredSize = [660, 380];
 
-    var providerTab = tabs.add("tab", undefined, t("settings_tab_provider"));
-    providerTab.orientation = "column";
-    providerTab.alignChildren = ["fill", "top"];
-
     var dataTab = tabs.add("tab", undefined, t("settings_tab_data"));
     dataTab.orientation = "column";
     dataTab.alignChildren = ["fill", "top"];
@@ -2211,6 +2207,10 @@ btnSettings.onClick = function() {
     var autoTab = tabs.add("tab", undefined, t("settings_tab_auto"));
     autoTab.orientation = "column";
     autoTab.alignChildren = ["fill", "top"];
+
+    var providerTab = tabs.add("tab", undefined, t("settings_tab_provider"));
+    providerTab.orientation = "column";
+    providerTab.alignChildren = ["fill", "top"];
 
     function createSettingsField(parent, labelText, value, chars) {
         var fieldGroup = parent.add("group");
@@ -2336,7 +2336,7 @@ btnSettings.onClick = function() {
     providerDrop.onChange = refreshProviderSettingsUI;
     refreshProviderSettingsUI();
 
-    tabs.selection = providerTab;
+    tabs.selection = dataTab;
 
     var csvInput = createPathInputRow(dataTab, t("glossary_path"), csvPath, function() {
         var chosenGlossaryPath = promptForGlossaryPath(csvInput.text, true);
