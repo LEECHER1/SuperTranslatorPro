@@ -181,7 +181,6 @@ var UI_STRINGS = {
     copyfit_tracking_help: { de: "Negativer Tracking-Grenzwert fuer die automatische Verdichtung. Standard: -10.", en: "Negative tracking limit for automatic tightening. Default: -10." },
     copyfit_scale_help: { de: "Kleinster erlaubter Horizontal-Scale-Wert in Prozent. Standard: 98%.", en: "Minimum allowed horizontal-scale value in percent. Default: 98%." },
     copyfit_settings_help: { de: "Smart Copyfit arbeitet zuerst mit Tracking, dann mit Horizontal Scale und erst danach mit Rahmenwachstum. Diese zwei Werte steuern die typografische Verdichtung.", en: "Smart copyfit adjusts tracking first, then horizontal scale, and only after that grows the frame. These two values control the typographic tightening." },
-    copyfit_percent_suffix: { de: "%", en: "%" },
     settings_copyfit_summary: { de: "Copyfit: Tracking bis {tracking}, Scale bis {scale}%", en: "Copyfit: tracking to {tracking}, scale to {scale}%" },
     memory_path: { de: "Netzwerk-Memory (JSON Pfad):", en: "Network memory (JSON path):" },
     memory_select: { de: "Bitte wähle die Memory JSON-Datei aus", en: "Please choose the memory JSON file" },
