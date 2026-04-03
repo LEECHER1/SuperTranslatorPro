@@ -65,7 +65,7 @@ var UI_STRINGS = {
     only_text_update: { de: "Nur Textänderungen übernehmen", en: "Only update changed text" },
     translate_start: { de: "Übersetzung starten", en: "Start Translation" },
     spellcheck_button: { de: "Deutsch prüfen", en: "Check German" },
-    spellcheck_help: { de: "Prüft deutsche Texte auf -de-Masterseiten und deren Dokumentseiten.", en: "Checks German text on -de masters and the document pages based on them." },
+    spellcheck_help: { de: "Prüft Texte auf Seiten, die automatisch der deutschen Musterseite zugeordnet werden.", en: "Checks text on pages that are automatically assigned to the German master." },
     close_button: { de: "Schließen", en: "Close" },
     status_title: { de: "Aktueller Status", en: "Current status" },
     status_provider: { de: "Provider:", en: "Provider:" },
@@ -212,7 +212,7 @@ var UI_STRINGS = {
     german_skip: { de: "Überspringen", en: "Skip" },
     german_replace: { de: "Ersetzen", en: "Replace" },
     german_auto_replace_failed: { de: "Die Stelle konnte nicht automatisch ersetzt werden:\n{summary}", en: "This location could not be replaced automatically:\n{summary}" },
-    german_no_targets: { de: "Keine Texte auf Dokumentseiten mit deutscher Musterseite gefunden.", en: "No text was found on document pages based on the German master." },
+    german_no_targets: { de: "Keine Texte auf automatisch erkannten deutschen Seiten gefunden.", en: "No text was found on automatically detected German pages." },
     german_progress_title: { de: "Deutsche Rechtschreibprüfung", en: "German Spell Check" },
     german_prepare_check: { de: "Bereite Prüfung vor...", en: "Preparing check..." },
     german_check_progress: { de: "Prüfe Dokumentseiten mit deutscher Musterseite: Text {current} von {total}...", en: "Checking document pages based on the German master: text {current} of {total}..." },
@@ -3034,7 +3034,7 @@ btnSettings.onClick = function() {
 btnCancel.onClick = function() { myWindow.close(); }
 
 function isGermanMasterName(name) {
-    return !!(name && name.match(/[-_]de(?:[-_]|$)/i));
+    return getMasterLang(name) === "de";
 }
 
 function normalizeLanguageBadgeText(text) {
@@ -3538,7 +3538,7 @@ function collectGermanSpellTargets(doc) {
     for (var pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {
         var page = doc.pages[pageIndex];
         if (!page.appliedMaster || !page.appliedMaster.isValid) continue;
-        if (!isGermanMasterName(page.appliedMaster.name)) continue;
+        if (getPageLanguageCode(page) !== "DE") continue;
 
         var pageItems = [];
         try { pageItems = page.allPageItems; } catch (e) { pageItems = []; }
@@ -5681,7 +5681,9 @@ function serializeJSON(obj) {
 }
 
 function getMasterLang(masterName) {
-    var match = masterName.match(/[-_]([a-z]{2})(?:[-_]|$)/i);
+    var normalized = String(masterName || "").replace(/^\s+|\s+$/g, "");
+    if (/^[a-z]{2}$/i.test(normalized)) return normalized.toLowerCase();
+    var match = normalized.match(/(?:^|[-_])([a-z]{2})(?:[-_]|$)/i);
     return match ? match[1].toLowerCase() : null;
 }
 
