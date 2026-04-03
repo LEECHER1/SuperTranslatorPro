@@ -417,8 +417,10 @@ var UI_STRINGS = {
     pages_help: { de: "Beispiel: 1, 3, 5-8", en: "Example: 1, 3, 5-8" },
     target_language_manual: { de: "Zielsprache:", en: "Target language:" },
     target_language_short: { de: "Zielsprache:", en: "Target language:" },
+    manual_all_languages_active: { de: "Alle DeepL-Sprachen aktiv", en: "All DeepL languages active" },
     lang_group_favorites: { de: "--- FAVORITEN ---", en: "--- FAVORITES ---" },
     lang_group_other_eu: { de: "--- SONSTIGE EU SPRACHEN ---", en: "--- OTHER EU LANGUAGES ---" },
+    lang_group_more_deepl: { de: "--- WEITERE DEEPL SPRACHEN ---", en: "--- MORE DEEPL LANGUAGES ---" },
     auto_mode: { de: "Vollautomatik", en: "Full automatic" },
     auto_settings: { de: "Automatik-Optionen", en: "Automatic options" },
     original_pages: { de: "Quellseiten:", en: "Source pages:" },
@@ -984,32 +986,37 @@ function getLocalizedLanguageName(code) {
 }
 
 function buildManualLanguageList() {
-    return [
-        t("lang_group_favorites"),
-        "EN (" + getLocalizedLanguageName("EN") + ")",
-        "FR (" + getLocalizedLanguageName("FR") + ")",
-        "IT (" + getLocalizedLanguageName("IT") + ")",
-        "ES (" + getLocalizedLanguageName("ES") + ")",
-        "CS (" + getLocalizedLanguageName("CS") + ")",
-        "HU (" + getLocalizedLanguageName("HU") + ")",
-        "DE (" + getLocalizedLanguageName("DE") + ")",
-        t("lang_group_other_eu"),
-        "BG (" + getLocalizedLanguageName("BG") + ")",
-        "DA (" + getLocalizedLanguageName("DA") + ")",
-        "EL (" + getLocalizedLanguageName("EL") + ")",
-        "ET (" + getLocalizedLanguageName("ET") + ")",
-        "FI (" + getLocalizedLanguageName("FI") + ")",
-        "LT (" + getLocalizedLanguageName("LT") + ")",
-        "LV (" + getLocalizedLanguageName("LV") + ")",
-        "NL (" + getLocalizedLanguageName("NL") + ")",
-        "PL (" + getLocalizedLanguageName("PL") + ")",
-        "PT (" + getLocalizedLanguageName("PT") + ")",
-        "RO (" + getLocalizedLanguageName("RO") + ")",
-        "RU (" + getLocalizedLanguageName("RU") + ")",
-        "SK (" + getLocalizedLanguageName("SK") + ")",
-        "SL (" + getLocalizedLanguageName("SL") + ")",
-        "SV (" + getLocalizedLanguageName("SV") + ")"
-    ];
+    return buildManualLanguageListForMode(false);
+}
+
+function appendManualLanguageOptionItems(list, options, seen) {
+    for (var i = 0; i < options.length; i++) {
+        var code = normalizeTranslationLanguageCode(options[i].code);
+        if (code === "" || seen[code]) continue;
+        list.push(code + " (" + getLocalizedLanguageName(code) + ")");
+        seen[code] = true;
+    }
+}
+
+function buildManualLanguageListForMode(includeExtended) {
+    var list = [];
+    var seen = {};
+    var favoriteCodes = ["EN", "FR", "IT", "ES", "CS", "HU", "DE"];
+    list.push(t("lang_group_favorites"));
+    for (var i = 0; i < favoriteCodes.length; i++) {
+        var favoriteCode = normalizeTranslationLanguageCode(favoriteCodes[i]);
+        list.push(favoriteCode + " (" + getLocalizedLanguageName(favoriteCode) + ")");
+        seen[favoriteCode] = true;
+    }
+
+    list.push(t("lang_group_other_eu"));
+    appendManualLanguageOptionItems(list, LEGACY_BDA_LANGUAGE_OPTIONS, seen);
+
+    if (includeExtended) {
+        list.push(t("lang_group_more_deepl"));
+        appendManualLanguageOptionItems(list, DEEPL_TARGET_LANGUAGE_OPTIONS, seen);
+    }
+    return list;
 }
 
 function getHyperlinkLanguageEntries() {
@@ -1497,6 +1504,7 @@ var germanFocusState = { activePageKey: null, fittedPageKey: null };
 var germanSpellDialogLocation = null;
 var mainWindowIdleTask = null;
 var mainWindowLiveSignature = "";
+var manualLanguageDropdownExpanded = false;
 var DEEPL_TARGET_LANGUAGE_OPTIONS = [
     { code: "ACE", labelEn: "Acehnese" },
     { code: "AF", labelEn: "Afrikaans" },
@@ -2782,6 +2790,11 @@ var langList = buildManualLanguageList();
 var dropdownLang = manualTargetGroup.add("dropdownlist", undefined, langList);
 dropdownLang.alignment = "fill";
 dropdownLang.selection = 1;
+var manualMoreLanguagesRow = manualTargetGroup.add("group");
+manualMoreLanguagesRow.orientation = "row";
+manualMoreLanguagesRow.alignChildren = ["left", "center"];
+manualMoreLanguagesRow.alignment = "left";
+var btnManualMoreLanguages = manualMoreLanguagesRow.add("button", undefined, t("legacy_more_languages"));
 var languageStateText = manualTargetGroup.add("statictext", undefined, "", { multiline: true });
 languageStateText.preferredSize.width = 500;
 
@@ -2867,7 +2880,7 @@ function getProviderStatusSummaryText() {
 function refreshManualLanguageDropdownUI() {
     if (!dropdownLang) return;
     var selectedCode = extractLanguageCodeFromOption(dropdownLang.selection ? dropdownLang.selection.text : "");
-    var languageItems = buildManualLanguageList();
+    var languageItems = buildManualLanguageListForMode(manualLanguageDropdownExpanded);
     dropdownLang.removeAll();
     for (var i = 0; i < languageItems.length; i++) dropdownLang.add("item", languageItems[i]);
 
@@ -2883,6 +2896,12 @@ function refreshManualLanguageDropdownUI() {
     if (selectedIndex < 0) selectedIndex = 1;
     if (selectedIndex >= 0 && selectedIndex < dropdownLang.items.length) dropdownLang.selection = selectedIndex;
     normalizeLanguageDropdownSelection();
+}
+
+function refreshManualLanguageExpandButtonUI() {
+    if (!btnManualMoreLanguages) return;
+    btnManualMoreLanguages.text = manualLanguageDropdownExpanded ? t("manual_all_languages_active") : t("legacy_more_languages");
+    btnManualMoreLanguages.enabled = !manualLanguageDropdownExpanded;
 }
 
 function refreshMainWindowUIText() {
@@ -2902,6 +2921,7 @@ function refreshMainWindowUIText() {
     pagesHint.text = t("pages_help");
     targetLanguageLabel.text = t("target_language_short");
     refreshManualLanguageDropdownUI();
+    refreshManualLanguageExpandButtonUI();
     autoSourceHelpText.text = t("auto_source_help");
     originalPagesLabel.text = t("original_pages");
     bdaSourceInput.helpTip = t("auto_source_help");
@@ -3144,7 +3164,7 @@ function refreshMainInlineHints() {
     }
 
     if (!radioBDA.value) {
-        languageStateText.text = (!selectedLangText || isLanguageSeparatorText(selectedLangText) || selectedLangText.indexOf("-") !== -1)
+        languageStateText.text = (!selectedLangText || isLanguageSeparatorText(selectedLangText) || selectedLangCode === "")
             ? t("validation_invalid_lang")
             : t("language_state_ready", { lang: selectedLangCode });
     }
@@ -3169,7 +3189,7 @@ function getMainValidationIssues() {
 
     if (!radioBDA.value) {
         var selectedLangText = dropdownLang.selection ? dropdownLang.selection.text : "";
-        if (!dropdownLang.selection || isLanguageSeparatorText(selectedLangText) || String(selectedLangText || "").indexOf("-") !== -1) {
+        if (!dropdownLang.selection || isLanguageSeparatorText(selectedLangText) || getSelectedLanguageCodeSafe() === "") {
             issues.push(t("validation_invalid_lang"));
         }
     }
@@ -3258,6 +3278,14 @@ radioBDA.onClick = function() {
 
 dropdownLang.onChange = function() {
     normalizeLanguageDropdownSelection();
+    refreshMainValidationUI();
+};
+
+btnManualMoreLanguages.onClick = function() {
+    if (manualLanguageDropdownExpanded) return;
+    manualLanguageDropdownExpanded = true;
+    refreshManualLanguageDropdownUI();
+    refreshManualLanguageExpandButtonUI();
     refreshMainValidationUI();
 };
 
@@ -5915,14 +5943,14 @@ btnTranslate.onClick = function() {
         sourcePages: editPages.text,
         bdaSourcePages: bdaSourceInput.text,
         updateTOC: checkTOC.value,
-        lang: dropdownLang.selection.text.substring(0, 2),
+        lang: getSelectedLanguageCodeSafe(),
         onlyTextUpdate: cbOnlyTextUpdate ? cbOnlyTextUpdate.value : false,
         autoReferenceLinks: checkAutoBDAHyperlinks ? checkAutoBDAHyperlinks.value : false,
         autoReferenceSymbols: refSymbolsSetting,
         backPageTracker: backPageTrackerSetting
     };
 
-    if (config.mode !== "BDA" && config.lang.indexOf("-") !== -1) {
+    if (config.mode !== "BDA" && config.lang === "") {
         alert(t("validation_invalid_lang"));
         return;
     }
