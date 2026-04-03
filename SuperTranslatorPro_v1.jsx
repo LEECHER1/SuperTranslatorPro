@@ -1073,6 +1073,7 @@ var cancelFlag = false;
 var startTime = 0;
 var germanHighlightState = null;
 var germanFocusState = { activePageKey: null, fittedPageKey: null };
+var germanSpellDialogLocation = null;
 var LEGACY_BDA_LANGUAGE_OPTIONS = [
     { code: "EN", labelDe: "Englisch", labelEn: "English" },
     { code: "FR", labelDe: "Französisch", labelEn: "French" },
@@ -2073,8 +2074,8 @@ myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 myWindow.spacing = 10;
 myWindow.margins = 14;
-myWindow.minimumSize = [560, 420];
-myWindow.preferredSize = [620, 470];
+myWindow.minimumSize = [840, 420];
+myWindow.preferredSize = [980, 500];
 
 var headerGroup = myWindow.add("group");
 headerGroup.orientation = "row";
@@ -2106,18 +2107,20 @@ statusPanel.orientation = "column";
 statusPanel.alignChildren = ["fill", "top"];
 statusPanel.alignment = ["fill", "fill"];
 statusPanel.margins = 12;
+statusPanel.preferredSize.width = 520;
 var statusSummaryText = statusPanel.add("statictext", undefined, " ", { multiline: true });
-statusSummaryText.preferredSize = [245, 42];
-statusSummaryText.minimumSize = [245, 42];
+statusSummaryText.preferredSize = [460, 68];
+statusSummaryText.minimumSize = [460, 68];
 
 var validationPanel = summaryRow.add("panel", undefined, t("validation_title"));
 validationPanel.orientation = "column";
 validationPanel.alignChildren = ["fill", "top"];
 validationPanel.alignment = ["fill", "fill"];
 validationPanel.margins = 12;
+validationPanel.preferredSize.width = 400;
 var validationText = validationPanel.add("statictext", undefined, " ", { multiline: true });
-validationText.preferredSize = [245, 54];
-validationText.minimumSize = [245, 54];
+validationText.preferredSize = [360, 68];
+validationText.minimumSize = [360, 68];
 
 var modePanel = myWindow.add("panel", undefined, t("mode_title"));
 modePanel.orientation = "column";
@@ -2137,7 +2140,7 @@ contentPanel.orientation = "column";
 contentPanel.alignChildren = ["fill", "top"];
 contentPanel.margins = 15;
 contentPanel.spacing = 10;
-contentPanel.minimumSize = [520, 160];
+contentPanel.minimumSize = [780, 160];
 
 var selectionModeGroup = contentPanel.add("group");
 selectionModeGroup.orientation = "column";
@@ -2282,7 +2285,8 @@ function refreshMainStatusUI() {
     var autoLinksEnabled = checkAutoBDAHyperlinks ? !!checkAutoBDAHyperlinks.value : !!autoBDAHyperlinksSetting;
     statusSummaryText.text =
         t("status_provider") + " " + getProviderStatusSummaryText() + "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvPath) + "\n" +
-        t("status_memory") + " " + getStatusPathLabel(tmPath) + "   |   " + t("status_links") + " " + (autoLinksEnabled ? t("status_on") : t("status_off")) + "   |   " + t("status_symbols") + " " + normalizeRefSymbols(refSymbolsSetting);
+        t("status_memory") + " " + getStatusPathLabel(tmPath) + "\n" +
+        t("status_links") + " " + (autoLinksEnabled ? t("status_on") : t("status_off")) + "   |   " + t("status_symbols") + " " + normalizeRefSymbols(refSymbolsSetting);
     try { myWindow.layout.layout(true); } catch (layoutErr) {}
 }
 
@@ -4137,8 +4141,8 @@ function openGermanFrameCorrectionDialog(corrections) {
             dlg.orientation = "column";
             dlg.alignChildren = ["fill", "top"];
             dlg.spacing = 10;
-            dlg.minimumSize = [620, 500];
-            dlg.preferredSize = [700, 560];
+            dlg.minimumSize = [560, 440];
+            dlg.preferredSize = [620, 500];
 
             var headerPanel = dlg.add("panel", undefined, correction.location);
             headerPanel.orientation = "column";
@@ -4146,16 +4150,16 @@ function openGermanFrameCorrectionDialog(corrections) {
             headerPanel.margins = 12;
             headerPanel.spacing = 6;
             var summaryText = headerPanel.add("statictext", undefined, t("german_frame_hint_count", { count: correction.issueCount }));
-            summaryText.preferredSize.width = 640;
+            summaryText.preferredSize.width = 560;
             var actionHint = headerPanel.add("statictext", undefined, t("german_frame_action_hint"), { multiline: true });
-            actionHint.preferredSize.width = 640;
+            actionHint.preferredSize.width = 560;
 
             var listPanel = dlg.add("panel", undefined, t("german_findings"));
             listPanel.orientation = "column";
             listPanel.alignChildren = ["fill", "top"];
             listPanel.margins = 12;
             var issueList = listPanel.add("listbox", undefined, [], { multiselect: false });
-            issueList.preferredSize = [640, 150];
+            issueList.preferredSize = [560, 130];
             for (var issueIndex = 0; issueIndex < correction.edits.length; issueIndex++) {
                 var issue = correction.edits[issueIndex];
                 issueList.add("item", (issueIndex + 1) + ". " + makeGermanTextVisible(issue.issueText) + " -> " + makeGermanTextVisible(issue.replacement));
@@ -4169,19 +4173,19 @@ function openGermanFrameCorrectionDialog(corrections) {
 
             detailPanel.add("statictext", undefined, t("german_find_label"));
             var issueBox = detailPanel.add("edittext", undefined, "", { readonly: true });
-            issueBox.preferredSize.width = 640;
+            issueBox.preferredSize.width = 560;
 
             detailPanel.add("statictext", undefined, t("german_replace_label"));
             var replacementBox = detailPanel.add("edittext", undefined, "", { readonly: true });
-            replacementBox.preferredSize.width = 640;
+            replacementBox.preferredSize.width = 560;
 
             detailPanel.add("statictext", undefined, t("german_hint"));
             var messageBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
-            messageBox.preferredSize = [640, 60];
+            messageBox.preferredSize = [560, 52];
 
             detailPanel.add("statictext", undefined, t("german_context"));
             var contextBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true, scrolling: true });
-            contextBox.preferredSize = [640, 110];
+            contextBox.preferredSize = [560, 90];
 
             var selectedEditIndex = 0;
             function updateIssuePreview() {
@@ -4229,11 +4233,23 @@ function openGermanFrameCorrectionDialog(corrections) {
                 dlg.close();
             };
             dlg.onClose = function() {
+                try {
+                    germanSpellDialogLocation = [
+                        getBoundsCoordinate(this.bounds, "left", 0, 0),
+                        getBoundsCoordinate(this.bounds, "top", 1, 0)
+                    ];
+                } catch (locationErr) {}
                 clearGermanIssueHighlight();
                 return true;
             };
             dlg.onShow = function() {
-                positionDialogRightOfMainWindow(dlg, 700, 560);
+                if (germanSpellDialogLocation && germanSpellDialogLocation.length === 2) {
+                    try {
+                        dlg.location = [germanSpellDialogLocation[0], germanSpellDialogLocation[1]];
+                        return;
+                    } catch (storedLocationErr) {}
+                }
+                positionDialogRightOfMainWindow(dlg, 620, 500);
             };
             dlg.onResizing = dlg.onResize = function() {
                 this.layout.resize();
