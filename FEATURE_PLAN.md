@@ -12,15 +12,16 @@
 ## Kurzstatus
 
 ### Bereits umgesetzt
-- [x] Deutsche Rechtschreibprüfung inkl. Korrekturdialog für `-de` Musterseiten und zugehörige Dokumentseiten
+- [x] Quellsprachen-Prüfung inkl. Korrekturdialog, automatischer Spracherkennung und Noise-Filter
 - [x] Verlinken von Referenzen und Web-URLs
 - [x] Live-Auslesen der Sprach-/Seitenzuordnung von Seite 1 für Hyperlinks
+- [x] Hauptfenster mit Live-Refresh für Status, Preflight und Button-Aktivierung
 - [x] Automatische Musterseiten-Generierung inkl. Erkennung, Auswahl/Abwahl und Reihenfolge
 - [x] Wörterbuch-/Glossar-System inkl. Erststart-Setup, Template, Migration und verständlicher Erklärungen
 - [x] Dynamische UI-Sprache DE/EN über `app.locale`
 - [x] Nachbearbeitung technischer Tokens wie `M5*15`, damit Leerzeichen sauber bleiben
 - [x] Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider
-- [x] Einstellungsfenster im Layout vergrößert und resizable gemacht, damit Felder im Daten-Tab nicht abgeschnitten werden
+- [x] Hyperlink-, Einstellungs- und Fortschrittsdialoge visuell überarbeitet und resizable gemacht
 
 ### Noch offen
 - [ ] Intelligente Copyfitting-Logik
@@ -31,7 +32,7 @@
 ---
 
 ## Übersicht
-- [x] Rechtschreibprüfung in der Mastersprache
+- [x] Quellsprachen-Prüfung
 - [ ] Intelligente Copyfitting-Logik
 - [x] Automatische Musterseiten-Generierung (Legacy-Fallback)
 - [x] Andere LLMs (ChatGPT / Gemini / Claude)
@@ -42,16 +43,18 @@
 
 ---
 
-## 1. Rechtschreibprüfung in der Mastersprache
-- [x] UI-Button für die deutsche Prüfung eingebaut
-- [x] Deutsche `-de` Masterseiten erkennen
-- [x] Zugehörige Dokumentseiten auf Basis der deutschen Musterseite prüfen
+## 1. Quellsprachen-Prüfung
+- [x] UI-Button für die Quellsprachen-Prüfung eingebaut
+- [x] Quellsprache automatisch über Sprachmarker, Musterseite oder Kontext erkennen
+- [x] Zugehörige Dokumentseiten der erkannten Quellsprache prüfen
 - [x] Korrekturhinweise und Dialog zur Übernahme/Überspringen anzeigen
+- [x] Hinweise zu Leerzeichen, Typografie und reinem Noise ignorieren
+- [x] Korrekturdialog kleiner, klarer und mit Positionsspeicherung umgesetzt
 - [x] Ergebnisse sauber zusammenfassen
 - [ ] Optional: Direkten Sprung zur ersten Auffälligkeit weiter verbessern
 
 **Notizen:**
-- Funktion ist produktiv nutzbar. Sinnvoll wären noch mehr Praxistests mit unterschiedlichen Layout-Strukturen.
+- Funktion ist produktiv nutzbar und nicht mehr auf Deutsch fest verdrahtet. Sinnvoll wären noch mehr Praxistests mit unterschiedlichen Layout-Strukturen und Quellsprachen.
 
 ---
 
@@ -112,14 +115,19 @@
 
 ## 6. UI/UX Optimierung
 - [x] Dynamische Anpassung der Skript-Sprache an `app.locale` (DE/EN)
+- [x] Hauptfenster mit klarerem Modus-Flow, Status- und Preflight-Bereichen aufgebaut
+- [x] Live-Validierung und Live-Refresh des Hauptfensters ohne Fokuswechsel ergänzt
 - [x] Legacy-Dialogtext verbessert, damit auch erkannte Sprachen verständlich erklärt werden
 - [x] Auswahl-/Abwahl-Logik im Musterseiten-Dialog erweitert
 - [x] Reihenfolge-Feld pro Sprache im Musterseiten-Dialog ergänzt
-- [x] Einstellungsfenster vergrößert und flexibel gemacht, damit Inhalte im Daten-Tab vollständig sichtbar bleiben
+- [x] Einstellungsfenster vergrößert, strukturiert und rechts am Hauptfenster angedockt
+- [x] Hyperlink-Dialog mit persistenter Zuordnung und resizable Layout überarbeitet
+- [x] Quellsprachen-Korrekturdialog und Fortschrittsfenster optisch aufgeräumt
+- [x] Grüner Erfolgsstatus im Fortschrittsfenster ergänzt
 - [ ] Weitere UI-Feinschliffe und Usability-Tests in InDesign
 
 **Notizen:**
-- UI ist deutlich besser als im ursprünglichen Plan; zuletzt wurde das Einstellungsfenster vergrößert, damit Formularfelder im Daten-Tab nicht mehr abgeschnitten werden. Vollständig finalisiert ist der Bereich aber noch nicht.
+- UI wurde in mehreren Phasen deutlich überarbeitet: Das Hauptfenster reagiert live auf Auswahländerungen, Dialoge sind strukturierter und resizable, und das Fortschrittsfenster zeigt jetzt einen sichtbaren Erfolgsstatus. Offen bleiben vor allem Praxistests in InDesign und weitere visuelle Feinschliffe.
 
 ---
 
@@ -175,7 +183,8 @@
 ---
 
 ## Änderungslog
-- 3. April 2026: Einstellungsfenster vergrößert und resizable gemacht, damit Inhalte im Daten-Tab nicht mehr abgeschnitten werden
+- 3. April 2026: UI/UX-Phasen 1-5 umgesetzt (klareres Hauptfenster, Live-Validierung, überarbeitete Settings-/Hyperlink-Dialoge, Button-Hierarchie und Fortschrittsfenster-Polish)
+- 3. April 2026: Hauptfenster live aktualisiert, Quellsprachen-Prüfung verallgemeinert und Fortschrittsfenster um grünen Erfolgsstatus erweitert
 - 2. April 2026: Gemini- und Claude-Adapter auf die gemeinsame XML-/Tag-sichere Provider-Schicht gehängt, inklusive UI-Feldern für Keys/Modelle und DeepL-Fallback
 - 2. April 2026: Lokalen OpenAI-kompatiblen Provider für LM Studio/Ollama ergänzt (Base URL, Modell, optionaler Key)
 - 1. April 2026: Phase 1 der Provider-Erweiterung umgesetzt (Provider-Interface, OpenAI-Adapter, UI für Provider- und API-Key-Auswahl)

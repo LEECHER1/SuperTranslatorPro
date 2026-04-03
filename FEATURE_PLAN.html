@@ -208,15 +208,16 @@
       <div class="status-card done">
         <h3>Bereits umgesetzt</h3>
         <ul class="plain-list">
-          <li>Deutsche Rechtschreibprüfung inkl. Korrekturdialog für <code>-de</code> Musterseiten und zugehörige Dokumentseiten</li>
+          <li>Quellsprachen-Prüfung inkl. Korrekturdialog, automatischer Spracherkennung und Noise-Filter</li>
           <li>Verlinken von Referenzen und Web-URLs</li>
           <li>Live-Auslesen der Sprach-/Seitenzuordnung von Seite 1 für Hyperlinks</li>
+          <li>Hauptfenster mit Live-Refresh für Status, Preflight und Button-Aktivierung</li>
           <li>Automatische Musterseiten-Generierung inkl. Erkennung, Auswahl/Abwahl und Reihenfolge</li>
           <li>Wörterbuch-/Glossar-System inkl. Erststart-Setup, Template, Migration und verständlicher Erklärungen</li>
           <li>Dynamische UI-Sprache DE/EN über <code>app.locale</code></li>
           <li>Nachbearbeitung technischer Tokens wie <code>M5*15</code>, damit Leerzeichen sauber bleiben</li>
           <li>Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider</li>
-          <li>Einstellungsfenster im Layout vergrößert und resizable gemacht, damit Felder im Daten-Tab nicht abgeschnitten werden</li>
+          <li>Hyperlink-, Einstellungs- und Fortschrittsdialoge visuell überarbeitet und resizable gemacht</li>
         </ul>
       </div>
       <div class="status-card open">
@@ -234,7 +235,7 @@
   <section>
     <h2>Übersicht</h2>
     <ul class="task-list">
-      <li><input type="checkbox" id="overview-1" class="plan-checkbox" checked /><label for="overview-1">Rechtschreibprüfung in der Mastersprache</label></li>
+      <li><input type="checkbox" id="overview-1" class="plan-checkbox" checked /><label for="overview-1">Quellsprachen-Prüfung</label></li>
       <li><input type="checkbox" id="overview-2" class="plan-checkbox" /><label for="overview-2">Intelligente Copyfitting-Logik</label></li>
       <li><input type="checkbox" id="overview-3" class="plan-checkbox" checked /><label for="overview-3">Automatische Musterseiten-Generierung (Legacy-Fallback)</label></li>
       <li><input type="checkbox" id="overview-4" class="plan-checkbox" checked /><label for="overview-4">Andere LLMs (ChatGPT / Gemini / Claude)</label></li>
@@ -248,19 +249,21 @@
   <section>
     <div class="section-row">
       <div>
-        <h2>1. Rechtschreibprüfung in der Mastersprache</h2>
+        <h2>1. Quellsprachen-Prüfung</h2>
         <ul class="task-list">
-          <li><input type="checkbox" id="task-1-1" class="plan-checkbox" checked /><label for="task-1-1">UI-Button für die deutsche Prüfung eingebaut</label></li>
-          <li><input type="checkbox" id="task-1-2" class="plan-checkbox" checked /><label for="task-1-2">Deutsche <code>-de</code> Masterseiten erkennen</label></li>
-          <li><input type="checkbox" id="task-1-3" class="plan-checkbox" checked /><label for="task-1-3">Zugehörige Dokumentseiten auf Basis der deutschen Musterseite prüfen</label></li>
+          <li><input type="checkbox" id="task-1-1" class="plan-checkbox" checked /><label for="task-1-1">UI-Button für die Quellsprachen-Prüfung eingebaut</label></li>
+          <li><input type="checkbox" id="task-1-2" class="plan-checkbox" checked /><label for="task-1-2">Quellsprache automatisch über Sprachmarker, Musterseite oder Kontext erkennen</label></li>
+          <li><input type="checkbox" id="task-1-3" class="plan-checkbox" checked /><label for="task-1-3">Zugehörige Dokumentseiten der erkannten Quellsprache prüfen</label></li>
           <li><input type="checkbox" id="task-1-4" class="plan-checkbox" checked /><label for="task-1-4">Korrekturhinweise und Dialog zur Übernahme/Überspringen anzeigen</label></li>
-          <li><input type="checkbox" id="task-1-5" class="plan-checkbox" checked /><label for="task-1-5">Ergebnisse sauber zusammenfassen</label></li>
-          <li><input type="checkbox" id="task-1-6" class="plan-checkbox" /><label for="task-1-6">Direkten Sprung zur ersten Auffälligkeit weiter verbessern</label></li>
+          <li><input type="checkbox" id="task-1-5" class="plan-checkbox" checked /><label for="task-1-5">Hinweise zu Leerzeichen, Typografie und reinem Noise ignorieren</label></li>
+          <li><input type="checkbox" id="task-1-6" class="plan-checkbox" checked /><label for="task-1-6">Korrekturdialog kleiner, klarer und mit Positionsspeicherung umgesetzt</label></li>
+          <li><input type="checkbox" id="task-1-7" class="plan-checkbox" checked /><label for="task-1-7">Ergebnisse sauber zusammenfassen</label></li>
+          <li><input type="checkbox" id="task-1-8" class="plan-checkbox" /><label for="task-1-8">Direkten Sprung zur ersten Auffälligkeit weiter verbessern</label></li>
         </ul>
       </div>
       <div class="small">
         <strong>Notizen</strong>
-        <textarea id="note-1">Funktion ist produktiv nutzbar. Sinnvoll wären noch mehr Praxistests mit unterschiedlichen Layout-Strukturen.</textarea>
+        <textarea id="note-1">Funktion ist produktiv nutzbar und nicht mehr auf Deutsch fest verdrahtet. Sinnvoll wären noch mehr Praxistests mit unterschiedlichen Layout-Strukturen und Quellsprachen.</textarea>
       </div>
     </div>
   </section>
@@ -353,16 +356,21 @@
         <h2>6. UI/UX Optimierung</h2>
         <ul class="task-list">
           <li><input type="checkbox" id="task-6-1" class="plan-checkbox" checked /><label for="task-6-1">Dynamische Anpassung der Skript-Sprache an <code>app.locale</code> (DE/EN)</label></li>
-          <li><input type="checkbox" id="task-6-2" class="plan-checkbox" checked /><label for="task-6-2">Legacy-Dialogtext verbessert, damit auch erkannte Sprachen verständlich erklärt werden</label></li>
-          <li><input type="checkbox" id="task-6-3" class="plan-checkbox" checked /><label for="task-6-3">Auswahl-/Abwahl-Logik im Musterseiten-Dialog erweitert</label></li>
-          <li><input type="checkbox" id="task-6-4" class="plan-checkbox" checked /><label for="task-6-4">Reihenfolge-Feld pro Sprache im Musterseiten-Dialog ergänzt</label></li>
-          <li><input type="checkbox" id="task-6-5" class="plan-checkbox" checked /><label for="task-6-5">Einstellungsfenster vergrößert und flexibel gemacht, damit Inhalte im Daten-Tab vollständig sichtbar bleiben</label></li>
-          <li><input type="checkbox" id="task-6-6" class="plan-checkbox" /><label for="task-6-6">Weitere UI-Feinschliffe und Usability-Tests in InDesign</label></li>
+          <li><input type="checkbox" id="task-6-2" class="plan-checkbox" checked /><label for="task-6-2">Hauptfenster mit klarerem Modus-Flow, Status- und Preflight-Bereichen aufgebaut</label></li>
+          <li><input type="checkbox" id="task-6-3" class="plan-checkbox" checked /><label for="task-6-3">Live-Validierung und Live-Refresh des Hauptfensters ohne Fokuswechsel ergänzt</label></li>
+          <li><input type="checkbox" id="task-6-4" class="plan-checkbox" checked /><label for="task-6-4">Legacy-Dialogtext verbessert, damit auch erkannte Sprachen verständlich erklärt werden</label></li>
+          <li><input type="checkbox" id="task-6-5" class="plan-checkbox" checked /><label for="task-6-5">Auswahl-/Abwahl-Logik im Musterseiten-Dialog erweitert</label></li>
+          <li><input type="checkbox" id="task-6-6" class="plan-checkbox" checked /><label for="task-6-6">Reihenfolge-Feld pro Sprache im Musterseiten-Dialog ergänzt</label></li>
+          <li><input type="checkbox" id="task-6-7" class="plan-checkbox" checked /><label for="task-6-7">Einstellungsfenster vergrößert, strukturiert und rechts am Hauptfenster angedockt</label></li>
+          <li><input type="checkbox" id="task-6-8" class="plan-checkbox" checked /><label for="task-6-8">Hyperlink-Dialog mit persistenter Zuordnung und resizable Layout überarbeitet</label></li>
+          <li><input type="checkbox" id="task-6-9" class="plan-checkbox" checked /><label for="task-6-9">Quellsprachen-Korrekturdialog und Fortschrittsfenster optisch aufgeräumt</label></li>
+          <li><input type="checkbox" id="task-6-10" class="plan-checkbox" checked /><label for="task-6-10">Grüner Erfolgsstatus im Fortschrittsfenster ergänzt</label></li>
+          <li><input type="checkbox" id="task-6-11" class="plan-checkbox" /><label for="task-6-11">Weitere UI-Feinschliffe und Usability-Tests in InDesign</label></li>
         </ul>
       </div>
       <div class="small">
         <strong>Notizen</strong>
-        <textarea id="note-6">UI ist deutlich besser als im ursprünglichen Plan; zuletzt wurde das Einstellungsfenster vergrößert, damit Formularfelder im Daten-Tab nicht mehr abgeschnitten werden. Vollständig finalisiert ist der Bereich aber noch nicht.</textarea>
+        <textarea id="note-6">UI wurde in mehreren Phasen deutlich überarbeitet: Das Hauptfenster reagiert live auf Auswahländerungen, Dialoge sind strukturierter und resizable, und das Fortschrittsfenster zeigt jetzt einen sichtbaren Erfolgsstatus. Offen bleiben vor allem Praxistests in InDesign und weitere visuelle Feinschliffe.</textarea>
       </div>
     </div>
   </section>
@@ -439,7 +447,8 @@
   <section>
     <h2>Änderungslog</h2>
     <ul class="plain-list">
-      <li>3. April 2026: Einstellungsfenster vergrößert und resizable gemacht, damit Inhalte im Daten-Tab nicht mehr abgeschnitten werden</li>
+      <li>3. April 2026: UI/UX-Phasen 1-5 umgesetzt (klareres Hauptfenster, Live-Validierung, überarbeitete Settings-/Hyperlink-Dialoge, Button-Hierarchie und Fortschrittsfenster-Polish)</li>
+      <li>3. April 2026: Hauptfenster live aktualisiert, Quellsprachen-Prüfung verallgemeinert und Fortschrittsfenster um grünen Erfolgsstatus erweitert</li>
       <li>2. April 2026: Gemini- und Claude-Adapter auf die gemeinsame XML-/Tag-sichere Provider-Schicht gehängt, inklusive UI-Feldern für Keys/Modelle und DeepL-Fallback</li>
       <li>2. April 2026: Lokalen OpenAI-kompatiblen Provider für LM Studio/Ollama ergänzt (Base URL, Modell, optionaler Key)</li>
       <li>1. April 2026: Phase 1 der Provider-Erweiterung umgesetzt (Provider-Interface, OpenAI-Adapter, UI für Provider- und API-Key-Auswahl)</li>
