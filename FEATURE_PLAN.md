@@ -31,6 +31,10 @@
 - [ ] Optionaler Hybrid-Modus zwischen DeepL und LLMs
 - [ ] Migration auf UXP / Plugin-Architektur
 - [ ] Erweiterte End-to-End-Tests mit echten InDesign-Dokumenten
+- [ ] Qualitätssicherung nach der Übersetzung (GREP-/Format-Prüfung)
+- [ ] Kontext-Awareness per Whole-Page Context als optionale Menü-Funktion
+- [ ] Cross-App Automatisierung für verknüpfte Illustrator-Dateien
+- [ ] Review-Modus für Side-by-Side Lektorat in InDesign
 
 ---
 
@@ -44,6 +48,10 @@
 - [x] Verlinken (Linking Features)
 - [x] Wörterbuch / Glossar-System
 - [x] Translation Memory / Mehrbenutzer-Schutz
+- [ ] Qualitätssicherung (QA)
+- [ ] Kontext-Awareness (Whole-Page Context)
+- [ ] Cross-App Automatisierung (Illustrator / BridgeTalk)
+- [ ] Review-Modus (Side-by-Side)
 
 ---
 
@@ -184,12 +192,62 @@
 
 ---
 
+## 10. Qualitätssicherung (QA)
+- [ ] GREP-/Format-Prüfung nach der Übersetzung ergänzen
+- [ ] Verlust wichtiger GREP-Stile oder Sonderzeichen automatisch erkennen
+- [ ] Geschützte Leerzeichen vor Einheiten wie `kg`, `cm`, `mm` oder ähnlichen Mustern automatisch wiederherstellen
+- [ ] Typografische Korrekturen als sicheren Post-Processing-Schritt definieren
+- [ ] Praxis-Tests mit typografisch sensiblen Dokumenten durchführen
+
+**Notizen:**
+- Ziel ist eine automatische Nachkontrolle direkt nach der Übersetzung, damit typische Formatverluste nicht erst im Lektorat auffallen. Besonders wichtig sind GREP-getriebene Feinheiten und Sonderzeichen wie geschützte Leerzeichen vor Maßeinheiten.
+
+---
+
+## 11. Kontext-Awareness (Whole-Page Context)
+- [ ] Gesamten Seiteninhalt als reinen Lese-Kontext ohne XML-Tags an KI-Provider übergeben
+- [ ] Kontext nur als optionale Menü-/Settings-Funktion anbieten
+- [ ] Funktion standardmäßig deaktiviert lassen
+- [ ] Mehrdeutige Begriffe wie `Bank`, `Absatz` oder `Leiter` mit Seitenthematik evaluieren
+- [ ] Token-/Kosten-Auswirkungen sowie Provider-Kompatibilität testen
+
+**Notizen:**
+- Die eigentliche Übersetzung soll weiterhin XML-/tag-sicher pro Textrahmen laufen. Neu wäre nur zusätzlicher Seitenkontext als Lesekontext für bessere semantische Entscheidungen, ohne das Standardverhalten ungefragt zu verändern.
+
+---
+
+## 12. Cross-App Automatisierung (Illustrator / BridgeTalk)
+- [ ] BridgeTalk-Kommunikation zwischen InDesign und Illustrator konzipieren
+- [ ] Verknüpfte `.ai`- und `.eps`-Dateien im Dokument identifizieren
+- [ ] Text-Ebenen in verknüpften Illustrator-Dateien automatisiert auslesen und übersetzen
+- [ ] Zielsprachige Ableger wie `_FR.ai` erzeugen und im InDesign-Dokument neu verknüpfen
+- [ ] Fehlerfälle für fehlende Schriften, gesperrte Dateien, verknüpfte Assets und Rückspeicherung testen
+
+**Notizen:**
+- Dieser Punkt ist bewusst als Zukunfts-Feature markiert, weil er technisch und organisatorisch deutlich größer ist als die restlichen Verbesserungen. Gleichzeitig wäre er im DTP-Alltag ein enormer Hebel, gerade bei Handbüchern mit beschrifteten Explosionszeichnungen oder Diagrammen.
+
+---
+
+## 13. Review-Modus (Side-by-Side)
+- [ ] Kleines Bedienfeld in InDesign für Review und Lektorat entwerfen
+- [ ] Beim Klick auf einen übersetzten Textrahmen Originaltext und Zieltext im Bedienfeld anzeigen
+- [ ] Original oben und Übersetzung unten klar lesbar darstellen
+- [ ] Datenquelle für den Originaltext im Review-Modus sauber definieren
+- [ ] Mit realen Review-Workflows in Agentur oder Lektorat testen
+
+**Notizen:**
+- Das Ziel ist ein deutlich angenehmerer Review-Flow direkt in InDesign, ohne ständig zwischen PDFs, Layout-Versionen oder mehreren Bildschirmen wechseln zu müssen.
+
+---
+
 ## Prioritäten
 1. UI/UX Feinschliff und echte InDesign-Tests
 2. Optionaler Hybrid-Modus zwischen DeepL und LLMs
 3. Weitere Provider-Live-Tests
 4. Migration auf UXP
 5. Zusätzliche Cross-Reference- und Glossar-Validierung
+6. QA-/Formatprüfung und Whole-Page Context evaluieren
+7. Review-Modus und Cross-App Automatisierung konzipieren
 
 ---
 
@@ -200,6 +258,10 @@
 - [ ] Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren
 - [ ] Glossar-Mehrbenutzerlauf mit zwei Rechnern bzw. externem CSV-Editor auf Netzlaufwerk testen
 - [ ] Translation-Memory-Mehrbenutzerlauf mit zwei Rechnern auf Netzlaufwerk testen
+- [ ] QA-Post-Processing für GREP-/Formatverluste und geschützte Leerzeichen konzipieren
+- [ ] Whole-Page-Context als optionalen, standardmäßig deaktivierten Menüpunkt planen
+- [ ] BridgeTalk-Prototyp für Illustrator-/InDesign-Automatisierung evaluieren
+- [ ] Review-Bedienfeld für Side-by-Side Lektorat in InDesign entwerfen
 - [ ] UXP-Refactoring-Plan erstellen
 - [ ] Glossar-Validator für fehlerhafte CSV-Struktur ergänzen
 - [ ] Optionalen Pfad Richtung zentrale TM-Datenhaltung oder Service evaluieren
@@ -208,6 +270,7 @@
 ---
 
 ## Änderungslog
+- 4. April 2026: Plan um QA-/Formatprüfung, Whole-Page Context, Cross-App Automatisierung für Illustrator und Review-Modus erweitert
 - 4. April 2026: Glossar-CSV für Mehrbenutzerbetrieb robuster gemacht, inklusive stabilerer Lesezugriffe, Backup-Fallback und gesichertem Template-Schreiben
 - 4. April 2026: Translation Memory für Mehrbenutzerbetrieb abgesichert, inklusive Sperrlogik, Delta-Merge, Backup-Fallback und atomarem Schreiben
 - 4. April 2026: Konfigurierbare Schrift-Fallbacks im Tab `Typografie` ergänzt, inklusive Script-Erkennung und Regeln für z. B. Kyrillisch, Arabisch, Hebräisch, Devanagari und CJK

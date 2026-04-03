@@ -230,6 +230,10 @@
           <li>Optionaler Hybrid-Modus zwischen DeepL und LLMs</li>
           <li>Migration auf UXP / Plugin-Architektur</li>
           <li>Erweiterte End-to-End-Tests mit echten InDesign-Dokumenten</li>
+          <li>Qualitätssicherung nach der Übersetzung (GREP-/Format-Prüfung)</li>
+          <li>Kontext-Awareness per Whole-Page Context als optionale Menü-Funktion</li>
+          <li>Cross-App Automatisierung für verknüpfte Illustrator-Dateien</li>
+          <li>Review-Modus für Side-by-Side Lektorat in InDesign</li>
         </ul>
       </div>
     </div>
@@ -247,6 +251,10 @@
       <li><input type="checkbox" id="overview-7" class="plan-checkbox" checked /><label for="overview-7">Verlinken (Linking Features)</label></li>
       <li><input type="checkbox" id="overview-8" class="plan-checkbox" checked /><label for="overview-8">Wörterbuch / Glossar-System</label></li>
       <li><input type="checkbox" id="overview-9" class="plan-checkbox" checked /><label for="overview-9">Translation Memory / Mehrbenutzer-Schutz</label></li>
+      <li><input type="checkbox" id="overview-10" class="plan-checkbox" /><label for="overview-10">Qualitätssicherung (QA)</label></li>
+      <li><input type="checkbox" id="overview-11" class="plan-checkbox" /><label for="overview-11">Kontext-Awareness (Whole-Page Context)</label></li>
+      <li><input type="checkbox" id="overview-12" class="plan-checkbox" /><label for="overview-12">Cross-App Automatisierung (Illustrator / BridgeTalk)</label></li>
+      <li><input type="checkbox" id="overview-13" class="plan-checkbox" /><label for="overview-13">Review-Modus (Side-by-Side)</label></li>
     </ul>
   </section>
 
@@ -450,6 +458,82 @@
   </section>
 
   <section>
+    <div class="section-row">
+      <div>
+        <h2>10. Qualitätssicherung (QA)</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-10-1" class="plan-checkbox" /><label for="task-10-1">GREP-/Format-Prüfung nach der Übersetzung ergänzen</label></li>
+          <li><input type="checkbox" id="task-10-2" class="plan-checkbox" /><label for="task-10-2">Verlust wichtiger GREP-Stile oder Sonderzeichen automatisch erkennen</label></li>
+          <li><input type="checkbox" id="task-10-3" class="plan-checkbox" /><label for="task-10-3">Geschützte Leerzeichen vor Einheiten wie <code>kg</code>, <code>cm</code>, <code>mm</code> oder ähnlichen Mustern automatisch wiederherstellen</label></li>
+          <li><input type="checkbox" id="task-10-4" class="plan-checkbox" /><label for="task-10-4">Typografische Korrekturen als sicheren Post-Processing-Schritt definieren</label></li>
+          <li><input type="checkbox" id="task-10-5" class="plan-checkbox" /><label for="task-10-5">Praxis-Tests mit typografisch sensiblen Dokumenten durchführen</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-10">Ziel ist eine automatische Nachkontrolle direkt nach der Übersetzung, damit typische Formatverluste nicht erst im Lektorat auffallen. Besonders wichtig sind GREP-getriebene Feinheiten und Sonderzeichen wie geschützte Leerzeichen vor Maßeinheiten.</textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-row">
+      <div>
+        <h2>11. Kontext-Awareness (Whole-Page Context)</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-11-1" class="plan-checkbox" /><label for="task-11-1">Gesamten Seiteninhalt als reinen Lese-Kontext ohne XML-Tags an KI-Provider übergeben</label></li>
+          <li><input type="checkbox" id="task-11-2" class="plan-checkbox" /><label for="task-11-2">Kontext nur als optionale Menü-/Settings-Funktion anbieten</label></li>
+          <li><input type="checkbox" id="task-11-3" class="plan-checkbox" /><label for="task-11-3">Funktion standardmäßig deaktiviert lassen</label></li>
+          <li><input type="checkbox" id="task-11-4" class="plan-checkbox" /><label for="task-11-4">Mehrdeutige Begriffe wie <code>Bank</code>, <code>Absatz</code> oder <code>Leiter</code> mit Seitenthematik evaluieren</label></li>
+          <li><input type="checkbox" id="task-11-5" class="plan-checkbox" /><label for="task-11-5">Token-/Kosten-Auswirkungen sowie Provider-Kompatibilität testen</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-11">Die eigentliche Übersetzung soll weiterhin XML-/tag-sicher pro Textrahmen laufen. Neu wäre nur zusätzlicher Seitenkontext als Lesekontext für bessere semantische Entscheidungen, ohne das Standardverhalten ungefragt zu verändern.</textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-row">
+      <div>
+        <h2>12. Cross-App Automatisierung (Illustrator / BridgeTalk)</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-12-1" class="plan-checkbox" /><label for="task-12-1">BridgeTalk-Kommunikation zwischen InDesign und Illustrator konzipieren</label></li>
+          <li><input type="checkbox" id="task-12-2" class="plan-checkbox" /><label for="task-12-2">Verknüpfte <code>.ai</code>- und <code>.eps</code>-Dateien im Dokument identifizieren</label></li>
+          <li><input type="checkbox" id="task-12-3" class="plan-checkbox" /><label for="task-12-3">Text-Ebenen in verknüpften Illustrator-Dateien automatisiert auslesen und übersetzen</label></li>
+          <li><input type="checkbox" id="task-12-4" class="plan-checkbox" /><label for="task-12-4">Zielsprachige Ableger wie <code>_FR.ai</code> erzeugen und im InDesign-Dokument neu verknüpfen</label></li>
+          <li><input type="checkbox" id="task-12-5" class="plan-checkbox" /><label for="task-12-5">Fehlerfälle für fehlende Schriften, gesperrte Dateien, verknüpfte Assets und Rückspeicherung testen</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-12">Dieser Punkt ist bewusst als Zukunfts-Feature markiert, weil er technisch und organisatorisch deutlich größer ist als die restlichen Verbesserungen. Gleichzeitig wäre er im DTP-Alltag ein enormer Hebel, gerade bei Handbüchern mit beschrifteten Explosionszeichnungen oder Diagrammen.</textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-row">
+      <div>
+        <h2>13. Review-Modus (Side-by-Side)</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-13-1" class="plan-checkbox" /><label for="task-13-1">Kleines Bedienfeld in InDesign für Review und Lektorat entwerfen</label></li>
+          <li><input type="checkbox" id="task-13-2" class="plan-checkbox" /><label for="task-13-2">Beim Klick auf einen übersetzten Textrahmen Originaltext und Zieltext im Bedienfeld anzeigen</label></li>
+          <li><input type="checkbox" id="task-13-3" class="plan-checkbox" /><label for="task-13-3">Original oben und Übersetzung unten klar lesbar darstellen</label></li>
+          <li><input type="checkbox" id="task-13-4" class="plan-checkbox" /><label for="task-13-4">Datenquelle für den Originaltext im Review-Modus sauber definieren</label></li>
+          <li><input type="checkbox" id="task-13-5" class="plan-checkbox" /><label for="task-13-5">Mit realen Review-Workflows in Agentur oder Lektorat testen</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-13">Das Ziel ist ein deutlich angenehmerer Review-Flow direkt in InDesign, ohne ständig zwischen PDFs, Layout-Versionen oder mehreren Bildschirmen wechseln zu müssen.</textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
     <h2>Offene Aufgaben</h2>
     <ul class="task-list">
       <li><input type="checkbox" id="task-open-3" class="plan-checkbox" /><label for="task-open-3">Legacy-BDA, Auto-Hyperlinks und Glossar-Flow in echten Projekten breit testen</label></li>
@@ -458,6 +542,10 @@
       <li><input type="checkbox" id="task-open-9" class="plan-checkbox" /><label for="task-open-9">Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren</label></li>
       <li><input type="checkbox" id="task-open-12" class="plan-checkbox" /><label for="task-open-12">Glossar-Mehrbenutzerlauf mit zwei Rechnern bzw. externem CSV-Editor auf Netzlaufwerk testen</label></li>
       <li><input type="checkbox" id="task-open-10" class="plan-checkbox" /><label for="task-open-10">Translation-Memory-Mehrbenutzerlauf mit zwei Rechnern auf Netzlaufwerk testen</label></li>
+      <li><input type="checkbox" id="task-open-13" class="plan-checkbox" /><label for="task-open-13">QA-Post-Processing für GREP-/Formatverluste und geschützte Leerzeichen konzipieren</label></li>
+      <li><input type="checkbox" id="task-open-14" class="plan-checkbox" /><label for="task-open-14">Whole-Page-Context als optionalen, standardmäßig deaktivierten Menüpunkt planen</label></li>
+      <li><input type="checkbox" id="task-open-15" class="plan-checkbox" /><label for="task-open-15">BridgeTalk-Prototyp für Illustrator-/InDesign-Automatisierung evaluieren</label></li>
+      <li><input type="checkbox" id="task-open-16" class="plan-checkbox" /><label for="task-open-16">Review-Bedienfeld für Side-by-Side Lektorat in InDesign entwerfen</label></li>
       <li><input type="checkbox" id="task-open-6" class="plan-checkbox" /><label for="task-open-6">UXP-Refactoring-Plan erstellen</label></li>
       <li><input type="checkbox" id="task-open-7" class="plan-checkbox" /><label for="task-open-7">Glossar-Validator für fehlerhafte CSV-Struktur ergänzen</label></li>
       <li><input type="checkbox" id="task-open-11" class="plan-checkbox" /><label for="task-open-11">Optionalen Pfad Richtung zentrale TM-Datenhaltung oder Service evaluieren</label></li>
@@ -473,12 +561,15 @@
       <li>Weitere Provider-Live-Tests</li>
       <li>Migration auf UXP</li>
       <li>Zusätzliche Cross-Reference- und Glossar-Validierung</li>
+      <li>QA-/Formatprüfung und Whole-Page Context evaluieren</li>
+      <li>Review-Modus und Cross-App Automatisierung konzipieren</li>
     </ol>
   </section>
 
   <section>
     <h2>Änderungslog</h2>
     <ul class="plain-list">
+      <li>4. April 2026: Plan um QA-/Formatprüfung, Whole-Page Context, Cross-App Automatisierung für Illustrator und Review-Modus erweitert</li>
       <li>4. April 2026: Glossar-CSV fuer Mehrbenutzerbetrieb robuster gemacht, inklusive stabilerer Lesezugriffe, Backup-Fallback und gesichertem Template-Schreiben</li>
       <li>4. April 2026: Translation Memory fuer Mehrbenutzerbetrieb abgesichert, inklusive Sperrlogik, Delta-Merge, Backup-Fallback und atomarem Schreiben</li>
       <li>4. April 2026: Konfigurierbare Schrift-Fallbacks im Tab <code>Typografie</code> ergänzt, inklusive Script-Erkennung und Regeln fuer z. B. Kyrillisch, Arabisch, Hebraeisch, Devanagari und CJK</li>
