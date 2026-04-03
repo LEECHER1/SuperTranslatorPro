@@ -22,6 +22,7 @@ var REF_SYMBOLS_LABEL = "SuperTranslatorPRO_RefSymbols";
 var HYPERLINK_PAGE_MAP_LABEL = "SuperTranslatorPRO_HyperlinkPageMap";
 var AUTO_HYPERLINKS_LABEL = "SuperTranslatorPRO_BDAAutoHyperlinks";
 var BACK_PAGE_TRACKER_LABEL = "SuperTranslatorPRO_BackPageTracker";
+var UI_LANGUAGE_LABEL = "SuperTranslatorPRO_UILanguage";
 
 function detectUILanguage() {
     var localeText = "";
@@ -32,7 +33,13 @@ function detectUILanguage() {
     return "en";
 }
 
-var UI_LANG = detectUILanguage();
+function normalizeUILanguageSetting(value) {
+    var normalized = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase();
+    return (normalized === "de" || normalized === "en") ? normalized : "auto";
+}
+
+var UI_LANGUAGE_SETTING = normalizeUILanguageSetting(app.extractLabel(UI_LANGUAGE_LABEL) || "auto");
+var UI_LANG = (UI_LANGUAGE_SETTING === "auto") ? detectUILanguage() : UI_LANGUAGE_SETTING;
 var UI_IS_GERMAN = (UI_LANG === "de");
 var UI_STRINGS = {
     main_title: { de: "Was soll übersetzt werden?", en: "What should be translated?" },
@@ -86,6 +93,9 @@ var UI_STRINGS = {
     bda_state_ready: { de: "Quellseiten fuer Vollautomatik: {pages}", en: "Source pages for full automation: {pages}" },
     settings_provider_validation_ready: { de: "Provider-Konfiguration ist vollstaendig.", en: "Provider configuration is complete." },
     settings_overview_title: { de: "Übersicht", en: "Overview" },
+    settings_ui_language: { de: "UI-Sprache:", en: "UI language:" },
+    settings_ui_language_auto: { de: "Auto (Systemsprache)", en: "Auto (system language)" },
+    settings_ui_language_hint: { de: "Steuert die Sprache der Script-Oberfläche. Auto verwendet die InDesign-Systemsprache.", en: "Controls the script interface language. Auto uses the InDesign system language." },
     settings_tab_data_hint: { de: "Glossar, Memory und Übersetzungsoptionen gelten dokumentübergreifend.", en: "Glossary, memory, and translation options apply across documents." },
     settings_tab_provider_hint: { de: "Wähle den aktiven Übersetzungsanbieter und hinterlege die passenden Zugangsdaten.", en: "Choose the active translation provider and enter the relevant credentials." },
     settings_tab_auto_hint: { de: "Diese Optionen steuern die BDA-Vollautomatik und das automatische Verlinken.", en: "These options control BDA full automation and automatic hyperlinking." },
@@ -350,6 +360,23 @@ function t(key, params) {
         text = text.replace(new RegExp("\\{" + name + "\\}", "g"), String(params[name]));
     }
     return text;
+}
+
+function applyUILanguageSetting(settingValue) {
+    UI_LANGUAGE_SETTING = normalizeUILanguageSetting(settingValue);
+    UI_LANG = (UI_LANGUAGE_SETTING === "auto") ? detectUILanguage() : UI_LANGUAGE_SETTING;
+    UI_IS_GERMAN = (UI_LANG === "de");
+}
+
+function buildUILanguageSettingOptions() {
+    return [t("settings_ui_language_auto"), "DE", "EN"];
+}
+
+function getUILanguageSettingSelectionIndex(settingValue) {
+    var normalized = normalizeUILanguageSetting(settingValue);
+    if (normalized === "de") return 1;
+    if (normalized === "en") return 2;
+    return 0;
 }
 
 function buildAboutText() {
@@ -2150,7 +2177,8 @@ var selectionModeGroup = contentPanel.add("group");
 selectionModeGroup.orientation = "column";
 selectionModeGroup.alignChildren = ["fill", "top"];
 selectionModeGroup.alignment = "fill";
-selectionModeGroup.add("statictext", undefined, t("selection_hint"), { multiline: true }).preferredSize.width = 500;
+var selectionHintText = selectionModeGroup.add("statictext", undefined, t("selection_hint"), { multiline: true });
+selectionHintText.preferredSize.width = 500;
 var selectionStateText = selectionModeGroup.add("statictext", undefined, "", { multiline: true });
 selectionStateText.preferredSize.width = 500;
 
@@ -2161,7 +2189,7 @@ pagesModeGroup.alignment = "fill";
 var pagesRow = pagesModeGroup.add("group");
 pagesRow.alignment = "fill";
 pagesRow.alignChildren = ["left", "center"];
-pagesRow.add("statictext", undefined, t("pages_label"));
+var pagesLabelText = pagesRow.add("statictext", undefined, t("pages_label"));
 var editPages = pagesRow.add("edittext", undefined, "");
 editPages.characters = 14;
 editPages.helpTip = t("pages_help");
@@ -2174,7 +2202,7 @@ var manualTargetGroup = contentPanel.add("group");
 manualTargetGroup.orientation = "column";
 manualTargetGroup.alignChildren = ["fill", "top"];
 manualTargetGroup.alignment = "fill";
-manualTargetGroup.add("statictext", undefined, t("target_language_short"));
+var targetLanguageLabel = manualTargetGroup.add("statictext", undefined, t("target_language_short"));
 var langList = buildManualLanguageList();
 var dropdownLang = manualTargetGroup.add("dropdownlist", undefined, langList);
 dropdownLang.alignment = "fill";
@@ -2186,11 +2214,12 @@ var autoModeGroup = contentPanel.add("group");
 autoModeGroup.orientation = "column";
 autoModeGroup.alignChildren = ["fill", "top"];
 autoModeGroup.alignment = "fill";
-autoModeGroup.add("statictext", undefined, t("auto_source_help"), { multiline: true }).preferredSize.width = 500;
+var autoSourceHelpText = autoModeGroup.add("statictext", undefined, t("auto_source_help"), { multiline: true });
+autoSourceHelpText.preferredSize.width = 500;
 var grpBDASource = autoModeGroup.add("group");
 grpBDASource.alignment = "fill";
 grpBDASource.alignChildren = ["left", "center"];
-grpBDASource.add("statictext", undefined, t("original_pages"));
+var originalPagesLabel = grpBDASource.add("statictext", undefined, t("original_pages"));
 var bdaSourceInput = grpBDASource.add("edittext", undefined, "AUTO");
 bdaSourceInput.characters = 10;
 bdaSourceInput.helpTip = t("auto_source_help");
@@ -2258,6 +2287,63 @@ function getProviderStatusSummaryText() {
     var display = getTranslationProviderDisplayName(providerId);
     var validationMessage = getProviderValidationMessage(providerId);
     return validationMessage === "" ? display : (display + " (" + t("status_settings_required") + ")");
+}
+
+function refreshManualLanguageDropdownUI() {
+    if (!dropdownLang) return;
+    var selectedCode = extractLanguageCodeFromOption(dropdownLang.selection ? dropdownLang.selection.text : "");
+    var languageItems = buildManualLanguageList();
+    dropdownLang.removeAll();
+    for (var i = 0; i < languageItems.length; i++) dropdownLang.add("item", languageItems[i]);
+
+    var selectedIndex = -1;
+    if (selectedCode !== "") {
+        for (var itemIndex = 0; itemIndex < dropdownLang.items.length; itemIndex++) {
+            if (extractLanguageCodeFromOption(dropdownLang.items[itemIndex].text) === selectedCode) {
+                selectedIndex = itemIndex;
+                break;
+            }
+        }
+    }
+    if (selectedIndex < 0) selectedIndex = 1;
+    if (selectedIndex >= 0 && selectedIndex < dropdownLang.items.length) dropdownLang.selection = selectedIndex;
+    normalizeLanguageDropdownSelection();
+}
+
+function refreshMainWindowUIText() {
+    if (!myWindow) return;
+    mainTitle.text = t("main_title");
+    btnSettings.text = t("settings_button");
+    btnSettings.helpTip = t("settings_help");
+    statusPanel.text = t("status_title");
+    validationPanel.text = t("validation_title");
+    modePanel.text = t("mode_title");
+    radioSelection.text = t("selection_mode");
+    radioPages.text = t("pages_mode");
+    radioBDA.text = t("auto_mode");
+    selectionHintText.text = t("selection_hint");
+    pagesLabelText.text = t("pages_label");
+    editPages.helpTip = t("pages_help");
+    pagesHint.text = t("pages_help");
+    targetLanguageLabel.text = t("target_language_short");
+    refreshManualLanguageDropdownUI();
+    autoSourceHelpText.text = t("auto_source_help");
+    originalPagesLabel.text = t("original_pages");
+    bdaSourceInput.helpTip = t("auto_source_help");
+    checkTOC.text = t("toc_checkbox");
+    checkAutoBDAHyperlinks.text = t("auto_hyperlink_checkbox");
+    checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
+    cbOnlyTextUpdate.text = t("only_text_update");
+    btnTranslate.text = t("translate_start");
+    btnLinkReferences.text = t("hyperlink_settings_button");
+    btnLinkReferences.helpTip = t("hyperlink_settings_help");
+    btnSpellCheck.text = t("spellcheck_button");
+    btnSpellCheck.helpTip = t("spellcheck_help");
+    btnCancel.text = t("close_button");
+    setActiveMainMode(radioBDA.value ? "BDA" : (radioPages.value ? "PAGES" : "SELECTION"));
+    refreshMainStatusUI();
+    refreshMainValidationUI();
+    try { myWindow.layout.layout(true); } catch (layoutErr) {}
 }
 
 function getActiveDocumentSafe() {
@@ -3088,6 +3174,14 @@ btnSettings.onClick = function() {
     });
 
     var dataTranslationSection = createSettingsSection(dataTab, t("settings_section_translation"));
+    var uiLanguageRow = dataTranslationSection.add("group");
+    uiLanguageRow.alignment = "left";
+    uiLanguageRow.alignChildren = ["left", "center"];
+    uiLanguageRow.add("statictext", undefined, t("settings_ui_language"));
+    var uiLanguageDrop = uiLanguageRow.add("dropdownlist", undefined, buildUILanguageSettingOptions());
+    uiLanguageDrop.preferredSize.width = 180;
+    uiLanguageDrop.selection = getUILanguageSettingSelectionIndex(UI_LANGUAGE_SETTING);
+    createDialogHint(dataTranslationSection, t("settings_ui_language_hint"));
     dataTranslationSection.add("statictext", undefined, t("formality"));
     var formDrop = dataTranslationSection.add("dropdownlist", undefined, buildFormalityOptions());
     formDrop.alignment = "fill";
@@ -3121,7 +3215,8 @@ btnSettings.onClick = function() {
             t("status_provider") + " " + getTranslationProviderDisplayName(selectedProviderId) +
             "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvInput.text) + "\n" +
             t("status_memory") + " " + getStatusPathLabel(tmInput.text) +
-            "   |   " + t("status_symbols") + " " + normalizeRefSymbols(autoHyperlinkSymbolsInput.text);
+            "   |   " + t("status_symbols") + " " + normalizeRefSymbols(autoHyperlinkSymbolsInput.text) + "\n" +
+            t("settings_ui_language") + " " + buildUILanguageSettingOptions()[(uiLanguageDrop.selection && uiLanguageDrop.selection.index >= 0) ? uiLanguageDrop.selection.index : 0];
     }
 
     providerDrop.onChange = function() {
@@ -3132,6 +3227,7 @@ btnSettings.onClick = function() {
     csvInput.onChanging = refreshSettingsOverview;
     tmInput.onChanging = refreshSettingsOverview;
     autoHyperlinkSymbolsInput.onChanging = refreshSettingsOverview;
+    uiLanguageDrop.onChange = refreshSettingsOverview;
     refreshSettingsOverview();
 
     var g = setWin.add("group");
@@ -3162,6 +3258,8 @@ btnSettings.onClick = function() {
     
     btnSave.onClick = function() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
+        var selectedUILanguageIndex = (uiLanguageDrop.selection && uiLanguageDrop.selection.index >= 0) ? uiLanguageDrop.selection.index : 0;
+        var selectedUILanguage = (selectedUILanguageIndex === 1) ? "de" : ((selectedUILanguageIndex === 2) ? "en" : "auto");
         translationProviderSetting = normalizeTranslationProvider(providerIds[selectedProviderIndex] || "deepl");
         apiKey = String(keyInput.text || "").replace(/^\s+|\s+$/g, "");
         openAIKey = String(openAIKeyInput.text || "").replace(/^\s+|\s+$/g, "");
@@ -3193,6 +3291,7 @@ btnSettings.onClick = function() {
         app.insertLabel(TM_PATH_LABEL, tmPath); 
         app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
         app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
+        app.insertLabel(UI_LANGUAGE_LABEL, normalizeUILanguageSetting(selectedUILanguage));
         tableRestoreDebugEnabled = !!debugTableRestoreCheckbox.value;
         app.insertLabel(DEBUG_TABLE_RESTORE_LABEL, tableRestoreDebugEnabled ? "1" : "0");
         
@@ -3200,6 +3299,8 @@ btnSettings.onClick = function() {
         if (formDrop.selection.index === 1) selForm = "more"; else if (formDrop.selection.index === 2) selForm = "less";
         app.insertLabel(FORMALITY_LABEL, selForm); formalitySetting = selForm;
         app.insertLabel(DNT_LABEL, dntInput.text); dntStyles = dntInput.text;
+        applyUILanguageSetting(selectedUILanguage);
+        refreshMainWindowUIText();
         refreshMainStatusUI();
         refreshMainValidationUI();
         
