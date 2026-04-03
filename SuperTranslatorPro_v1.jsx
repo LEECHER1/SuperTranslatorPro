@@ -2155,16 +2155,20 @@ validationText.minimumSize = [290, 68];
 
 var modePanel = myWindow.add("panel", undefined, t("mode_title"));
 modePanel.orientation = "column";
-modePanel.alignChildren = ["left", "top"];
+modePanel.alignChildren = ["fill", "top"];
 modePanel.margins = 12;
 var modeOptionsRow = modePanel.add("group");
 modeOptionsRow.orientation = "column";
-modeOptionsRow.alignChildren = ["left", "center"];
+modeOptionsRow.alignment = "fill";
+modeOptionsRow.alignChildren = ["fill", "center"];
 modeOptionsRow.spacing = 8;
 
 var radioSelection = modeOptionsRow.add("radiobutton", undefined, t("selection_mode"));
 var radioPages = modeOptionsRow.add("radiobutton", undefined, t("pages_mode"));
 var radioBDA = modeOptionsRow.add("radiobutton", undefined, t("auto_mode"));
+radioSelection.alignment = ["fill", "center"];
+radioPages.alignment = ["fill", "center"];
+radioBDA.alignment = ["fill", "center"];
 
 var contentPanel = myWindow.add("panel", undefined, "");
 contentPanel.orientation = "column";
