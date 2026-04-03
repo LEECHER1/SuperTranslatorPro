@@ -1969,17 +1969,20 @@ myWindow.preferredSize = [620, 470];
 var headerGroup = myWindow.add("group");
 headerGroup.orientation = "row";
 headerGroup.alignment = "fill";
-headerGroup.alignChildren = ["left", "center"];
+headerGroup.alignChildren = ["fill", "center"];
+headerGroup.spacing = 10;
 
 var mainTitle = headerGroup.add("statictext", undefined, t("main_title"));
+mainTitle.alignment = ["left", "center"];
 mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 16);
-mainTitle.preferredSize.width = 320;
 
 var headerSpacer = headerGroup.add("statictext", undefined, "");
-headerSpacer.alignment = "fill";
+headerSpacer.alignment = ["fill", "center"];
+headerSpacer.minimumSize.width = 0;
 
 var btnSettings = headerGroup.add("button", undefined, t("settings_button"));
 btnSettings.helpTip = t("settings_help");
+btnSettings.alignment = ["right", "center"];
 btnSettings.preferredSize = [150, 30];
 
 var summaryRow = myWindow.add("group");
@@ -1993,18 +1996,18 @@ statusPanel.orientation = "column";
 statusPanel.alignChildren = ["fill", "top"];
 statusPanel.alignment = ["fill", "fill"];
 statusPanel.margins = 12;
-var statusLineTop = statusPanel.add("statictext", undefined, "", { multiline: true });
-statusLineTop.preferredSize.width = 245;
-var statusLineBottom = statusPanel.add("statictext", undefined, "", { multiline: true });
-statusLineBottom.preferredSize.width = 245;
+var statusSummaryText = statusPanel.add("statictext", undefined, " ", { multiline: true });
+statusSummaryText.preferredSize = [245, 42];
+statusSummaryText.minimumSize = [245, 42];
 
 var validationPanel = summaryRow.add("panel", undefined, t("validation_title"));
 validationPanel.orientation = "column";
 validationPanel.alignChildren = ["fill", "top"];
 validationPanel.alignment = ["fill", "fill"];
 validationPanel.margins = 12;
-var validationText = validationPanel.add("statictext", undefined, "", { multiline: true });
-validationText.preferredSize.width = 245;
+var validationText = validationPanel.add("statictext", undefined, " ", { multiline: true });
+validationText.preferredSize = [245, 54];
+validationText.minimumSize = [245, 54];
 
 var modePanel = myWindow.add("panel", undefined, t("mode_title"));
 modePanel.orientation = "column";
@@ -2095,16 +2098,16 @@ var groupButtons = myWindow.add("group");
 groupButtons.alignment = "fill";
 groupButtons.alignChildren = ["left", "center"];
 groupButtons.spacing = 8;
+var btnTranslate = groupButtons.add("button", undefined, t("translate_start"));
+btnTranslate.preferredSize = [180, 32];
+var buttonSpacer = groupButtons.add("statictext", undefined, "");
+buttonSpacer.alignment = "fill";
 var btnLinkReferences = groupButtons.add("button", undefined, t("hyperlink_settings_button"));
 btnLinkReferences.helpTip = t("hyperlink_settings_help");
 btnLinkReferences.preferredSize = [130, 28];
 var btnSpellCheck = groupButtons.add("button", undefined, t("spellcheck_button"));
 btnSpellCheck.helpTip = t("spellcheck_help");
 btnSpellCheck.preferredSize = [130, 28];
-var buttonSpacer = groupButtons.add("statictext", undefined, "");
-buttonSpacer.alignment = "fill";
-var btnTranslate = groupButtons.add("button", undefined, t("translate_start"));
-btnTranslate.preferredSize = [180, 32];
 var btnCancel = groupButtons.add("button", undefined, t("close_button"));
 btnCancel.preferredSize = [120, 28];
 
@@ -2169,9 +2172,48 @@ function getSelectedLanguageCodeSafe() {
 
 function refreshMainStatusUI() {
     var autoLinksEnabled = checkAutoBDAHyperlinks ? !!checkAutoBDAHyperlinks.value : !!autoBDAHyperlinksSetting;
-    statusLineTop.text = t("status_provider") + " " + getProviderStatusSummaryText() + "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvPath);
-    statusLineBottom.text = t("status_memory") + " " + getStatusPathLabel(tmPath) + "   |   " + t("status_links") + " " + (autoLinksEnabled ? t("status_on") : t("status_off")) + "   |   " + t("status_symbols") + " " + normalizeRefSymbols(refSymbolsSetting);
+    statusSummaryText.text =
+        t("status_provider") + " " + getProviderStatusSummaryText() + "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvPath) + "\n" +
+        t("status_memory") + " " + getStatusPathLabel(tmPath) + "   |   " + t("status_links") + " " + (autoLinksEnabled ? t("status_on") : t("status_off")) + "   |   " + t("status_symbols") + " " + normalizeRefSymbols(refSymbolsSetting);
     try { myWindow.layout.layout(true); } catch (layoutErr) {}
+}
+
+function getBoundsCoordinate(boundsObj, propertyName, fallbackIndex, fallbackValue) {
+    if (!boundsObj) return fallbackValue;
+    try {
+        if (typeof boundsObj[propertyName] !== "undefined") return boundsObj[propertyName];
+    } catch (e) {}
+    try {
+        if (typeof boundsObj[fallbackIndex] !== "undefined") return boundsObj[fallbackIndex];
+    } catch (e2) {}
+    return fallbackValue;
+}
+
+function positionDialogRightOfMainWindow(dialog, dialogWidth, dialogHeight) {
+    if (!dialog || !myWindow) return;
+    try {
+        var anchorBounds = myWindow.bounds;
+        var left = getBoundsCoordinate(anchorBounds, "right", 2, 0) + 12;
+        var top = getBoundsCoordinate(anchorBounds, "top", 1, 0);
+
+        try {
+            if ($.screens && $.screens.length > 0) {
+                var screenBounds = $.screens[0].visibleBounds || $.screens[0].bounds;
+                var screenLeft = getBoundsCoordinate(screenBounds, "left", 0, 0);
+                var screenTop = getBoundsCoordinate(screenBounds, "top", 1, 0);
+                var screenRight = getBoundsCoordinate(screenBounds, "right", 2, left + dialogWidth);
+                var screenBottom = getBoundsCoordinate(screenBounds, "bottom", 3, top + dialogHeight);
+                if (left + dialogWidth > screenRight) {
+                    left = Math.max(screenLeft + 20, getBoundsCoordinate(anchorBounds, "left", 0, 0) - dialogWidth - 12);
+                }
+                if (top + dialogHeight > screenBottom) {
+                    top = Math.max(screenTop + 20, screenBottom - dialogHeight - 20);
+                }
+            }
+        } catch (screenErr) {}
+
+        dialog.location = [left, top];
+    } catch (e3) {}
 }
 
 function refreshMainInlineHints() {
@@ -2978,6 +3020,9 @@ btnSettings.onClick = function() {
         alert(buildAboutText(), t("about_title"));
     };
     btnCancelSet.onClick = function() { setWin.close(); };
+    setWin.onShow = function() {
+        positionDialogRightOfMainWindow(setWin, 760, 620);
+    };
     setWin.onResizing = setWin.onResize = function() {
         this.layout.resize();
     };
