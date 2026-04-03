@@ -93,7 +93,7 @@ var UI_STRINGS = {
     bda_state_ready: { de: "Quellseiten fuer Vollautomatik: {pages}", en: "Source pages for full automation: {pages}" },
     settings_provider_validation_ready: { de: "Provider-Konfiguration ist vollstaendig.", en: "Provider configuration is complete." },
     settings_overview_title: { de: "Übersicht", en: "Overview" },
-    settings_tab_ui: { de: "UI", en: "UI" },
+    settings_tab_ui: { de: "UI-Sprache", en: "UI Language" },
     settings_ui_language: { de: "UI-Sprache:", en: "UI language:" },
     settings_ui_language_auto: { de: "Auto (Systemsprache)", en: "Auto (system language)" },
     settings_tab_data_hint: { de: "Glossar, Memory und Übersetzungsoptionen gelten dokumentübergreifend.", en: "Glossary, memory, and translation options apply across documents." },
@@ -2952,10 +2952,6 @@ btnSettings.onClick = function() {
     tabs.minimumSize = [700, 420];
     tabs.preferredSize = [700, 420];
 
-    var uiTab = tabs.add("tab", undefined, t("settings_tab_ui"));
-    uiTab.orientation = "column";
-    uiTab.alignChildren = ["fill", "top"];
-
     var dataTab = tabs.add("tab", undefined, t("settings_tab_data"));
     dataTab.orientation = "column";
     dataTab.alignChildren = ["fill", "top"];
@@ -2967,6 +2963,10 @@ btnSettings.onClick = function() {
     var providerTab = tabs.add("tab", undefined, t("settings_tab_provider"));
     providerTab.orientation = "column";
     providerTab.alignChildren = ["fill", "top"];
+
+    var uiTab = tabs.add("tab", undefined, t("settings_tab_ui"));
+    uiTab.orientation = "column";
+    uiTab.alignChildren = ["fill", "top"];
 
     function createSettingsField(parent, labelText, value, chars) {
         var fieldGroup = parent.add("group");
