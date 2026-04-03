@@ -66,7 +66,7 @@
 - [x] Overflow-Fix innerhalb von `executeTranslation` ersetzen
 
 **Notizen:**
-- Smart Copyfit ist jetzt im Übersetzungsablauf integriert: zuerst Tracking, dann Horizontal Scale, erst danach Rahmenwachstum. Offen bleiben vor allem Praxistests mit echten InDesign-Dokumenten und unterschiedlichen Layouts.
+- Smart Copyfit ist jetzt im Übersetzungsablauf integriert: zuerst Tracking, dann Horizontal Scale, erst danach Rahmenwachstum. Die typografischen Grenzwerte sind im Einstellungsdialog konfigurierbar; Standard bleibt Tracking bis `-10` und Horizontal Scale bis `98%`. Offen bleiben vor allem Praxistests mit echten InDesign-Dokumenten und unterschiedlichen Layouts.
 
 ---
 
@@ -181,6 +181,7 @@
 ---
 
 ## Änderungslog
+- 3. April 2026: Smart-Copyfit-Einstellungen ergänzt, damit Tracking-Limit und minimale Horizontal Scale im Einstellungsdialog manuell anpassbar sind (Default `-10` / `98%`)
 - 3. April 2026: Intelligente Copyfitting-Logik umgesetzt (`applySmartCopyfit`) mit Tracking bis `-10`, Horizontal Scale bis `98%` und Rahmenwachstum als letztem Fallback
 - 3. April 2026: UI-Sprache als eigener Settings-Tab ergänzt (`UI-Sprache` mit `Auto`, `DE`, `EN`) und im Einstellungsdialog nach rechts verschoben
 - 3. April 2026: UI/UX-Phasen 1-5 umgesetzt (klareres Hauptfenster, Live-Validierung, überarbeitete Settings-/Hyperlink-Dialoge, Button-Hierarchie und Fortschrittsfenster-Polish)
