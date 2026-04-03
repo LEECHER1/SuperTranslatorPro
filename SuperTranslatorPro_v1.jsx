@@ -553,6 +553,9 @@ var UI_STRINGS = {
     no_debug_log_file: { de: "Es wurde noch keine Debug-Logdatei erstellt.", en: "No debug log file has been created yet." },
     about_title: { de: "Über Super Translator Pro", en: "About Super Translator Pro" },
     memory_write_warning: { de: "Memory-Warnung: Datei konnte nicht geschrieben werden.", en: "Memory warning: the file could not be written." },
+    memory_read_warning: { de: "Memory-Warnung: Die Datei konnte nicht sicher gelesen werden. Der Lauf verwendet ein leeres oder gesichertes Memory.", en: "Memory warning: the file could not be read safely. This run will use an empty or recovered memory." },
+    memory_busy_warning: { de: "Memory-Warnung: Das Memory wird gerade von einem anderen Benutzer aktualisiert. Neue Einträge konnten diesmal nicht gespeichert werden.", en: "Memory warning: another user is currently updating the memory. New entries could not be saved this time." },
+    memory_clear_warning: { de: "Memory-Warnung: Das Memory konnte nicht sicher geleert werden.", en: "Memory warning: the memory could not be cleared safely." },
     legacy_missing_title: { de: "Fehlende Musterseiten erzeugen", en: "Create Missing Master Pages" },
     legacy_missing_info: { de: "Zielsprachen auswählen oder abwählen.\nBereits erkannte Sprachen sind automatisch aktiviert.\nMit Reihenfolge bestimmst du die Position der Musterseiten (1 = zuerst).", en: "Select or deselect target languages.\nDetected languages are enabled automatically.\nUse the order field to control the master-page position (1 = first)." },
     legacy_more_languages: { de: "Weitere Sprachen", en: "More Languages" },
@@ -1474,6 +1477,11 @@ var translationProviderSetting = normalizeTranslationProvider(app.extractLabel(T
 var csvPathSettingRaw = app.extractLabel(CSV_PATH_LABEL) || "";
 var csvPath = resolveCSVPath(csvPathSettingRaw);
 var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
+var TM_LOCK_TIMEOUT_MS = 15000;
+var TM_LOCK_POLL_MS = 250;
+var TM_LOCK_STALE_MS = 120000;
+var tmRuntimeId = String(new Date().getTime()) + "_" + String(Math.floor(Math.random() * 100000));
+var tmWarningCache = {};
 var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
 var hyperlinkPageMappings = loadHyperlinkPageMappings(app.extractLabel(HYPERLINK_PAGE_MAP_LABEL) || "");
 var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
@@ -2100,47 +2108,438 @@ function getTMFile() {
     return new File(Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
 }
 
-function loadTM() {
-    var f = getTMFile();
-    if (f.exists) {
-        try { 
-            f.encoding = "UTF-8";
-            f.open('r'); 
-            var content = f.read(); 
-            f.close(); 
-            if (content === "") return {};
-            return eval("(" + content + ")"); 
-        } catch(e) { return {}; }
+function getTMBackupFile() {
+    return new File(getTMFile().fsName + ".bak");
+}
+
+function getTMLockFolder() {
+    return new Folder(getTMFile().fsName + ".lock");
+}
+
+function getTMLockInfoFile(lockFolder) {
+    return new File(lockFolder.fsName + "/owner.txt");
+}
+
+function buildTMTempFile() {
+    return new File(getTMFile().fsName + ".tmp." + tmRuntimeId + "_" + String(new Date().getTime()));
+}
+
+function buildTMCorruptSnapshotFile() {
+    var d = new Date();
+    var stamp = d.getFullYear() +
+        ("0" + (d.getMonth() + 1)).slice(-2) +
+        ("0" + d.getDate()).slice(-2) + "_" +
+        ("0" + d.getHours()).slice(-2) +
+        ("0" + d.getMinutes()).slice(-2) +
+        ("0" + d.getSeconds()).slice(-2);
+    return new File(getTMFile().fsName + ".corrupt." + stamp + ".json");
+}
+
+function reportTMWarningOnce(cacheKey, messageKey, logMessage) {
+    if (logMessage) writeLog(logMessage, "WARNUNG");
+    if (tmWarningCache[cacheKey]) return;
+    tmWarningCache[cacheKey] = true;
+    try { alert(t(messageKey)); } catch (e) {}
+}
+
+function normalizeTMObject(rawObj) {
+    var normalized = {};
+    if (!rawObj || typeof rawObj !== "object") return normalized;
+    for (var lang in rawObj) {
+        if (!rawObj.hasOwnProperty(lang)) continue;
+        var bucket = rawObj[lang];
+        if (!bucket || typeof bucket !== "object") continue;
+        normalized[lang] = {};
+        for (var key in bucket) {
+            if (!bucket.hasOwnProperty(key)) continue;
+            var value = bucket[key];
+            if (value === null || value === undefined || value === "") continue;
+            normalized[lang][String(key)] = String(value);
+        }
     }
+    return normalized;
+}
+
+function isTMObjectEmpty(tmObj) {
+    var normalized = normalizeTMObject(tmObj);
+    for (var lang in normalized) {
+        if (!normalized.hasOwnProperty(lang)) continue;
+        for (var key in normalized[lang]) {
+            if (normalized[lang].hasOwnProperty(key)) return false;
+        }
+    }
+    return true;
+}
+
+function mergeTMObjects(baseObj, overlayObj) {
+    var merged = normalizeTMObject(baseObj);
+    var overlay = normalizeTMObject(overlayObj);
+    for (var lang in overlay) {
+        if (!overlay.hasOwnProperty(lang)) continue;
+        if (!merged[lang]) merged[lang] = {};
+        for (var key in overlay[lang]) {
+            if (!overlay[lang].hasOwnProperty(key)) continue;
+            merged[lang][key] = overlay[lang][key];
+        }
+    }
+    return merged;
+}
+
+function parseTMContent(content) {
+    var normalizedContent = String(content || "").replace(/^\uFEFF/, "").replace(/^\s+|\s+$/g, "");
+    if (normalizedContent === "") return { ok: true, obj: {}, empty: true };
+    try {
+        return { ok: true, obj: normalizeTMObject(eval("(" + normalizedContent + ")")), empty: false };
+    } catch (e) {
+        return { ok: false, obj: {}, error: e, empty: false };
+    }
+}
+
+function readTMFileData(fileObj) {
+    if (!fileObj.exists) return { ok: true, obj: {}, exists: false, empty: true };
+    var opened = false;
+    var content = "";
+    try {
+        fileObj.encoding = "UTF-8";
+        opened = fileObj.open('r');
+        if (!opened) throw new Error("TM file could not be opened for reading.");
+        content = fileObj.read();
+        fileObj.close();
+        opened = false;
+        var parsed = parseTMContent(content);
+        parsed.exists = true;
+        parsed.path = fileObj.fsName;
+        return parsed;
+    } catch (e) {
+        try { if (opened) fileObj.close(); } catch (closeErr) {}
+        return { ok: false, obj: {}, exists: true, error: e, path: fileObj.fsName };
+    }
+}
+
+function serializeTM(tmObj) {
+    var normalized = normalizeTMObject(tmObj);
+    var str = "{\n";
+    var langs = [];
+    for (var l in normalized) {
+        if (!normalized.hasOwnProperty(l)) continue;
+        var keys = [];
+        for (var k in normalized[l]) {
+            if (!normalized[l].hasOwnProperty(k) || !normalized[l][k]) continue;
+            var ek = String(k).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
+            var ev = String(normalized[l][k]).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
+            keys.push('"' + ek + '":"' + ev + '"');
+        }
+        langs.push('"' + l + '":{' + keys.join(',') + '}');
+    }
+    str += langs.join(",\n") + "\n}";
+    return str;
+}
+
+function writeTMLockInfo(lockFolder) {
+    var infoFile = getTMLockInfoFile(lockFolder);
+    var opened = false;
+    try {
+        infoFile.encoding = "UTF-8";
+        opened = infoFile.open('w');
+        if (!opened) return false;
+        infoFile.write("owner=" + tmRuntimeId + "\ncreated=" + String(new Date().getTime()) + "\n");
+        infoFile.close();
+        return true;
+    } catch (e) {
+        try { if (opened) infoFile.close(); } catch (closeErr) {}
+        return false;
+    }
+}
+
+function getTMLockTimestamp(lockFolder) {
+    if (!lockFolder || !lockFolder.exists) return 0;
+    var infoFile = getTMLockInfoFile(lockFolder);
+    var modDate = null;
+    try {
+        if (infoFile.exists) modDate = infoFile.modified;
+        else modDate = lockFolder.modified;
+    } catch (e) { modDate = null; }
+    try {
+        if (modDate && modDate.getTime) return modDate.getTime();
+    } catch (e2) {}
+    return 0;
+}
+
+function removeTMLockFolder(lockFolder) {
+    if (!lockFolder || !lockFolder.exists) return true;
+    try {
+        var items = lockFolder.getFiles();
+        for (var i = 0; i < items.length; i++) {
+            try { items[i].remove(); } catch (childErr) {}
+        }
+        if (!lockFolder.exists) return true;
+        return lockFolder.remove();
+    } catch (e) {
+        return !lockFolder.exists;
+    }
+}
+
+function breakStaleTMLock(lockFolder) {
+    var broken = removeTMLockFolder(lockFolder);
+    if (broken) writeLog("Veraltete Translation-Memory-Sperre wurde entfernt: " + lockFolder.fsName, "WARNUNG");
+    return broken;
+}
+
+function waitForTMLockRelease(maxWaitMs) {
+    var waitMs = (maxWaitMs && maxWaitMs > 0) ? maxWaitMs : TM_LOCK_TIMEOUT_MS;
+    var startMs = new Date().getTime();
+    var lockFolder = getTMLockFolder();
+    while (lockFolder.exists) {
+        var lockTimestamp = getTMLockTimestamp(lockFolder);
+        if (lockTimestamp > 0 && (new Date().getTime() - lockTimestamp) >= TM_LOCK_STALE_MS) {
+            if (breakStaleTMLock(lockFolder)) continue;
+        }
+        if ((new Date().getTime() - startMs) >= waitMs) return false;
+        try { $.sleep(TM_LOCK_POLL_MS); } catch (sleepErr) {}
+    }
+    return true;
+}
+
+function acquireTMLock(timeoutMs) {
+    var waitMs = (timeoutMs && timeoutMs > 0) ? timeoutMs : TM_LOCK_TIMEOUT_MS;
+    var startMs = new Date().getTime();
+    var lockFolder = getTMLockFolder();
+    while ((new Date().getTime() - startMs) < waitMs) {
+        if (!lockFolder.exists) {
+            try {
+                if (lockFolder.create()) {
+                    writeTMLockInfo(lockFolder);
+                    return { folder: lockFolder };
+                }
+            } catch (e) {}
+        }
+        var lockTimestamp = getTMLockTimestamp(lockFolder);
+        if (lockTimestamp > 0 && (new Date().getTime() - lockTimestamp) >= TM_LOCK_STALE_MS) {
+            if (breakStaleTMLock(lockFolder)) continue;
+        }
+        try { $.sleep(TM_LOCK_POLL_MS); } catch (sleepErr) {}
+    }
+    return null;
+}
+
+function releaseTMLock(lockHandle) {
+    if (!lockHandle || !lockHandle.folder) return;
+    if (!removeTMLockFolder(lockHandle.folder)) {
+        writeLog("Translation-Memory-Sperre konnte nicht sauber entfernt werden: " + lockHandle.folder.fsName, "WARNUNG");
+    }
+}
+
+function loadTMState(options) {
+    var opts = options || {};
+    if (opts.waitForLock !== false) waitForTMLockRelease(TM_LOCK_TIMEOUT_MS);
+
+    var primaryFile = getTMFile();
+    var primaryResult = readTMFileData(primaryFile);
+    if (primaryResult.ok) {
+        primaryResult.source = "primary";
+        return primaryResult;
+    }
+
+    if (primaryFile.exists) {
+        var backupResult = readTMFileData(getTMBackupFile());
+        if (backupResult.ok) {
+            backupResult.source = "backup";
+            backupResult.primaryError = primaryResult.error;
+            return backupResult;
+        }
+    }
+
+    primaryResult.source = "primary";
+    return primaryResult;
+}
+
+function snapshotCorruptTMFile() {
+    var tmFile = getTMFile();
+    if (!tmFile.exists) return null;
+    var snapshot = buildTMCorruptSnapshotFile();
+    try {
+        if (tmFile.copy(snapshot.fsName)) return snapshot;
+    } catch (e) {}
+    return null;
+}
+
+function writeTMContentAtomically(targetFile, content, options) {
+    var opts = options || {};
+    var tempFile = buildTMTempFile();
+    var backupFile = getTMBackupFile();
+    var opened = false;
+    var targetExisted = false;
+    try {
+        var parentFolder = targetFile.parent;
+        if (parentFolder && !parentFolder.exists) {
+            try { parentFolder.create(); } catch (parentErr) {}
+        }
+
+        targetExisted = targetFile.exists;
+        if (tempFile.exists) {
+            try { tempFile.remove(); } catch (tempCleanupErr) {}
+        }
+
+        tempFile.encoding = "UTF-8";
+        opened = tempFile.open('w');
+        if (!opened) throw new Error("TM temp file could not be opened for writing.");
+        if (!tempFile.write(content)) throw new Error("TM temp file could not be written.");
+        tempFile.close();
+        opened = false;
+
+        if (!opts.preserveBackup && backupFile.exists) {
+            try { backupFile.remove(); } catch (oldBackupErr) {}
+        }
+
+        if (targetExisted) {
+            if (!opts.preserveBackup) {
+                try {
+                    if (!targetFile.copy(backupFile.fsName)) {
+                        writeLog("Translation-Memory-Backup konnte nicht erstellt werden: " + backupFile.fsName, "WARNUNG");
+                    }
+                } catch (backupErr) {
+                    writeLog("Translation-Memory-Backup fehlgeschlagen: " + (backupErr.message || backupErr), "WARNUNG");
+                }
+            }
+            if (!targetFile.remove()) throw new Error("TM target file could not be replaced.");
+        }
+
+        if (!tempFile.rename(targetFile.name)) {
+            if (!tempFile.copy(targetFile.fsName)) throw new Error("TM temp file could not be moved into place.");
+            try { tempFile.remove(); } catch (tempRemoveErr) {}
+        }
+        return true;
+    } catch (e) {
+        try { if (opened) tempFile.close(); } catch (closeErr) {}
+        try { if (tempFile.exists) tempFile.remove(); } catch (cleanupErr) {}
+        if (!targetFile.exists && backupFile.exists) {
+            try { backupFile.copy(targetFile.fsName); } catch (restoreErr) {}
+        }
+        return false;
+    }
+}
+
+function loadTM() {
+    var state = loadTMState({ waitForLock: true });
+    if (state.ok) {
+        if (state.source === "backup") {
+            writeLog("Translation Memory Hauptdatei war nicht lesbar. Sicherung wird fuer den aktuellen Lauf verwendet.", "WARNUNG");
+        }
+        return state.obj;
+    }
+
+    var readError = state.error && state.error.message ? state.error.message : state.error;
+    reportTMWarningOnce(
+        "tm_read_failed",
+        "memory_read_warning",
+        "Translation Memory konnte nicht sicher gelesen werden: " + (readError || "unbekannter Fehler")
+    );
     return {};
 }
 
-function saveTM(tmObj) {
-    var f = getTMFile();
+function saveTMDelta(tmDelta) {
+    var normalizedDelta = normalizeTMObject(tmDelta);
+    if (isTMObjectEmpty(normalizedDelta)) return true;
+
+    var lockHandle = acquireTMLock(TM_LOCK_TIMEOUT_MS);
+    if (!lockHandle) {
+        reportTMWarningOnce(
+            "tm_save_busy",
+            "memory_busy_warning",
+            "Translation Memory ist aktuell gesperrt. Neue Eintraege konnten nicht gespeichert werden."
+        );
+        return false;
+    }
+
+    var success = false;
+    var deferredWarning = null;
     try {
-        var str = "{\n"; var langs = [];
-        for (var l in tmObj) {
-            if (tmObj.hasOwnProperty(l)) {
-                var keys = [];
-                for (var k in tmObj[l]) {
-                    if (tmObj[l].hasOwnProperty(k) && tmObj[l][k]) {
-                        var ek = String(k).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
-                        var ev = String(tmObj[l][k]).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
-                        keys.push('"' + ek + '":"' + ev + '"');
-                    }
-                }
-                langs.push('"' + l + '":{' + keys.join(',') + '}');
+        var state = loadTMState({ waitForLock: false });
+        var baseTM = {};
+
+        if (!state.ok) {
+            var corruptSnapshot = snapshotCorruptTMFile();
+            var errorText = state.error && state.error.message ? state.error.message : state.error;
+            deferredWarning = {
+                cacheKey: "tm_save_read_failed",
+                messageKey: "memory_write_warning",
+                logMessage: "Translation Memory konnte vor dem Speichern nicht gelesen werden: " + (errorText || "unbekannter Fehler") +
+                    (corruptSnapshot ? " | Defekte Datei gesichert unter: " + corruptSnapshot.fsName : "")
+            };
+        } else {
+            baseTM = state.obj;
+            if (state.source === "backup") {
+                var recoveredSnapshot = snapshotCorruptTMFile();
+                writeLog(
+                    "Translation Memory Hauptdatei war beschaedigt. Sicherung wird fuer die Wiederherstellung verwendet." +
+                    (recoveredSnapshot ? " Defekte Datei gesichert unter: " + recoveredSnapshot.fsName : ""),
+                    "WARNUNG"
+                );
+            }
+
+            var mergedTM = mergeTMObjects(baseTM, normalizedDelta);
+            success = writeTMContentAtomically(getTMFile(), serializeTM(mergedTM), { preserveBackup: state.source === "backup" });
+            if (!success) {
+                deferredWarning = {
+                    cacheKey: "tm_save_write_failed",
+                    messageKey: "memory_write_warning",
+                    logMessage: "Translation Memory konnte nicht sicher geschrieben werden: " + getTMFile().fsName
+                };
             }
         }
-        str += langs.join(",\n") + "\n}";
-        
-        f.encoding = "UTF-8";
-        if (f.open('w')) {
-            var success = f.write(str);
-            f.close();
-            if (!success) alert(t("memory_write_warning"));
+    } finally {
+        releaseTMLock(lockHandle);
+    }
+
+    if (deferredWarning) {
+        reportTMWarningOnce(deferredWarning.cacheKey, deferredWarning.messageKey, deferredWarning.logMessage);
+    }
+    return success;
+}
+
+function clearTM() {
+    var lockHandle = acquireTMLock(TM_LOCK_TIMEOUT_MS);
+    if (!lockHandle) {
+        reportTMWarningOnce(
+            "tm_clear_busy",
+            "memory_clear_warning",
+            "Translation Memory konnte nicht geleert werden, weil die Datei aktuell gesperrt ist."
+        );
+        return false;
+    }
+
+    var success = true;
+    var deferredWarning = null;
+    try {
+        var tmFile = getTMFile();
+        var backupFile = getTMBackupFile();
+        if (tmFile.exists) {
+            try { if (!tmFile.remove()) success = false; } catch (tmRemoveErr) { success = false; }
         }
-    } catch(e) {}
+        if (backupFile.exists) {
+            try { if (!backupFile.remove()) success = false; } catch (backupRemoveErr) { success = false; }
+        }
+        if (!success) {
+            success = writeTMContentAtomically(tmFile, serializeTM({}));
+            if (success && backupFile.exists) {
+                try { backupFile.remove(); } catch (backupCleanupErr) {}
+            }
+        }
+        if (!success) {
+            deferredWarning = {
+                cacheKey: "tm_clear_failed",
+                messageKey: "memory_clear_warning",
+                logMessage: "Translation Memory konnte nicht sicher geleert werden: " + getTMFile().fsName
+            };
+        }
+    } finally {
+        releaseTMLock(lockHandle);
+    }
+
+    if (deferredWarning) {
+        reportTMWarningOnce(deferredWarning.cacheKey, deferredWarning.messageKey, deferredWarning.logMessage);
+    }
+    return success;
 }
 
 function guessCSVSeparator(content) {
@@ -4239,9 +4638,7 @@ btnSettings.onClick = function() {
     };
     btnClearTM.onClick = function() {
         if(confirm(t("clear_memory_confirm"))) {
-            var f = getTMFile();
-            if (f.exists) f.remove();
-            alert(t("clear_memory_done"));
+            if (clearTM()) alert(t("clear_memory_done"));
         }
     }
     btnFeedbackReport.onClick = function() {
@@ -7977,17 +8374,20 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             }
 
             var tmUpdated = false;
+            var tmDelta = {};
+            tmDelta[selectedLang] = {};
             for(var q=0; q < translationQueue.length; q++) {
                 var trXML = translatedBatch[q];
                 if (trXML) { 
                     trXML = normalizeTranslatedXML(trXML);
                     finalTranslations[translationQueue[q].index] = trXML;
                     tm[selectedLang][translationQueue[q].xml] = trXML;
+                    tmDelta[selectedLang][translationQueue[q].xml] = trXML;
                     tmUpdated = true;
                     globalStats.apiChars += translationQueue[q].len;
                 }
             }
-            if (tmUpdated) saveTM(tm); 
+            if (tmUpdated) saveTMDelta(tmDelta); 
         }
         
         var formatPct = overStartPct + ((overEndPct - overStartPct) * 0.9);
