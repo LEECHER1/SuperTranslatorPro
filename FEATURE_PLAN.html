@@ -218,12 +218,12 @@
           <li>Nachbearbeitung technischer Tokens wie <code>M5*15</code>, damit Leerzeichen sauber bleiben</li>
           <li>Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider</li>
           <li>Hyperlink-, Einstellungs- und Fortschrittsdialoge visuell überarbeitet und resizable gemacht</li>
+          <li>Intelligente Copyfitting-Logik mit Tracking-, Scale- und Rahmen-Fallback</li>
         </ul>
       </div>
       <div class="status-card open">
         <h3>Noch offen</h3>
         <ul class="plain-list">
-          <li>Intelligente Copyfitting-Logik</li>
           <li>Optionaler Hybrid-Modus zwischen DeepL und LLMs</li>
           <li>Migration auf UXP / Plugin-Architektur</li>
           <li>Erweiterte End-to-End-Tests mit echten InDesign-Dokumenten</li>
@@ -236,7 +236,7 @@
     <h2>Übersicht</h2>
     <ul class="task-list">
       <li><input type="checkbox" id="overview-1" class="plan-checkbox" checked /><label for="overview-1">Quellsprachen-Prüfung</label></li>
-      <li><input type="checkbox" id="overview-2" class="plan-checkbox" /><label for="overview-2">Intelligente Copyfitting-Logik</label></li>
+      <li><input type="checkbox" id="overview-2" class="plan-checkbox" checked /><label for="overview-2">Intelligente Copyfitting-Logik</label></li>
       <li><input type="checkbox" id="overview-3" class="plan-checkbox" checked /><label for="overview-3">Automatische Musterseiten-Generierung (Legacy-Fallback)</label></li>
       <li><input type="checkbox" id="overview-4" class="plan-checkbox" checked /><label for="overview-4">Andere LLMs (ChatGPT / Gemini / Claude)</label></li>
       <li><input type="checkbox" id="overview-5" class="plan-checkbox" /><label for="overview-5">Migration auf UXP</label></li>
@@ -273,16 +273,16 @@
       <div>
         <h2>2. Intelligente Copyfitting-Logik</h2>
         <ul class="task-list">
-          <li><input type="checkbox" id="task-2-1" class="plan-checkbox" /><label for="task-2-1">Neue Helper-Funktion <code>applySmartCopyfit(textFrame)</code> erstellen</label></li>
-          <li><input type="checkbox" id="task-2-2" class="plan-checkbox" /><label for="task-2-2">Priorität 1: Tracking (Laufweite) schrittweise bis -10 reduzieren</label></li>
-          <li><input type="checkbox" id="task-2-3" class="plan-checkbox" /><label for="task-2-3">Priorität 2: Horizontal Scale (Zeichenbreite) schrittweise bis 98% reduzieren</label></li>
-          <li><input type="checkbox" id="task-2-4" class="plan-checkbox" /><label for="task-2-4">Priorität 3: Rahmenvergrößerung nur als letzter Fallback anwenden</label></li>
-          <li><input type="checkbox" id="task-2-5" class="plan-checkbox" /><label for="task-2-5">Overflow-Fix innerhalb von <code>executeTranslation</code> ersetzen</label></li>
+          <li><input type="checkbox" id="task-2-1" class="plan-checkbox" checked /><label for="task-2-1">Neue Helper-Funktion <code>applySmartCopyfit(textFrame)</code> erstellen</label></li>
+          <li><input type="checkbox" id="task-2-2" class="plan-checkbox" checked /><label for="task-2-2">Priorität 1: Tracking (Laufweite) schrittweise bis -10 reduzieren</label></li>
+          <li><input type="checkbox" id="task-2-3" class="plan-checkbox" checked /><label for="task-2-3">Priorität 2: Horizontal Scale (Zeichenbreite) schrittweise bis 98% reduzieren</label></li>
+          <li><input type="checkbox" id="task-2-4" class="plan-checkbox" checked /><label for="task-2-4">Priorität 3: Rahmenvergrößerung nur als letzter Fallback anwenden</label></li>
+          <li><input type="checkbox" id="task-2-5" class="plan-checkbox" checked /><label for="task-2-5">Overflow-Fix innerhalb von <code>executeTranslation</code> ersetzen</label></li>
         </ul>
       </div>
       <div class="small">
         <strong>Notizen</strong>
-        <textarea id="note-2">Das ist aktuell eines der wichtigsten offenen Themen.</textarea>
+        <textarea id="note-2">Smart Copyfit ist jetzt im Übersetzungsablauf integriert: zuerst Tracking, dann Horizontal Scale, erst danach Rahmenwachstum. Offen bleiben vor allem Praxistests mit echten InDesign-Dokumenten und unterschiedlichen Layouts.</textarea>
       </div>
     </div>
   </section>
@@ -421,8 +421,6 @@
   <section>
     <h2>Offene Aufgaben</h2>
     <ul class="task-list">
-      <li><input type="checkbox" id="task-open-1" class="plan-checkbox" /><label for="task-open-1"><code>applySmartCopyfit(textFrame)</code> mit Tracking/Scale/Frame bauen</label></li>
-      <li><input type="checkbox" id="task-open-2" class="plan-checkbox" /><label for="task-open-2">Overflow-Fix in <code>executeTranslation</code> ersetzen</label></li>
       <li><input type="checkbox" id="task-open-3" class="plan-checkbox" /><label for="task-open-3">Legacy-BDA, Auto-Hyperlinks und Glossar-Flow in echten Projekten breit testen</label></li>
       <li><input type="checkbox" id="task-open-4" class="plan-checkbox" /><label for="task-open-4">Gemini-/Claude-Live-Tests inkl. Grenzfällen mit XML, Tabellen und langen BDA-Läufen durchführen</label></li>
       <li><input type="checkbox" id="task-open-5" class="plan-checkbox" /><label for="task-open-5">Lokale LLM-Live-Tests mit LM Studio und Ollama durchführen</label></li>
@@ -436,9 +434,9 @@
   <section>
     <h2>Prioritäten</h2>
     <ol>
-      <li>Intelligente Copyfitting-Logik</li>
       <li>UI/UX Feinschliff und echte InDesign-Tests</li>
-      <li>Weitere LLM-Anbieter</li>
+      <li>Optionaler Hybrid-Modus zwischen DeepL und LLMs</li>
+      <li>Weitere Provider-Live-Tests</li>
       <li>Migration auf UXP</li>
       <li>Zusätzliche Cross-Reference- und Glossar-Validierung</li>
     </ol>
@@ -447,6 +445,7 @@
   <section>
     <h2>Änderungslog</h2>
     <ul class="plain-list">
+      <li>3. April 2026: Intelligente Copyfitting-Logik umgesetzt (<code>applySmartCopyfit</code>) mit Tracking bis <code>-10</code>, Horizontal Scale bis <code>98%</code> und Rahmenwachstum als letztem Fallback</li>
       <li>3. April 2026: UI-Sprache als eigener Settings-Tab ergänzt (<code>UI-Sprache</code> mit <code>Auto</code>, <code>DE</code>, <code>EN</code>) und im Einstellungsdialog nach rechts verschoben</li>
       <li>3. April 2026: UI/UX-Phasen 1-5 umgesetzt (klareres Hauptfenster, Live-Validierung, überarbeitete Settings-/Hyperlink-Dialoge, Button-Hierarchie und Fortschrittsfenster-Polish)</li>
       <li>3. April 2026: Hauptfenster live aktualisiert, Quellsprachen-Prüfung verallgemeinert und Fortschrittsfenster um grünen Erfolgsstatus erweitert</li>

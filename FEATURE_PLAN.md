@@ -5,7 +5,7 @@
 ## Aktueller Status
 - **Version:** 28.2
 - **Datum:** 3. April 2026
-- **Status:** Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Copyfit, Provider-Stabilisierung, Hybrid-Modus und UXP-Planung.
+- **Status:** Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Provider-Stabilisierung, Hybrid-Modus, echten InDesign-Tests und UXP-Planung.
 
 ---
 
@@ -22,9 +22,9 @@
 - [x] Nachbearbeitung technischer Tokens wie `M5*15`, damit Leerzeichen sauber bleiben
 - [x] Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider
 - [x] Hyperlink-, Einstellungs- und Fortschrittsdialoge visuell überarbeitet und resizable gemacht
+- [x] Intelligente Copyfitting-Logik mit Tracking-, Scale- und Rahmen-Fallback
 
 ### Noch offen
-- [ ] Intelligente Copyfitting-Logik
 - [ ] Optionaler Hybrid-Modus zwischen DeepL und LLMs
 - [ ] Migration auf UXP / Plugin-Architektur
 - [ ] Erweiterte End-to-End-Tests mit echten InDesign-Dokumenten
@@ -33,7 +33,7 @@
 
 ## Übersicht
 - [x] Quellsprachen-Prüfung
-- [ ] Intelligente Copyfitting-Logik
+- [x] Intelligente Copyfitting-Logik
 - [x] Automatische Musterseiten-Generierung (Legacy-Fallback)
 - [x] Andere LLMs (ChatGPT / Gemini / Claude)
 - [ ] Migration auf UXP
@@ -59,14 +59,14 @@
 ---
 
 ## 2. Intelligente Copyfitting-Logik
-- [ ] Neue Helper-Funktion `applySmartCopyfit(textFrame)` erstellen
-- [ ] Priorität 1: Tracking (Laufweite) schrittweise bis -10 reduzieren
-- [ ] Priorität 2: Horizontal Scale (Zeichenbreite) schrittweise bis 98% reduzieren
-- [ ] Priorität 3: Rahmenvergrößerung nur als letzter Fallback anwenden
-- [ ] Overflow-Fix innerhalb von `executeTranslation` ersetzen
+- [x] Neue Helper-Funktion `applySmartCopyfit(textFrame)` erstellen
+- [x] Priorität 1: Tracking (Laufweite) schrittweise bis -10 reduzieren
+- [x] Priorität 2: Horizontal Scale (Zeichenbreite) schrittweise bis 98% reduzieren
+- [x] Priorität 3: Rahmenvergrößerung nur als letzter Fallback anwenden
+- [x] Overflow-Fix innerhalb von `executeTranslation` ersetzen
 
 **Notizen:**
-- Das ist aktuell eines der wichtigsten offenen Themen.
+- Smart Copyfit ist jetzt im Übersetzungsablauf integriert: zuerst Tracking, dann Horizontal Scale, erst danach Rahmenwachstum. Offen bleiben vor allem Praxistests mit echten InDesign-Dokumenten und unterschiedlichen Layouts.
 
 ---
 
@@ -161,17 +161,15 @@
 ---
 
 ## Prioritäten
-1. Intelligente Copyfitting-Logik
-2. UI/UX Feinschliff und echte InDesign-Tests
-3. Weitere LLM-Anbieter
+1. UI/UX Feinschliff und echte InDesign-Tests
+2. Optionaler Hybrid-Modus zwischen DeepL und LLMs
+3. Weitere Provider-Live-Tests
 4. Migration auf UXP
 5. Zusätzliche Cross-Reference- und Glossar-Validierung
 
 ---
 
 ## Offene ToDo-Punkte
-- [ ] `applySmartCopyfit(textFrame)` mit Tracking/Scale/Frame bauen
-- [ ] Overflow-Fix in `executeTranslation` ersetzen
 - [ ] Legacy-BDA, Auto-Hyperlinks und Glossar-Flow in echten Projekten breit testen
 - [ ] Gemini-/Claude-Live-Tests inkl. Grenzfällen mit XML, Tabellen und langen BDA-Läufen durchführen
 - [ ] Lokale LLM-Live-Tests mit LM Studio und Ollama durchführen
@@ -183,6 +181,7 @@
 ---
 
 ## Änderungslog
+- 3. April 2026: Intelligente Copyfitting-Logik umgesetzt (`applySmartCopyfit`) mit Tracking bis `-10`, Horizontal Scale bis `98%` und Rahmenwachstum als letztem Fallback
 - 3. April 2026: UI-Sprache als eigener Settings-Tab ergänzt (`UI-Sprache` mit `Auto`, `DE`, `EN`) und im Einstellungsdialog nach rechts verschoben
 - 3. April 2026: UI/UX-Phasen 1-5 umgesetzt (klareres Hauptfenster, Live-Validierung, überarbeitete Settings-/Hyperlink-Dialoge, Button-Hierarchie und Fortschrittsfenster-Polish)
 - 3. April 2026: Hauptfenster live aktualisiert, Quellsprachen-Prüfung verallgemeinert und Fortschrittsfenster um grünen Erfolgsstatus erweitert

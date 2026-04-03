@@ -249,7 +249,7 @@ var UI_STRINGS = {
     progress_done: { de: "Verarbeitung abgeschlossen.", en: "Processing completed." },
     progress_success: { de: "Der Vorgang wurde erfolgreich abgeschlossen.", en: "The process completed successfully." },
     progress_success_badge: { de: "Erfolgreich abgeschlossen", en: "Completed successfully" },
-    progress_duration: { de: "Dauer: {mins} Min. {secs} Sek.\nAPI gespart: {saved} Z. | Rahmen gefixt: {frames}", en: "Duration: {mins} min {secs} sec.\nAPI saved: {saved} chars | Frames fixed: {frames}" },
+    progress_duration: { de: "Dauer: {mins} Min. {secs} Sek.\nAPI gespart: {saved} Z. | Copyfit gelöst: {frames}", en: "Duration: {mins} min {secs} sec.\nAPI saved: {saved} chars | Copyfit resolved: {frames}" },
     validation_invalid_lang: { de: "Bitte wähle eine gültige Zielsprache aus, keine Trennlinie.", en: "Please select a valid target language, not a separator." },
     validation_select_something: { de: "Bitte markiere zuerst etwas im Dokument.", en: "Please select something in the document first." },
     validation_enter_pages: { de: "Bitte Seitenzahlen eintragen.", en: "Please enter page numbers." },
@@ -348,7 +348,7 @@ var UI_STRINGS = {
     local_invalid_xml: { de: "Das lokale LLM lieferte für Block {index} ein ungültiges XML-/Tag-Ergebnis zurück.", en: "The local LLM returned an invalid XML/tag result for block {index}." },
     applying_formatting: { de: "Wende Formatierungen an...", en: "Applying formatting..." },
     restoring_tables_images: { de: "Stelle Tabellen und Bilder wieder her...", en: "Restoring tables and images..." },
-    checking_overflow: { de: "Prüfe auf Textübersatz (Auto-Fit)...", en: "Checking for overset text (auto-fit)..." }
+    checking_overflow: { de: "Prüfe auf Textübersatz (Smart Copyfit)...", en: "Checking for overset text (smart copyfit)..." }
 };
 
 function t(key, params) {
@@ -390,7 +390,7 @@ function buildAboutText() {
         infoText += "• Netzwerk-Glossar (CSV) für den Schutz von Fachbegriffen\n";
         infoText += "• Formelle/Informelle Anrede & DNT-Format Ignorierung\n";
         infoText += "• Cross-Platform (macOS & Windows) API-Anbindung\n";
-        infoText += "• Intelligente Auto-Fit Korrektur gegen Textrahmen-Übersatz";
+        infoText += "• Intelligente Copyfitting-Korrektur gegen Textrahmen-Übersatz";
     } else {
         infoText += "A professional translation tool for InDesign powered by DeepL by default with optional OpenAI, Gemini, Claude, and local OpenAI-compatible providers.\n\n";
         infoText += "Core features:\n";
@@ -399,7 +399,7 @@ function buildAboutText() {
         infoText += "• Network glossary (CSV) to protect terminology\n";
         infoText += "• Formal/informal tone and DNT style exclusions\n";
         infoText += "• Cross-platform API integration (macOS & Windows)\n";
-        infoText += "• Smart auto-fit correction for overset text frames";
+        infoText += "• Smart copyfitting correction for overset text frames";
     }
     return infoText;
 }
@@ -4976,7 +4976,7 @@ btnTranslate.onClick = function() {
         function() { 
             try {
                 var resultMsg = runMainProcess(doc, config); 
-                writeLog("Erfolgreich beendet. (API genutzt: " + globalStats.apiChars + " Z., API gespart: " + globalStats.savedChars + " Z., Auto-Fit: " + globalStats.fittedFrames + " Rahmen)");
+                writeLog("Erfolgreich beendet. (API genutzt: " + globalStats.apiChars + " Z., API gespart: " + globalStats.savedChars + " Z., Copyfit gelöst: " + globalStats.fittedFrames + " Rahmen)");
                 showSuccessScreen(resultMsg ? resultMsg : t("all_translations_done"));
             } catch(e) {
                 closeProgressWindow();
@@ -6527,7 +6527,184 @@ function restoreParkedTablesAndImages(doc, storageEnv, globalParkedTables, globa
     }
 }
 
-// --- 6. KERN-ÜBERSETZUNGS-LOGIK MIT TM, WÖRTERBUCH & AUTO-FIT ---
+function getSmartCopyfitTargetFrame(textFrame) {
+    var targetFrame = textFrame;
+    if (!targetFrame || !targetFrame.isValid) return null;
+    try {
+        var story = targetFrame.parentStory;
+        if (story && story.isValid && story.textContainers && story.textContainers.length > 0) {
+            for (var i = story.textContainers.length - 1; i >= 0; i--) {
+                var container = story.textContainers[i];
+                if (container && container.isValid && container.constructor && container.constructor.name === "TextFrame") {
+                    targetFrame = container;
+                    break;
+                }
+            }
+        }
+    } catch (e) {}
+    return targetFrame;
+}
+
+function recomposeSmartCopyfitFrame(textFrame) {
+    if (!textFrame || !textFrame.isValid) return;
+    try {
+        var story = textFrame.parentStory;
+        if (story && story.isValid && story.recompose) {
+            story.recompose();
+            return;
+        }
+    } catch (e) {}
+    try {
+        if (textFrame.recompose) textFrame.recompose();
+    } catch (e2) {}
+}
+
+function getSmartCopyfitRanges(textFrame) {
+    if (!textFrame || !textFrame.isValid) return [];
+    var textObj = null;
+    try {
+        if (textFrame.parentStory && textFrame.parentStory.isValid) textObj = textFrame.parentStory;
+    } catch (e) { textObj = null; }
+    if (!textObj) {
+        try {
+            if (textFrame.texts && textFrame.texts.length > 0 && textFrame.texts[0] && textFrame.texts[0].isValid) textObj = textFrame.texts[0];
+        } catch (e2) { textObj = null; }
+    }
+    if (!textObj) return [];
+    try { return textObj.textStyleRanges.everyItem().getElements(); } catch (e3) {}
+    try { return textObj.textStyleRanges; } catch (e4) {}
+    return [];
+}
+
+function applySmartCopyfit(textFrame) {
+    var targetFrame = getSmartCopyfitTargetFrame(textFrame);
+    var result = {
+        attempted: false,
+        changed: false,
+        resolved: false,
+        trackingSteps: 0,
+        scaleSteps: 0,
+        frameGrowthSteps: 0,
+        frameId: null
+    };
+    if (!targetFrame || !targetFrame.isValid) return result;
+
+    try { result.frameId = targetFrame.id; } catch (e0) {}
+
+    var hasOverflow = false;
+    try { hasOverflow = !!targetFrame.overflows; } catch (e1) { hasOverflow = false; }
+    if (!hasOverflow) {
+        result.resolved = true;
+        return result;
+    }
+
+    result.attempted = true;
+
+    var trackingStep = 2;
+    var minTracking = -10;
+    var scaleStep = 1;
+    var minScale = 98;
+    var frameGrowthStep = 5;
+    var maxFrameGrowthSteps = 20;
+
+    var refreshOverflow = function() {
+        recomposeSmartCopyfitFrame(targetFrame);
+        try { return !!targetFrame.overflows; } catch (overflowErr) { return false; }
+    };
+
+    var applyTrackingStep = function() {
+        var changed = false;
+        var ranges = getSmartCopyfitRanges(targetFrame);
+        for (var i = 0; i < ranges.length; i++) {
+            var currentTracking = 0;
+            try { currentTracking = parseFloat(ranges[i].tracking); } catch (e2) { currentTracking = 0; }
+            if (isNaN(currentTracking)) currentTracking = 0;
+            if (currentTracking <= minTracking) continue;
+
+            var nextTracking = currentTracking - trackingStep;
+            if (nextTracking < minTracking) nextTracking = minTracking;
+            if (nextTracking === currentTracking) continue;
+
+            try {
+                ranges[i].tracking = nextTracking;
+                changed = true;
+            } catch (trackingErr) {}
+        }
+        return changed;
+    };
+
+    var applyScaleStep = function() {
+        var changed = false;
+        var ranges = getSmartCopyfitRanges(targetFrame);
+        for (var i = 0; i < ranges.length; i++) {
+            var currentScale = 100;
+            try { currentScale = parseFloat(ranges[i].horizontalScale); } catch (e3) { currentScale = 100; }
+            if (isNaN(currentScale) || currentScale <= 0) currentScale = 100;
+            if (currentScale <= minScale) continue;
+
+            var nextScale = currentScale - scaleStep;
+            if (nextScale < minScale) nextScale = minScale;
+            if (nextScale === currentScale) continue;
+
+            try {
+                ranges[i].horizontalScale = nextScale;
+                changed = true;
+            } catch (scaleErr) {}
+        }
+        return changed;
+    };
+
+    var overflowStillExists = refreshOverflow();
+
+    while (overflowStillExists) {
+        var trackingChanged = applyTrackingStep();
+        if (!trackingChanged) break;
+        result.changed = true;
+        result.trackingSteps++;
+        overflowStillExists = refreshOverflow();
+    }
+
+    while (overflowStillExists) {
+        var scaleChanged = applyScaleStep();
+        if (!scaleChanged) break;
+        result.changed = true;
+        result.scaleSteps++;
+        overflowStillExists = refreshOverflow();
+    }
+
+    var bounds = null;
+    try { bounds = targetFrame.geometricBounds; } catch (e4) { bounds = null; }
+    while (overflowStillExists && bounds && result.frameGrowthSteps < maxFrameGrowthSteps) {
+        bounds[2] += frameGrowthStep;
+        try {
+            targetFrame.geometricBounds = bounds;
+            result.changed = true;
+            result.frameGrowthSteps++;
+        } catch (frameErr) {
+            break;
+        }
+        overflowStillExists = refreshOverflow();
+    }
+
+    result.resolved = !overflowStillExists;
+
+    writeDebugLog(
+        "copyfit:frame=" + (result.frameId !== null ? result.frameId : "?") +
+        " overflowStart=1" +
+        " trackingSteps=" + result.trackingSteps +
+        " scaleSteps=" + result.scaleSteps +
+        " growthSteps=" + result.frameGrowthSteps +
+        " resolved=" + result.resolved
+    );
+
+    if (!result.resolved) {
+        writeLog("Textübersatz konnte nicht vollständig behoben werden (Rahmen " + (result.frameId !== null ? result.frameId : "?") + ").", "WARNUNG");
+    }
+
+    return result;
+}
+
+// --- 6. KERN-ÜBERSETZUNGS-LOGIK MIT TM, WÖRTERBUCH & SMART COPYFIT ---
 function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selectedLang, overStartPct, overEndPct) {
     var storageEnv = setupTempImageStorage(doc);
     var textTargets = [];
@@ -6790,7 +6967,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
     }
 
     updateProgress(98, t("checking_overflow"), overEndPct, null);
-    var checkedFrameIds = {};
+    var checkedCopyfitKeys = {};
     for (var i = 0; i < textTargets.length; i++) {
         var st = textTargets[i];
         if (!st || !st.isValid) continue;
@@ -6803,18 +6980,21 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         for (var j = 0; j < tFrames.length; j++) {
             var tf = tFrames[j];
             if (tf && tf.isValid && tf.constructor.name === "TextFrame") {
-                if (!checkedFrameIds[tf.id]) {
-                    checkedFrameIds[tf.id] = true;
-                    if (tf.overflows) {
-                        var bounds = tf.geometricBounds;
-                        var attempts = 0;
-                        while (tf.overflows && attempts < 20) { 
-                            bounds[2] += 5; 
-                            tf.geometricBounds = bounds;
-                            attempts++;
-                        }
-                        globalStats.fittedFrames++;
-                    }
+                var copyfitFrame = getSmartCopyfitTargetFrame(tf);
+                if (!copyfitFrame || !copyfitFrame.isValid) copyfitFrame = tf;
+
+                var copyfitKey = "";
+                try {
+                    if (copyfitFrame.parentStory && copyfitFrame.parentStory.isValid) copyfitKey = "story:" + copyfitFrame.parentStory.id;
+                } catch (e2) { copyfitKey = ""; }
+                if (copyfitKey === "") {
+                    try { copyfitKey = "frame:" + copyfitFrame.id; } catch (e3) { copyfitKey = "frame:" + i + ":" + j; }
+                }
+
+                if (!checkedCopyfitKeys[copyfitKey]) {
+                    checkedCopyfitKeys[copyfitKey] = true;
+                    var copyfitResult = applySmartCopyfit(copyfitFrame);
+                    if (copyfitResult.attempted && copyfitResult.resolved) globalStats.fittedFrames++;
                 }
             }
         }
