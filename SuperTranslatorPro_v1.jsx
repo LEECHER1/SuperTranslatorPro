@@ -3600,26 +3600,53 @@ btnSettings.onClick = function() {
     dntInput.characters = 40;
     dntInput.alignment = "fill";
 
+    function createCompactTypographyRow(parent, leftConfig, rightConfig) {
+        var row = parent.add("group");
+        row.orientation = "row";
+        row.alignment = "fill";
+        row.alignChildren = ["fill", "top"];
+        row.spacing = 14;
+
+        var leftField = createSettingsField(row, leftConfig.label, leftConfig.value, leftConfig.chars || 8);
+        leftField.label.helpTip = leftConfig.help || "";
+        leftField.input.helpTip = leftConfig.help || "";
+
+        var rightField = null;
+        if (rightConfig) {
+            rightField = createSettingsField(row, rightConfig.label, rightConfig.value, rightConfig.chars || 8);
+            rightField.label.helpTip = rightConfig.help || "";
+            rightField.input.helpTip = rightConfig.help || "";
+        }
+
+        return { left: leftField, right: rightField };
+    }
+
     var copyfitEnabledCheckbox = typographyCopyfitSection.add("checkbox", undefined, t("copyfit_enabled"));
     copyfitEnabledCheckbox.value = !!smartCopyfitEnabled;
     copyfitEnabledCheckbox.helpTip = t("copyfit_enabled_help");
-    typographyCopyfitSection.add("statictext", undefined, t("copyfit_enabled_help"), { multiline: true }).preferredSize.width = 640;
 
-    var copyfitTrackingField = createSettingsField(typographyCopyfitSection, t("copyfit_max_tracking"), String(smartCopyfitMaxTracking), 8);
-    copyfitTrackingField.input.helpTip = t("copyfit_tracking_help");
-    copyfitTrackingField.group.add("statictext", undefined, t("copyfit_tracking_help"), { multiline: true }).preferredSize.width = 640;
+    var copyfitCompactHint = typographyCopyfitSection.add("statictext", undefined, t("copyfit_enabled_help"), { multiline: true });
+    copyfitCompactHint.preferredSize.width = 640;
 
-    var copyfitScaleField = createSettingsField(typographyCopyfitSection, t("copyfit_min_scale"), String(smartCopyfitMinScale), 8);
-    copyfitScaleField.input.helpTip = t("copyfit_scale_help");
-    copyfitScaleField.group.add("statictext", undefined, t("copyfit_scale_help"), { multiline: true }).preferredSize.width = 640;
+    var copyfitGrid = typographyCopyfitSection.add("group");
+    copyfitGrid.orientation = "column";
+    copyfitGrid.alignment = "fill";
+    copyfitGrid.alignChildren = ["fill", "top"];
+    copyfitGrid.spacing = 10;
 
-    var copyfitTrackingStepField = createSettingsField(typographyCopyfitSection, t("copyfit_tracking_step"), String(smartCopyfitTrackingStep), 8);
-    copyfitTrackingStepField.input.helpTip = t("copyfit_tracking_step_help");
-    copyfitTrackingStepField.group.add("statictext", undefined, t("copyfit_tracking_step_help"), { multiline: true }).preferredSize.width = 640;
+    var copyfitLimitsRow = createCompactTypographyRow(copyfitGrid,
+        { label: t("copyfit_max_tracking"), value: String(smartCopyfitMaxTracking), chars: 8, help: t("copyfit_tracking_help") },
+        { label: t("copyfit_min_scale"), value: String(smartCopyfitMinScale), chars: 8, help: t("copyfit_scale_help") }
+    );
+    var copyfitTrackingField = copyfitLimitsRow.left;
+    var copyfitScaleField = copyfitLimitsRow.right;
 
-    var copyfitScaleStepField = createSettingsField(typographyCopyfitSection, t("copyfit_scale_step"), String(smartCopyfitScaleStep), 8);
-    copyfitScaleStepField.input.helpTip = t("copyfit_scale_step_help");
-    copyfitScaleStepField.group.add("statictext", undefined, t("copyfit_scale_step_help"), { multiline: true }).preferredSize.width = 640;
+    var copyfitStepsRow = createCompactTypographyRow(copyfitGrid,
+        { label: t("copyfit_tracking_step"), value: String(smartCopyfitTrackingStep), chars: 8, help: t("copyfit_tracking_step_help") },
+        { label: t("copyfit_scale_step"), value: String(smartCopyfitScaleStep), chars: 8, help: t("copyfit_scale_step_help") }
+    );
+    var copyfitTrackingStepField = copyfitStepsRow.left;
+    var copyfitScaleStepField = copyfitStepsRow.right;
 
     var copyfitHint = typographyCopyfitSection.add("statictext", undefined, t("copyfit_settings_help"), { multiline: true });
     copyfitHint.preferredSize.width = 640;
@@ -3627,14 +3654,18 @@ btnSettings.onClick = function() {
     var fontFallbackEnabledCheckbox = typographyFontFallbackSection.add("checkbox", undefined, t("font_fallback_enabled"));
     fontFallbackEnabledCheckbox.value = !!fontFallbackEnabled;
     fontFallbackEnabledCheckbox.helpTip = t("font_fallback_enabled_help");
-    typographyFontFallbackSection.add("statictext", undefined, t("font_fallback_enabled_help"), { multiline: true }).preferredSize.width = 640;
+
+    var fontFallbackHint = typographyFontFallbackSection.add("statictext", undefined, t("font_fallback_enabled_help"), { multiline: true });
+    fontFallbackHint.preferredSize.width = 640;
 
     typographyFontFallbackSection.add("statictext", undefined, t("font_fallback_rules"));
     var fontFallbackRulesInput = typographyFontFallbackSection.add("edittext", undefined, fontFallbackRulesSetting, { multiline: true, scrolling: true });
     fontFallbackRulesInput.alignment = ["fill", "top"];
-    fontFallbackRulesInput.preferredSize = [640, 210];
+    fontFallbackRulesInput.preferredSize = [640, 120];
     fontFallbackRulesInput.helpTip = t("font_fallback_rules_help");
-    typographyFontFallbackSection.add("statictext", undefined, t("font_fallback_rules_help"), { multiline: true }).preferredSize.width = 640;
+
+    var fontFallbackRulesHelpText = typographyFontFallbackSection.add("statictext", undefined, t("font_fallback_rules_help"), { multiline: true });
+    fontFallbackRulesHelpText.preferredSize.width = 640;
 
     function refreshTypographySettingsUI() {
         var copyfitEnabled = !!copyfitEnabledCheckbox.value;
