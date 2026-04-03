@@ -218,6 +218,8 @@ var UI_STRINGS = {
     german_check_progress: { de: "Prüfe Dokumentseiten mit deutscher Musterseite: Text {current} von {total}...", en: "Checking document pages based on the German master: text {current} of {total}..." },
     german_check_ok: { de: "Korrekturprüfung für Dokumentseiten mit deutscher Musterseite abgeschlossen. Keine Änderungen vorgeschlagen.", en: "Correction check for document pages based on the German master completed. No changes suggested." },
     german_check_notice_skipped: { de: "\n\nHinweis: {count} Textblöcke konnten nicht geprüft werden.", en: "\n\nNote: {count} text block(s) could not be checked." },
+    german_check_notice_skipped_with_reason: { de: "\n\nHinweis: {count} Textblöcke konnten nicht geprüft werden.\nGrund: {reason}", en: "\n\nNote: {count} text block(s) could not be checked.\nReason: {reason}" },
+    german_check_failed_all_skipped: { de: "Die Deutsch-Prüfung konnte nicht ausgeführt werden.\n\nAlle {count} Textblöcke wurden übersprungen.\nGrund: {reason}\n\nDie Funktion nutzt LanguageTool per externem Aufruf.", en: "The German check could not be completed.\n\nAll {count} text block(s) were skipped.\nReason: {reason}\n\nThis feature uses LanguageTool via an external call." },
     german_dialog_done: { de: "Korrekturdialog beendet.\nErsetzt: {replaced}\nÜbersprungen: {skipped}", en: "Correction dialog finished.\nReplaced: {replaced}\nSkipped: {skipped}" },
     german_dialog_done_stopped: { de: "\nVorzeitig beendet.", en: "\nStopped early." },
     progress_title: { de: "Übersetzung läuft...", en: "Translation in Progress..." },
@@ -4266,6 +4268,7 @@ function runMasterSpellingCheck(doc) {
 
     var corrections = [];
     var skippedTexts = 0;
+    var firstCheckError = "";
 
     for (var i = 0; i < targets.length; i++) {
         var item = targets[i];
@@ -4276,6 +4279,7 @@ function runMasterSpellingCheck(doc) {
             var response = runLanguageToolGermanFrameCheck(item.text);
             if (!response.ok || !response.data) {
                 skippedTexts++;
+                if (!firstCheckError && response && response.error) firstCheckError = String(response.error);
                 continue;
             }
             var matches = response.data.matches || [];
@@ -4283,14 +4287,23 @@ function runMasterSpellingCheck(doc) {
             if (correction) corrections.push(correction);
         } catch (e) {
             skippedTexts++;
+            if (!firstCheckError) firstCheckError = (e && e.message) ? String(e.message) : String(e);
         }
     }
 
     progressWin.close();
 
     if (corrections.length === 0) {
+        if (skippedTexts === targets.length && firstCheckError !== "") {
+            alert(t("german_check_failed_all_skipped", { count: skippedTexts, reason: firstCheckError }));
+            return;
+        }
         var okMessage = t("german_check_ok");
-        if (skippedTexts > 0) okMessage += t("german_check_notice_skipped", { count: skippedTexts });
+        if (skippedTexts > 0) {
+            okMessage += firstCheckError !== ""
+                ? t("german_check_notice_skipped_with_reason", { count: skippedTexts, reason: firstCheckError })
+                : t("german_check_notice_skipped", { count: skippedTexts });
+        }
         alert(okMessage);
         return;
     }
