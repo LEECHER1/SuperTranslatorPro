@@ -23,8 +23,11 @@ var HYPERLINK_PAGE_MAP_LABEL = "SuperTranslatorPRO_HyperlinkPageMap";
 var AUTO_HYPERLINKS_LABEL = "SuperTranslatorPRO_BDAAutoHyperlinks";
 var BACK_PAGE_TRACKER_LABEL = "SuperTranslatorPRO_BackPageTracker";
 var UI_LANGUAGE_LABEL = "SuperTranslatorPRO_UILanguage";
+var COPYFIT_ENABLED_LABEL = "SuperTranslatorPRO_CopyfitEnabled";
 var COPYFIT_MAX_TRACKING_LABEL = "SuperTranslatorPRO_CopyfitMaxTracking";
 var COPYFIT_MIN_SCALE_LABEL = "SuperTranslatorPRO_CopyfitMinScale";
+var COPYFIT_TRACKING_STEP_LABEL = "SuperTranslatorPRO_CopyfitTrackingStep";
+var COPYFIT_SCALE_STEP_LABEL = "SuperTranslatorPRO_CopyfitScaleStep";
 
 function detectUILanguage() {
     var localeText = "";
@@ -59,6 +62,24 @@ function normalizeCopyfitMinScaleSetting(value) {
     var parsed = Math.round(parseCopyfitNumericSetting(value, 98));
     if (parsed > 100) parsed = 100;
     if (parsed < 50) parsed = 50;
+    return parsed;
+}
+
+function normalizeCopyfitEnabledSetting(value) {
+    return String(value || "1") !== "0";
+}
+
+function normalizeCopyfitTrackingStepSetting(value) {
+    var parsed = Math.round(parseCopyfitNumericSetting(value, 2));
+    if (parsed < 1) parsed = 1;
+    if (parsed > 20) parsed = 20;
+    return parsed;
+}
+
+function normalizeCopyfitScaleStepSetting(value) {
+    var parsed = Math.round(parseCopyfitNumericSetting(value, 1));
+    if (parsed < 1) parsed = 1;
+    if (parsed > 10) parsed = 10;
     return parsed;
 }
 
@@ -179,12 +200,20 @@ var UI_STRINGS = {
     formality_formal: { de: "Formell (Sie)", en: "Formal" },
     formality_informal: { de: "Informell (Du)", en: "Informal" },
     ignored_styles: { de: "Ignorierte Absatz-/Zeichenformate (DNT, kommagetrennt):", en: "Ignored paragraph/character styles (DNT, comma-separated):" },
+    copyfit_enabled: { de: "Smart Copyfit aktivieren", en: "Enable smart copyfit" },
     copyfit_max_tracking: { de: "Smart Copyfit: Tracking bis", en: "Smart copyfit: tracking down to" },
     copyfit_min_scale: { de: "Smart Copyfit: Horizontal Scale bis", en: "Smart copyfit: horizontal scale down to" },
+    copyfit_tracking_step: { de: "Smart Copyfit: Tracking-Schrittweite", en: "Smart copyfit: tracking step size" },
+    copyfit_scale_step: { de: "Smart Copyfit: Scale-Schrittweite", en: "Smart copyfit: scale step size" },
+    copyfit_enabled_help: { de: "Wenn deaktiviert, wird nach der Übersetzung keine automatische Copyfitting-Korrektur ausgeführt.", en: "When disabled, no automatic copyfitting correction runs after translation." },
     copyfit_tracking_help: { de: "Negativer Tracking-Grenzwert fuer die automatische Verdichtung. Standard: -10.", en: "Negative tracking limit for automatic tightening. Default: -10." },
     copyfit_scale_help: { de: "Kleinster erlaubter Horizontal-Scale-Wert in Prozent. Standard: 98%.", en: "Minimum allowed horizontal-scale value in percent. Default: 98%." },
+    copyfit_tracking_step_help: { de: "Um wie viele Tracking-Einheiten pro Schritt reduziert wird. Standard: 2.", en: "How many tracking units are reduced per step. Default: 2." },
+    copyfit_scale_step_help: { de: "Um wie viele Prozentpunkte die Horizontal Scale pro Schritt reduziert wird. Standard: 1.", en: "How many percentage points horizontal scale is reduced per step. Default: 1." },
     copyfit_settings_help: { de: "Smart Copyfit arbeitet zuerst mit Tracking, dann mit Horizontal Scale und erst danach mit Rahmenwachstum. Diese zwei Werte steuern die typografische Verdichtung.", en: "Smart copyfit adjusts tracking first, then horizontal scale, and only after that grows the frame. These two values control the typographic tightening." },
-    settings_copyfit_summary: { de: "Copyfit: Tracking bis {tracking}, Scale bis {scale}%", en: "Copyfit: tracking to {tracking}, scale to {scale}%" },
+    settings_copyfit_summary: { de: "Copyfit: {enabled}, Tracking bis {tracking} in {trackingStep}er Schritten, Scale bis {scale}% in {scaleStep}% Schritten", en: "Copyfit: {enabled}, tracking to {tracking} in steps of {trackingStep}, scale to {scale}% in steps of {scaleStep}%" },
+    settings_copyfit_enabled_on: { de: "an", en: "on" },
+    settings_copyfit_enabled_off: { de: "aus", en: "off" },
     memory_path: { de: "Netzwerk-Memory (JSON Pfad):", en: "Network memory (JSON path):" },
     memory_select: { de: "Bitte wähle die Memory JSON-Datei aus", en: "Please choose the memory JSON file" },
     memory_save_new: { de: "Speicherort für neues Memory wählen", en: "Choose a location for a new memory file" },
@@ -1126,8 +1155,11 @@ var DEBUG_TABLE_RESTORE_LABEL = "SuperTranslatorPRO_DebugTableRestore";
 var formalitySetting = app.extractLabel(FORMALITY_LABEL) || "default";
 var dntStyles = app.extractLabel(DNT_LABEL) || "";
 var tableRestoreDebugEnabled = (app.extractLabel(DEBUG_TABLE_RESTORE_LABEL) === "1");
+var smartCopyfitEnabled = normalizeCopyfitEnabledSetting(app.extractLabel(COPYFIT_ENABLED_LABEL) || "1");
 var smartCopyfitMaxTracking = normalizeCopyfitMaxTrackingSetting(app.extractLabel(COPYFIT_MAX_TRACKING_LABEL) || "-10");
 var smartCopyfitMinScale = normalizeCopyfitMinScaleSetting(app.extractLabel(COPYFIT_MIN_SCALE_LABEL) || "98");
+var smartCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(app.extractLabel(COPYFIT_TRACKING_STEP_LABEL) || "2");
+var smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(app.extractLabel(COPYFIT_SCALE_STEP_LABEL) || "1");
 
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
 var progressWin, progressBar, progressText;
@@ -3243,6 +3275,11 @@ btnSettings.onClick = function() {
     dntInput.characters = 40;
     dntInput.alignment = "fill";
 
+    var copyfitEnabledCheckbox = typographyCopyfitSection.add("checkbox", undefined, t("copyfit_enabled"));
+    copyfitEnabledCheckbox.value = !!smartCopyfitEnabled;
+    copyfitEnabledCheckbox.helpTip = t("copyfit_enabled_help");
+    typographyCopyfitSection.add("statictext", undefined, t("copyfit_enabled_help"), { multiline: true }).preferredSize.width = 640;
+
     var copyfitTrackingField = createSettingsField(typographyCopyfitSection, t("copyfit_max_tracking"), String(smartCopyfitMaxTracking), 8);
     copyfitTrackingField.input.helpTip = t("copyfit_tracking_help");
     copyfitTrackingField.group.add("statictext", undefined, t("copyfit_tracking_help"), { multiline: true }).preferredSize.width = 640;
@@ -3251,8 +3288,26 @@ btnSettings.onClick = function() {
     copyfitScaleField.input.helpTip = t("copyfit_scale_help");
     copyfitScaleField.group.add("statictext", undefined, t("copyfit_scale_help"), { multiline: true }).preferredSize.width = 640;
 
+    var copyfitTrackingStepField = createSettingsField(typographyCopyfitSection, t("copyfit_tracking_step"), String(smartCopyfitTrackingStep), 8);
+    copyfitTrackingStepField.input.helpTip = t("copyfit_tracking_step_help");
+    copyfitTrackingStepField.group.add("statictext", undefined, t("copyfit_tracking_step_help"), { multiline: true }).preferredSize.width = 640;
+
+    var copyfitScaleStepField = createSettingsField(typographyCopyfitSection, t("copyfit_scale_step"), String(smartCopyfitScaleStep), 8);
+    copyfitScaleStepField.input.helpTip = t("copyfit_scale_step_help");
+    copyfitScaleStepField.group.add("statictext", undefined, t("copyfit_scale_step_help"), { multiline: true }).preferredSize.width = 640;
+
     var copyfitHint = typographyCopyfitSection.add("statictext", undefined, t("copyfit_settings_help"), { multiline: true });
     copyfitHint.preferredSize.width = 640;
+
+    function refreshTypographySettingsUI() {
+        var enabled = !!copyfitEnabledCheckbox.value;
+        copyfitTrackingField.input.enabled = enabled;
+        copyfitScaleField.input.enabled = enabled;
+        copyfitTrackingStepField.input.enabled = enabled;
+        copyfitScaleStepField.input.enabled = enabled;
+        try { typographyCopyfitSection.layout.layout(true); } catch (typographyLayoutErr) {}
+        try { setWin.layout.layout(true); } catch (typographyWinLayoutErr) {}
+    }
 
     createDialogHint(autoTab, t("settings_tab_auto_hint"));
     var autoSection = createSettingsSection(autoTab, t("settings_section_auto_options"));
@@ -3273,14 +3328,23 @@ btnSettings.onClick = function() {
     function refreshSettingsOverview() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
         var selectedProviderId = providerIds[selectedProviderIndex] || "deepl";
+        var draftCopyfitEnabled = !!copyfitEnabledCheckbox.value;
         var draftCopyfitTracking = normalizeCopyfitMaxTrackingSetting(copyfitTrackingField.input.text);
         var draftCopyfitScale = normalizeCopyfitMinScaleSetting(copyfitScaleField.input.text);
+        var draftCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(copyfitTrackingStepField.input.text);
+        var draftCopyfitScaleStep = normalizeCopyfitScaleStepSetting(copyfitScaleStepField.input.text);
         settingsOverviewText.text =
             t("status_provider") + " " + getTranslationProviderDisplayName(selectedProviderId) +
             "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvInput.text) + "\n" +
             t("status_memory") + " " + getStatusPathLabel(tmInput.text) +
             "   |   " + t("status_symbols") + " " + normalizeRefSymbols(autoHyperlinkSymbolsInput.text) + "\n" +
-            t("settings_copyfit_summary", { tracking: draftCopyfitTracking, scale: draftCopyfitScale }) + "\n" +
+            t("settings_copyfit_summary", {
+                enabled: draftCopyfitEnabled ? t("settings_copyfit_enabled_on") : t("settings_copyfit_enabled_off"),
+                tracking: draftCopyfitTracking,
+                trackingStep: draftCopyfitTrackingStep,
+                scale: draftCopyfitScale,
+                scaleStep: draftCopyfitScaleStep
+            }) + "\n" +
             t("settings_ui_language") + " " + buildUILanguageSettingOptions()[(uiLanguageDrop.selection && uiLanguageDrop.selection.index >= 0) ? uiLanguageDrop.selection.index : 0];
     }
 
@@ -3292,9 +3356,16 @@ btnSettings.onClick = function() {
     csvInput.onChanging = refreshSettingsOverview;
     tmInput.onChanging = refreshSettingsOverview;
     autoHyperlinkSymbolsInput.onChanging = refreshSettingsOverview;
+    copyfitEnabledCheckbox.onClick = function() {
+        refreshTypographySettingsUI();
+        refreshSettingsOverview();
+    };
     copyfitTrackingField.input.onChanging = refreshSettingsOverview;
     copyfitScaleField.input.onChanging = refreshSettingsOverview;
+    copyfitTrackingStepField.input.onChanging = refreshSettingsOverview;
+    copyfitScaleStepField.input.onChanging = refreshSettingsOverview;
     uiLanguageDrop.onChange = refreshSettingsOverview;
+    refreshTypographySettingsUI();
     refreshSettingsOverview();
 
     var g = setWin.add("group");
@@ -3343,8 +3414,11 @@ btnSettings.onClick = function() {
         tmPath = tmInput.text;
         refSymbolsSetting = normalizeRefSymbols(autoHyperlinkSymbolsInput.text);
         backPageTrackerSetting = normalizeBackPageTrackerSetting(backPageTrackerInput.text);
+        smartCopyfitEnabled = !!copyfitEnabledCheckbox.value;
         smartCopyfitMaxTracking = normalizeCopyfitMaxTrackingSetting(copyfitTrackingField.input.text);
         smartCopyfitMinScale = normalizeCopyfitMinScaleSetting(copyfitScaleField.input.text);
+        smartCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(copyfitTrackingStepField.input.text);
+        smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(copyfitScaleStepField.input.text);
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(OPENAI_KEY_LABEL, openAIKey);
         app.insertLabel(OPENAI_MODEL_LABEL, openAIModel);
@@ -3360,8 +3434,11 @@ btnSettings.onClick = function() {
         app.insertLabel(TM_PATH_LABEL, tmPath); 
         app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
         app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
+        app.insertLabel(COPYFIT_ENABLED_LABEL, smartCopyfitEnabled ? "1" : "0");
         app.insertLabel(COPYFIT_MAX_TRACKING_LABEL, String(smartCopyfitMaxTracking));
         app.insertLabel(COPYFIT_MIN_SCALE_LABEL, String(smartCopyfitMinScale));
+        app.insertLabel(COPYFIT_TRACKING_STEP_LABEL, String(smartCopyfitTrackingStep));
+        app.insertLabel(COPYFIT_SCALE_STEP_LABEL, String(smartCopyfitScaleStep));
         app.insertLabel(UI_LANGUAGE_LABEL, normalizeUILanguageSetting(selectedUILanguage));
         tableRestoreDebugEnabled = !!debugTableRestoreCheckbox.value;
         app.insertLabel(DEBUG_TABLE_RESTORE_LABEL, tableRestoreDebugEnabled ? "1" : "0");
@@ -6213,8 +6290,11 @@ function createFeedbackReport() {
             reportFile.writeln("Referenz-Symbole: " + (refSymbolsSetting || "[]"));
             reportFile.writeln("Formality: " + (formalitySetting || "default"));
             reportFile.writeln("DNT Styles: " + (dntStyles || "(leer)"));
+            reportFile.writeln("Copyfit aktiv: " + (smartCopyfitEnabled ? "Ja" : "Nein"));
             reportFile.writeln("Copyfit Tracking bis: " + smartCopyfitMaxTracking);
             reportFile.writeln("Copyfit Scale bis: " + smartCopyfitMinScale + "%");
+            reportFile.writeln("Copyfit Tracking-Schrittweite: " + smartCopyfitTrackingStep);
+            reportFile.writeln("Copyfit Scale-Schrittweite: " + smartCopyfitScaleStep + "%");
             reportFile.writeln("Debug Tabellen/Bilder: " + (tableRestoreDebugEnabled ? "Ja" : "Nein"));
             reportFile.writeln("Debug-Log Pfad: " + debugLogPath);
             reportFile.writeln("\n--- Bitte hier beschreiben: \n");
@@ -6655,6 +6735,11 @@ function applySmartCopyfit(textFrame) {
 
     try { result.frameId = targetFrame.id; } catch (e0) {}
 
+    if (!smartCopyfitEnabled) {
+        writeDebugLog("copyfit:frame=" + (result.frameId !== null ? result.frameId : "?") + " disabled=1");
+        return result;
+    }
+
     var hasOverflow = false;
     try { hasOverflow = !!targetFrame.overflows; } catch (e1) { hasOverflow = false; }
     if (!hasOverflow) {
@@ -6664,9 +6749,9 @@ function applySmartCopyfit(textFrame) {
 
     result.attempted = true;
 
-    var trackingStep = 2;
+    var trackingStep = normalizeCopyfitTrackingStepSetting(smartCopyfitTrackingStep);
     var minTracking = normalizeCopyfitMaxTrackingSetting(smartCopyfitMaxTracking);
-    var scaleStep = 1;
+    var scaleStep = normalizeCopyfitScaleStepSetting(smartCopyfitScaleStep);
     var minScale = normalizeCopyfitMinScaleSetting(smartCopyfitMinScale);
     var frameGrowthStep = 5;
     var maxFrameGrowthSteps = 20;
@@ -6755,8 +6840,11 @@ function applySmartCopyfit(textFrame) {
     writeDebugLog(
         "copyfit:frame=" + (result.frameId !== null ? result.frameId : "?") +
         " overflowStart=1" +
+        " enabled=1" +
         " trackingLimit=" + minTracking +
+        " trackingStep=" + trackingStep +
         " scaleLimit=" + minScale +
+        " scaleStep=" + scaleStep +
         " trackingSteps=" + result.trackingSteps +
         " scaleSteps=" + result.scaleSteps +
         " growthSteps=" + result.frameGrowthSteps +
