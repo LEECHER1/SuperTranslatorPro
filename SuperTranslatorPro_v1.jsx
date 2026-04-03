@@ -54,7 +54,7 @@ var UI_STRINGS = {
     auto_mode: { de: "Vollautomatik (BDA)", en: "Full automatic (BDA)" },
     auto_settings: { de: "Automatik-Optionen", en: "Automatic options" },
     original_pages: { de: "Quellseiten:", en: "Source pages:" },
-    auto_source_help: { de: "AUTO sucht selbst nach der deutschen Musterseite über das schwarze Sprachkästchen", en: "AUTO detects the German master via the black language badge" },
+    auto_source_help: { de: "Übersetzt die Quellsprache automatisch in die ausgewählten Sprachen.", en: "Automatically translates the source language into the selected languages." },
     toc_checkbox: { de: "Inhaltsverzeichnis in Klammern aktualisieren", en: "Update table of contents in brackets" },
     auto_hyperlink_checkbox: { de: "Hyperlinks erstellen", en: "Create hyperlinks" },
     auto_hyperlink_symbols: { de: "Klammern/Symbole:", en: "Brackets/symbols:" },
@@ -2086,8 +2086,6 @@ checkTOC.value = true;
 var checkAutoBDAHyperlinks = autoModeGroup.add("checkbox", undefined, t("auto_hyperlink_checkbox"));
 checkAutoBDAHyperlinks.value = autoBDAHyperlinksSetting;
 checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
-var autoHyperlinkHint = autoModeGroup.add("statictext", undefined, t("auto_hyperlink_help"), { multiline: true });
-autoHyperlinkHint.preferredSize.width = 500;
 var cbOnlyTextUpdate = autoModeGroup.add("checkbox", undefined, t("only_text_update"));
 cbOnlyTextUpdate.value = false;
 cbOnlyTextUpdate.enabled = false;
