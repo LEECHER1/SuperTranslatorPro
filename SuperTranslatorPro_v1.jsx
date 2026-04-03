@@ -1074,6 +1074,8 @@ var startTime = 0;
 var germanHighlightState = null;
 var germanFocusState = { activePageKey: null, fittedPageKey: null };
 var germanSpellDialogLocation = null;
+var mainWindowIdleTask = null;
+var mainWindowLiveSignature = "";
 var LEGACY_BDA_LANGUAGE_OPTIONS = [
     { code: "EN", labelDe: "Englisch", labelEn: "English" },
     { code: "FR", labelDe: "Französisch", labelEn: "French" },
@@ -2285,6 +2287,90 @@ function getSelectedLanguageCodeSafe() {
     return extractLanguageCodeFromOption(dropdownLang && dropdownLang.selection ? dropdownLang.selection.text : "");
 }
 
+function getMainWindowSelectionSignature() {
+    var parts = [];
+    try {
+        var selectionItems = app.selection || [];
+        parts.push(String(selectionItems.length));
+        for (var i = 0; i < selectionItems.length && i < 6; i++) {
+            var item = selectionItems[i];
+            var itemSig = "";
+            try { itemSig = (item && item.isValid && item.id !== undefined) ? String(item.id) : ""; } catch (e) { itemSig = ""; }
+            if (itemSig === "") {
+                try { itemSig = item && item.constructor ? String(item.constructor.name) : "item"; } catch (e2) { itemSig = "item"; }
+            }
+            parts.push(itemSig);
+        }
+    } catch (e3) {
+        parts.push("selection-error");
+    }
+    return parts.join(",");
+}
+
+function getMainWindowLiveSignature() {
+    var docSig = "no-doc";
+    try {
+        var doc = app.activeDocument;
+        if (doc && doc.isValid) {
+            try { docSig = "doc:" + String(doc.id); } catch (e) { docSig = "doc:" + String(doc.name || "active"); }
+        }
+    } catch (e2) {}
+    return [
+        docSig,
+        getMainWindowSelectionSignature(),
+        radioSelection && radioSelection.value ? "mode:selection" : (radioPages && radioPages.value ? "mode:pages" : "mode:bda")
+    ].join("|");
+}
+
+function refreshMainWindowLiveState(forceRefresh) {
+    if (!myWindow || !myWindow.visible) return;
+    var liveSignature = getMainWindowLiveSignature();
+    if (!forceRefresh && liveSignature === mainWindowLiveSignature) return;
+    mainWindowLiveSignature = liveSignature;
+    refreshMainStatusUI();
+    refreshMainValidationUI();
+}
+
+function handleMainWindowIdle() {
+    try {
+        refreshMainWindowLiveState(false);
+    } catch (e) {}
+}
+
+function stopMainWindowLiveRefresh() {
+    try {
+        if (mainWindowIdleTask && mainWindowIdleTask.isValid) {
+            try { mainWindowIdleTask.removeEventListener("onIdle", handleMainWindowIdle); } catch (listenerErr) {}
+            try { mainWindowIdleTask.remove(); } catch (removeErr) {}
+        }
+    } catch (e) {}
+    mainWindowIdleTask = null;
+    mainWindowLiveSignature = "";
+}
+
+function ensureMainWindowLiveRefresh() {
+    try {
+        if (mainWindowIdleTask && mainWindowIdleTask.isValid) return;
+    } catch (e) {
+        mainWindowIdleTask = null;
+    }
+    try {
+        var idleTasks = app.idleTasks;
+        for (var i = idleTasks.length - 1; i >= 0; i--) {
+            var idleTask = idleTasks[i];
+            if (!idleTask || !idleTask.isValid) continue;
+            if (String(idleTask.name || "") !== "SuperTranslatorPRO_MainWindowLiveRefresh") continue;
+            try { idleTask.remove(); } catch (cleanupErr) {}
+        }
+    } catch (e2) {}
+    try {
+        mainWindowIdleTask = app.idleTasks.add({ name: "SuperTranslatorPRO_MainWindowLiveRefresh", sleep: 250 });
+        mainWindowIdleTask.addEventListener("onIdle", handleMainWindowIdle);
+    } catch (e3) {
+        mainWindowIdleTask = null;
+    }
+}
+
 function refreshMainStatusUI() {
     var autoLinksEnabled = checkAutoBDAHyperlinks ? !!checkAutoBDAHyperlinks.value : !!autoBDAHyperlinksSetting;
     statusSummaryText.text =
@@ -2505,8 +2591,12 @@ myWindow.onResizing = myWindow.onResize = function() {
     this.layout.resize();
 };
 myWindow.onShow = myWindow.onActivate = function() {
-    refreshMainStatusUI();
-    refreshMainValidationUI();
+    ensureMainWindowLiveRefresh();
+    refreshMainWindowLiveState(true);
+};
+myWindow.onClose = function() {
+    stopMainWindowLiveRefresh();
+    return true;
 };
 
 btnSpellCheck.onClick = function() {
@@ -3145,7 +3235,10 @@ btnSettings.onClick = function() {
     setWin.show();
 };
 
-btnCancel.onClick = function() { myWindow.close(); }
+btnCancel.onClick = function() {
+    stopMainWindowLiveRefresh();
+    myWindow.close();
+}
 
 function isGermanMasterName(name) {
     return getMasterLang(name) === "de";
