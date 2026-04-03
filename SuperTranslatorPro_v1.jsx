@@ -2074,8 +2074,8 @@ myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 myWindow.spacing = 10;
 myWindow.margins = 14;
-myWindow.minimumSize = [780, 420];
-myWindow.preferredSize = [900, 500];
+myWindow.minimumSize = [740, 420];
+myWindow.preferredSize = [860, 500];
 
 var headerGroup = myWindow.add("group");
 headerGroup.orientation = "row";
@@ -2107,29 +2107,29 @@ statusPanel.orientation = "column";
 statusPanel.alignChildren = ["fill", "top"];
 statusPanel.alignment = ["fill", "fill"];
 statusPanel.margins = 12;
-statusPanel.preferredSize.width = 480;
+statusPanel.preferredSize.width = 450;
 var statusSummaryText = statusPanel.add("statictext", undefined, " ", { multiline: true });
-statusSummaryText.preferredSize = [430, 74];
-statusSummaryText.minimumSize = [430, 74];
+statusSummaryText.preferredSize = [400, 74];
+statusSummaryText.minimumSize = [400, 74];
 
 var validationPanel = summaryRow.add("panel", undefined, t("validation_title"));
 validationPanel.orientation = "column";
 validationPanel.alignChildren = ["fill", "top"];
 validationPanel.alignment = ["fill", "fill"];
 validationPanel.margins = 12;
-validationPanel.preferredSize.width = 360;
+validationPanel.preferredSize.width = 330;
 var validationText = validationPanel.add("statictext", undefined, " ", { multiline: true });
-validationText.preferredSize = [320, 68];
-validationText.minimumSize = [320, 68];
+validationText.preferredSize = [290, 68];
+validationText.minimumSize = [290, 68];
 
 var modePanel = myWindow.add("panel", undefined, t("mode_title"));
 modePanel.orientation = "column";
 modePanel.alignChildren = ["left", "top"];
 modePanel.margins = 12;
 var modeOptionsRow = modePanel.add("group");
-modeOptionsRow.orientation = "row";
+modeOptionsRow.orientation = "column";
 modeOptionsRow.alignChildren = ["left", "center"];
-modeOptionsRow.spacing = 18;
+modeOptionsRow.spacing = 8;
 
 var radioSelection = modeOptionsRow.add("radiobutton", undefined, t("selection_mode"));
 var radioPages = modeOptionsRow.add("radiobutton", undefined, t("pages_mode"));
@@ -2140,7 +2140,7 @@ contentPanel.orientation = "column";
 contentPanel.alignChildren = ["fill", "top"];
 contentPanel.margins = 15;
 contentPanel.spacing = 10;
-contentPanel.minimumSize = [700, 160];
+contentPanel.minimumSize = [640, 160];
 
 var selectionModeGroup = contentPanel.add("group");
 selectionModeGroup.orientation = "column";
