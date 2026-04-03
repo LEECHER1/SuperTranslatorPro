@@ -1982,37 +1982,49 @@ var btnSettings = headerGroup.add("button", undefined, t("settings_button"));
 btnSettings.helpTip = t("settings_help");
 btnSettings.preferredSize = [150, 30];
 
-var statusPanel = myWindow.add("panel", undefined, t("status_title"));
+var summaryRow = myWindow.add("group");
+summaryRow.orientation = "row";
+summaryRow.alignment = "fill";
+summaryRow.alignChildren = ["fill", "fill"];
+summaryRow.spacing = 10;
+
+var statusPanel = summaryRow.add("panel", undefined, t("status_title"));
 statusPanel.orientation = "column";
 statusPanel.alignChildren = ["fill", "top"];
+statusPanel.alignment = ["fill", "fill"];
 statusPanel.margins = 12;
 var statusLineTop = statusPanel.add("statictext", undefined, "", { multiline: true });
-statusLineTop.preferredSize.width = 520;
+statusLineTop.preferredSize.width = 245;
 var statusLineBottom = statusPanel.add("statictext", undefined, "", { multiline: true });
-statusLineBottom.preferredSize.width = 520;
+statusLineBottom.preferredSize.width = 245;
+
+var validationPanel = summaryRow.add("panel", undefined, t("validation_title"));
+validationPanel.orientation = "column";
+validationPanel.alignChildren = ["fill", "top"];
+validationPanel.alignment = ["fill", "fill"];
+validationPanel.margins = 12;
+var validationText = validationPanel.add("statictext", undefined, "", { multiline: true });
+validationText.preferredSize.width = 245;
 
 var modePanel = myWindow.add("panel", undefined, t("mode_title"));
 modePanel.orientation = "column";
 modePanel.alignChildren = ["left", "top"];
 modePanel.margins = 12;
+var modeOptionsRow = modePanel.add("group");
+modeOptionsRow.orientation = "row";
+modeOptionsRow.alignChildren = ["left", "center"];
+modeOptionsRow.spacing = 18;
 
-var radioSelection = modePanel.add("radiobutton", undefined, t("selection_mode"));
-var radioPages = modePanel.add("radiobutton", undefined, t("pages_mode"));
-var radioBDA = modePanel.add("radiobutton", undefined, t("auto_mode"));
+var radioSelection = modeOptionsRow.add("radiobutton", undefined, t("selection_mode"));
+var radioPages = modeOptionsRow.add("radiobutton", undefined, t("pages_mode"));
+var radioBDA = modeOptionsRow.add("radiobutton", undefined, t("auto_mode"));
 
 var contentPanel = myWindow.add("panel", undefined, "");
 contentPanel.orientation = "column";
 contentPanel.alignChildren = ["fill", "top"];
 contentPanel.margins = 15;
 contentPanel.spacing = 10;
-contentPanel.minimumSize = [520, 170];
-
-var validationPanel = myWindow.add("panel", undefined, t("validation_title"));
-validationPanel.orientation = "column";
-validationPanel.alignChildren = ["fill", "top"];
-validationPanel.margins = 12;
-var validationText = validationPanel.add("statictext", undefined, "", { multiline: true });
-validationText.preferredSize.width = 520;
+contentPanel.minimumSize = [520, 160];
 
 var selectionModeGroup = contentPanel.add("group");
 selectionModeGroup.orientation = "column";
@@ -2082,15 +2094,19 @@ function updateBDAHyperlinkControls(enabled) {
 var groupButtons = myWindow.add("group");
 groupButtons.alignment = "fill";
 groupButtons.alignChildren = ["left", "center"];
+groupButtons.spacing = 8;
 var btnLinkReferences = groupButtons.add("button", undefined, t("hyperlink_settings_button"));
 btnLinkReferences.helpTip = t("hyperlink_settings_help");
+btnLinkReferences.preferredSize = [130, 28];
 var btnSpellCheck = groupButtons.add("button", undefined, t("spellcheck_button"));
 btnSpellCheck.helpTip = t("spellcheck_help");
+btnSpellCheck.preferredSize = [130, 28];
 var buttonSpacer = groupButtons.add("statictext", undefined, "");
 buttonSpacer.alignment = "fill";
 var btnTranslate = groupButtons.add("button", undefined, t("translate_start"));
-btnTranslate.preferredSize = [160, 30];
+btnTranslate.preferredSize = [180, 32];
 var btnCancel = groupButtons.add("button", undefined, t("close_button"));
+btnCancel.preferredSize = [120, 28];
 
 function setMainGroupVisible(group, isVisible) {
     group.visible = !!isVisible;
@@ -2395,9 +2411,13 @@ function showHyperlinkDialog(doc) {
 
     var hyperlinkButtonGroup = hyperlinkPanel.add("group");
     hyperlinkButtonGroup.alignment = "fill";
+    hyperlinkButtonGroup.spacing = 8;
     var btnSaveHyperlinkMapping = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_save_mapping"));
+    btnSaveHyperlinkMapping.preferredSize = [150, 28];
     var btnRemoveHyperlinkMapping = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_remove_mapping"));
+    btnRemoveHyperlinkMapping.preferredSize = [150, 28];
     var btnReloadFromCover = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_reload_from_cover"));
+    btnReloadFromCover.preferredSize = [170, 28];
 
     hyperlinkPanel.add("statictext", undefined, t("hyperlink_saved_mappings"));
     var hyperlinkMappingsView = hyperlinkPanel.add("listbox", undefined, [], { multiselect: false });
@@ -2507,10 +2527,13 @@ function showHyperlinkDialog(doc) {
 
     var buttonRow = dlg.add("group");
     buttonRow.alignment = "fill";
+    buttonRow.spacing = 10;
     var buttonSpacer = buttonRow.add("statictext", undefined, "");
     buttonSpacer.alignment = "fill";
-    var btnRun = buttonRow.add("button", undefined, t("hyperlink_execute"));
-    var btnClose = buttonRow.add("button", undefined, t("cancel"));
+    var btnRun = buttonRow.add("button", undefined, t("hyperlink_execute"), { name: "ok" });
+    btnRun.preferredSize = [150, 30];
+    var btnClose = buttonRow.add("button", undefined, t("cancel"), { name: "cancel" });
+    btnClose.preferredSize = [120, 28];
 
     btnRun.onClick = function() {
         var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
@@ -2572,6 +2595,7 @@ btnSettings.onClick = function() {
     var topGrp = setWin.add("group");
     topGrp.alignment = "fill";
     topGrp.alignChildren = ["right", "center"];
+    topGrp.spacing = 8;
     var btnLog = topGrp.add("button", undefined, t("log_file"));
     btnLog.preferredSize = [110, 28];
     var btnDebugLog = topGrp.add("button", undefined, t("debug_log_file"));
@@ -2864,9 +2888,11 @@ btnSettings.onClick = function() {
     g.alignment = "fill";
     g.alignChildren = ["fill", "center"];
     g.margins.top = 8;
+    g.spacing = 10;
     
     var leftGrp = g.add("group");
     leftGrp.alignment = "left";
+    leftGrp.spacing = 10;
     var btnClearTM = leftGrp.add("button", undefined, t("clear_memory"));
     btnClearTM.preferredSize = [140, 28];
     var btnFeedbackReport = leftGrp.add("button", undefined, t("feedback_report"));
@@ -2876,13 +2902,12 @@ btnSettings.onClick = function() {
     spacer.alignment = "fill";
     
     var rightGrp = g.add("group");
-    rightGrp.alignment = ["fill", "center"];
+    rightGrp.alignment = ["right", "center"];
     rightGrp.alignChildren = ["right", "center"];
-    var btnSave = rightGrp.add("button", undefined, t("save"));
-    btnSave.preferredSize = [120, 28];
-    var btnSpacer = rightGrp.add("statictext", undefined, "");
-    btnSpacer.alignment = "fill";
-    var btnCancelSet = rightGrp.add("button", undefined, t("cancel"));
+    rightGrp.spacing = 10;
+    var btnSave = rightGrp.add("button", undefined, t("save"), { name: "ok" });
+    btnSave.preferredSize = [130, 30];
+    var btnCancelSet = rightGrp.add("button", undefined, t("cancel"), { name: "cancel" });
     btnCancelSet.preferredSize = [120, 28];
     
     btnSave.onClick = function() {
