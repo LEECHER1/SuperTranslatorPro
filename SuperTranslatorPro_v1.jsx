@@ -80,6 +80,11 @@ var UI_STRINGS = {
     validation_title: { de: "Vor dem Start", en: "Before starting" },
     validation_ready: { de: "Alles ist bereit. Du kannst die Uebersetzung direkt starten.", en: "Everything is ready. You can start the translation now." },
     validation_needs_attention: { de: "Bitte zuerst pruefen:", en: "Please check first:" },
+    selection_state_ready: { de: "Auswahl erkannt. Bereit zum Uebersetzen.", en: "Selection detected. Ready to translate." },
+    pages_state_ready: { de: "Seitenangabe erkannt: {pages}", en: "Page input detected: {pages}" },
+    language_state_ready: { de: "Zielsprache aktiv: {lang}", en: "Active target language: {lang}" },
+    bda_state_ready: { de: "Quellseiten fuer Vollautomatik: {pages}", en: "Source pages for full automation: {pages}" },
+    settings_provider_validation_ready: { de: "Provider-Konfiguration ist vollstaendig.", en: "Provider configuration is complete." },
     settings_overview_title: { de: "Übersicht", en: "Overview" },
     settings_tab_data_hint: { de: "Glossar, Memory und Übersetzungsoptionen gelten dokumentübergreifend.", en: "Glossary, memory, and translation options apply across documents." },
     settings_tab_provider_hint: { de: "Wähle den aktiven Übersetzungsanbieter und hinterlege die passenden Zugangsdaten.", en: "Choose the active translation provider and enter the relevant credentials." },
@@ -2014,6 +2019,8 @@ selectionModeGroup.orientation = "column";
 selectionModeGroup.alignChildren = ["fill", "top"];
 selectionModeGroup.alignment = "fill";
 selectionModeGroup.add("statictext", undefined, t("selection_hint"), { multiline: true }).preferredSize.width = 500;
+var selectionStateText = selectionModeGroup.add("statictext", undefined, "", { multiline: true });
+selectionStateText.preferredSize.width = 500;
 
 var pagesModeGroup = contentPanel.add("group");
 pagesModeGroup.orientation = "column";
@@ -2028,6 +2035,8 @@ editPages.characters = 14;
 editPages.helpTip = t("pages_help");
 var pagesHint = pagesModeGroup.add("statictext", undefined, t("pages_help"));
 pagesHint.preferredSize.width = 500;
+var pagesStateText = pagesModeGroup.add("statictext", undefined, "", { multiline: true });
+pagesStateText.preferredSize.width = 500;
 
 var manualTargetGroup = contentPanel.add("group");
 manualTargetGroup.orientation = "column";
@@ -2038,6 +2047,8 @@ var langList = buildManualLanguageList();
 var dropdownLang = manualTargetGroup.add("dropdownlist", undefined, langList);
 dropdownLang.alignment = "fill";
 dropdownLang.selection = 1;
+var languageStateText = manualTargetGroup.add("statictext", undefined, "", { multiline: true });
+languageStateText.preferredSize.width = 500;
 
 var autoModeGroup = contentPanel.add("group");
 autoModeGroup.orientation = "column";
@@ -2051,6 +2062,8 @@ grpBDASource.add("statictext", undefined, t("original_pages"));
 var bdaSourceInput = grpBDASource.add("edittext", undefined, "AUTO");
 bdaSourceInput.characters = 10;
 bdaSourceInput.helpTip = t("auto_source_help");
+var bdaSourceStateText = autoModeGroup.add("statictext", undefined, "", { multiline: true });
+bdaSourceStateText.preferredSize.width = 500;
 var checkTOC = autoModeGroup.add("checkbox", undefined, t("toc_checkbox"));
 checkTOC.value = true;
 var checkAutoBDAHyperlinks = autoModeGroup.add("checkbox", undefined, t("auto_hyperlink_checkbox"));
@@ -2125,11 +2138,65 @@ function hasDocumentSelectionSafe() {
     }
 }
 
+function getDocumentSelectionCountSafe() {
+    try {
+        return app.selection ? app.selection.length : 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function getSelectedLanguageCodeSafe() {
+    normalizeLanguageDropdownSelection();
+    return extractLanguageCodeFromOption(dropdownLang && dropdownLang.selection ? dropdownLang.selection.text : "");
+}
+
 function refreshMainStatusUI() {
     var autoLinksEnabled = checkAutoBDAHyperlinks ? !!checkAutoBDAHyperlinks.value : !!autoBDAHyperlinksSetting;
     statusLineTop.text = t("status_provider") + " " + getProviderStatusSummaryText() + "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvPath);
     statusLineBottom.text = t("status_memory") + " " + getStatusPathLabel(tmPath) + "   |   " + t("status_links") + " " + (autoLinksEnabled ? t("status_on") : t("status_off")) + "   |   " + t("status_symbols") + " " + normalizeRefSymbols(refSymbolsSetting);
     try { myWindow.layout.layout(true); } catch (layoutErr) {}
+}
+
+function refreshMainInlineHints() {
+    var doc = getActiveDocumentSafe();
+    var hasDoc = !!(doc && doc.isValid);
+    var selectedLangText = dropdownLang && dropdownLang.selection ? dropdownLang.selection.text : "";
+    var selectedLangCode = getSelectedLanguageCodeSafe();
+    var selectionCount = getDocumentSelectionCountSafe();
+    var trimmedPages = String(editPages.text || "").replace(/^\s+|\s+$/g, "");
+    var trimmedBDAPages = String(bdaSourceInput.text || "").replace(/^\s+|\s+$/g, "");
+
+    selectionStateText.text = "";
+    pagesStateText.text = "";
+    languageStateText.text = "";
+    bdaSourceStateText.text = "";
+
+    if (!hasDoc) {
+        selectionStateText.text = t("no_document_open");
+        pagesStateText.text = t("no_document_open");
+        languageStateText.text = t("no_document_open");
+        bdaSourceStateText.text = t("no_document_open");
+        return;
+    }
+
+    if (radioSelection.value) {
+        selectionStateText.text = selectionCount > 0 ? t("selection_state_ready") : t("validation_select_something");
+    }
+
+    if (radioPages.value) {
+        pagesStateText.text = trimmedPages !== "" ? t("pages_state_ready", { pages: trimmedPages }) : t("validation_enter_pages");
+    }
+
+    if (!radioBDA.value) {
+        languageStateText.text = (!selectedLangText || isLanguageSeparatorText(selectedLangText) || selectedLangText.indexOf("-") !== -1)
+            ? t("validation_invalid_lang")
+            : t("language_state_ready", { lang: selectedLangCode });
+    }
+
+    if (radioBDA.value) {
+        bdaSourceStateText.text = trimmedBDAPages !== "" ? t("bda_state_ready", { pages: trimmedBDAPages }) : t("validation_enter_pages_or_auto");
+    }
 }
 
 function getMainValidationIssues() {
@@ -2173,6 +2240,7 @@ function refreshMainValidationUI() {
         validationText.text = t("validation_needs_attention") + "\n- " + issues.join("\n- ");
     }
 
+    refreshMainInlineHints();
     try { myWindow.layout.layout(true); } catch (layoutErr) {}
 }
 
@@ -2664,6 +2732,27 @@ btnSettings.onClick = function() {
     var localLLMBaseURLInput = localProviderFields.inputs.localLLMBaseURL;
     var localLLMApiKeyInput = localProviderFields.inputs.localLLMApiKey;
     var localLLMModelInput = localProviderFields.inputs.localLLMModel;
+    var providerValidationText = providerCredentialsSection.add("statictext", undefined, "", { multiline: true });
+    providerValidationText.preferredSize.width = 640;
+
+    function getDraftProviderValidationMessage() {
+        var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
+        var selectedProviderId = providerIds[selectedProviderIndex] || "deepl";
+        if (selectedProviderId === "openai") return String(openAIKeyInput.text || "").replace(/^\s+|\s+$/g, "") === "" ? t("validation_enter_openai_key") : "";
+        if (selectedProviderId === "gemini") return String(geminiKeyInput.text || "").replace(/^\s+|\s+$/g, "") === "" ? t("validation_enter_gemini_key") : "";
+        if (selectedProviderId === "claude") return String(claudeKeyInput.text || "").replace(/^\s+|\s+$/g, "") === "" ? t("validation_enter_claude_key") : "";
+        if (selectedProviderId === "local") {
+            if (normalizeLocalLLMBaseURL(localLLMBaseURLInput.text) === "") return t("validation_enter_local_llm_base_url");
+            if (normalizeLocalLLMModel(localLLMModelInput.text) === "") return t("validation_enter_local_llm_model");
+            return "";
+        }
+        return String(keyInput.text || "").replace(/^\s+|\s+$/g, "") === "" ? t("validation_enter_deepl_key") : "";
+    }
+
+    function refreshProviderValidationUI() {
+        var validationMessage = getDraftProviderValidationMessage();
+        providerValidationText.text = validationMessage === "" ? t("settings_provider_validation_ready") : validationMessage;
+    }
 
     function refreshProviderSettingsUI() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
@@ -2681,8 +2770,22 @@ btnSettings.onClick = function() {
         try { setWin.layout.layout(true); } catch (winLayoutErr) {}
     }
 
-    providerDrop.onChange = refreshProviderSettingsUI;
+    providerDrop.onChange = function() {
+        refreshProviderSettingsUI();
+        refreshProviderValidationUI();
+    };
+    keyInput.onChanging = refreshProviderValidationUI;
+    openAIKeyInput.onChanging = refreshProviderValidationUI;
+    openAIModelInput.onChanging = refreshProviderValidationUI;
+    geminiKeyInput.onChanging = refreshProviderValidationUI;
+    geminiModelInput.onChanging = refreshProviderValidationUI;
+    claudeKeyInput.onChanging = refreshProviderValidationUI;
+    claudeModelInput.onChanging = refreshProviderValidationUI;
+    localLLMBaseURLInput.onChanging = refreshProviderValidationUI;
+    localLLMApiKeyInput.onChanging = refreshProviderValidationUI;
+    localLLMModelInput.onChanging = refreshProviderValidationUI;
     refreshProviderSettingsUI();
+    refreshProviderValidationUI();
 
     tabs.selection = dataTab;
 
@@ -2749,6 +2852,7 @@ btnSettings.onClick = function() {
 
     providerDrop.onChange = function() {
         refreshProviderSettingsUI();
+        refreshProviderValidationUI();
         refreshSettingsOverview();
     };
     csvInput.onChanging = refreshSettingsOverview;
