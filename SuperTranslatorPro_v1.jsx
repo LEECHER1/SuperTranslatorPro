@@ -117,14 +117,17 @@ var UI_STRINGS = {
     bda_state_ready: { de: "Quellseiten fuer Vollautomatik: {pages}", en: "Source pages for full automation: {pages}" },
     settings_provider_validation_ready: { de: "Provider-Konfiguration ist vollstaendig.", en: "Provider configuration is complete." },
     settings_overview_title: { de: "Übersicht", en: "Overview" },
+    settings_tab_typography: { de: "Typografie", en: "Typography" },
     settings_tab_ui: { de: "UI-Sprache", en: "UI Language" },
     settings_ui_language: { de: "UI-Sprache:", en: "UI language:" },
     settings_ui_language_auto: { de: "Auto (Systemsprache)", en: "Auto (system language)" },
     settings_tab_data_hint: { de: "Glossar, Memory und Übersetzungsoptionen gelten dokumentübergreifend.", en: "Glossary, memory, and translation options apply across documents." },
+    settings_tab_typography_hint: { de: "Hier steuerst du die automatische Copyfitting-Logik und manuelle typografische Grenzen fuer enge Layouts.", en: "Control the automatic copyfitting logic and manual typographic limits for tight layouts here." },
     settings_tab_provider_hint: { de: "Wähle den aktiven Übersetzungsanbieter und hinterlege die passenden Zugangsdaten.", en: "Choose the active translation provider and enter the relevant credentials." },
     settings_tab_auto_hint: { de: "Diese Optionen steuern die BDA-Vollautomatik und das automatische Verlinken.", en: "These options control BDA full automation and automatic hyperlinking." },
     settings_section_resources: { de: "Dateien", en: "Files" },
     settings_section_translation: { de: "Übersetzung", en: "Translation" },
+    settings_section_typography_copyfit: { de: "Smart Copyfit", en: "Smart copyfit" },
     settings_section_provider_setup: { de: "Provider-Auswahl", en: "Provider selection" },
     settings_section_provider_credentials: { de: "Zugangsdaten", en: "Credentials" },
     settings_section_auto_options: { de: "Automatik", en: "Automation" },
@@ -3000,6 +3003,10 @@ btnSettings.onClick = function() {
     providerTab.orientation = "column";
     providerTab.alignChildren = ["fill", "top"];
 
+    var typographyTab = tabs.add("tab", undefined, t("settings_tab_typography"));
+    typographyTab.orientation = "column";
+    typographyTab.alignChildren = ["fill", "top"];
+
     var uiTab = tabs.add("tab", undefined, t("settings_tab_ui"));
     uiTab.orientation = "column";
     uiTab.alignChildren = ["fill", "top"];
@@ -3189,6 +3196,9 @@ btnSettings.onClick = function() {
 
     tabs.selection = dataTab;
 
+    createDialogHint(typographyTab, t("settings_tab_typography_hint"));
+    var typographyCopyfitSection = createSettingsSection(typographyTab, t("settings_section_typography_copyfit"));
+
     var uiSection = createSettingsSection(uiTab, t("settings_tab_ui"));
     var uiLanguageRow = uiSection.add("group");
     uiLanguageRow.alignment = "left";
@@ -3233,15 +3243,15 @@ btnSettings.onClick = function() {
     dntInput.characters = 40;
     dntInput.alignment = "fill";
 
-    var copyfitTrackingField = createSettingsField(dataTranslationSection, t("copyfit_max_tracking"), String(smartCopyfitMaxTracking), 8);
+    var copyfitTrackingField = createSettingsField(typographyCopyfitSection, t("copyfit_max_tracking"), String(smartCopyfitMaxTracking), 8);
     copyfitTrackingField.input.helpTip = t("copyfit_tracking_help");
     copyfitTrackingField.group.add("statictext", undefined, t("copyfit_tracking_help"), { multiline: true }).preferredSize.width = 640;
 
-    var copyfitScaleField = createSettingsField(dataTranslationSection, t("copyfit_min_scale"), String(smartCopyfitMinScale), 8);
+    var copyfitScaleField = createSettingsField(typographyCopyfitSection, t("copyfit_min_scale"), String(smartCopyfitMinScale), 8);
     copyfitScaleField.input.helpTip = t("copyfit_scale_help");
     copyfitScaleField.group.add("statictext", undefined, t("copyfit_scale_help"), { multiline: true }).preferredSize.width = 640;
 
-    var copyfitHint = dataTranslationSection.add("statictext", undefined, t("copyfit_settings_help"), { multiline: true });
+    var copyfitHint = typographyCopyfitSection.add("statictext", undefined, t("copyfit_settings_help"), { multiline: true });
     copyfitHint.preferredSize.width = 640;
 
     createDialogHint(autoTab, t("settings_tab_auto_hint"));
