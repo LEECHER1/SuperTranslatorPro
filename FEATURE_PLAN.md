@@ -4,7 +4,7 @@
 
 ## Aktueller Status
 - **Version:** 28.2
-- **Datum:** 3. April 2026
+- **Datum:** 4. April 2026
 - **Status:** Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Provider-Stabilisierung, Hybrid-Modus, echten InDesign-Tests und UXP-Planung.
 
 ---
@@ -23,6 +23,7 @@
 - [x] Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider
 - [x] Hyperlink-, Einstellungs- und Fortschrittsdialoge visuell überarbeitet und resizable gemacht
 - [x] Intelligente Copyfitting-Logik mit Tracking-, Scale- und Rahmen-Fallback
+- [x] Konfigurierbare Schrift-Fallbacks im Tab `Typografie` fuer nicht-lateinische Zielschriften und kuenftige Sprachskripte
 
 ### Noch offen
 - [ ] Optionaler Hybrid-Modus zwischen DeepL und LLMs
@@ -181,6 +182,7 @@
 ---
 
 ## Änderungslog
+- 4. April 2026: Konfigurierbare Schrift-Fallbacks im Tab `Typografie` ergänzt, inklusive Script-Erkennung und Regeln für z. B. Kyrillisch, Arabisch, Hebräisch, Devanagari und CJK
 - 3. April 2026: `Typografie`-Tab erweitert um Smart-Copyfit Ein/Aus sowie konfigurierbare Tracking- und Scale-Schrittweiten
 - 3. April 2026: Smart-Copyfit-Einstellungen ergänzt, damit Tracking-Limit und minimale Horizontal Scale im Einstellungsdialog manuell anpassbar sind (Default `-10` / `98%`)
 - 3. April 2026: Intelligente Copyfitting-Logik umgesetzt (`applySmartCopyfit`) mit Tracking bis `-10`, Horizontal Scale bis `98%` und Rahmenwachstum als letztem Fallback

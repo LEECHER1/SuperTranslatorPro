@@ -28,6 +28,8 @@ var COPYFIT_MAX_TRACKING_LABEL = "SuperTranslatorPRO_CopyfitMaxTracking";
 var COPYFIT_MIN_SCALE_LABEL = "SuperTranslatorPRO_CopyfitMinScale";
 var COPYFIT_TRACKING_STEP_LABEL = "SuperTranslatorPRO_CopyfitTrackingStep";
 var COPYFIT_SCALE_STEP_LABEL = "SuperTranslatorPRO_CopyfitScaleStep";
+var FONT_FALLBACK_ENABLED_LABEL = "SuperTranslatorPRO_FontFallbackEnabled";
+var FONT_FALLBACK_RULES_LABEL = "SuperTranslatorPRO_FontFallbackRules";
 
 function detectUILanguage() {
     var localeText = "";
@@ -81,6 +83,320 @@ function normalizeCopyfitScaleStepSetting(value) {
     if (parsed < 1) parsed = 1;
     if (parsed > 10) parsed = 10;
     return parsed;
+}
+
+function normalizeMultilineSetting(value) {
+    return String(value === null || value === undefined ? "" : value).replace(/\r\n?/g, "\n");
+}
+
+function normalizeFontFallbackEnabledSetting(value) {
+    return String(value || "1") !== "0";
+}
+
+function normalizeFontFallbackRuleKey(value) {
+    return String(value || "").replace(/^\s+|\s+$/g, "").toUpperCase().replace(/\s+/g, "");
+}
+
+function normalizeFontFallbackRuleValue(value) {
+    var normalized = String(value || "").replace(/^\s+|\s+$/g, "");
+    normalized = normalized.replace(/^["']+/, "").replace(/["']+$/, "");
+    return normalized;
+}
+
+function normalizeFontFallbackRulesSetting(value) {
+    return normalizeMultilineSetting(value);
+}
+
+function encodeFontFallbackRulesSettingForLabel(value) {
+    var normalized = normalizeFontFallbackRulesSetting(value);
+    return normalized === "" ? "__EMPTY__" : normalized;
+}
+
+function decodeFontFallbackRulesSettingFromLabel(value) {
+    var normalized = normalizeFontFallbackRulesSetting(value);
+    if (normalized === "__EMPTY__") return "";
+    if (normalized === "") return buildDefaultFontFallbackRulesSetting();
+    return normalized;
+}
+
+function normalizeFontLookupKey(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+var installedFontFamilyLookupCache = null;
+var parsedFontFallbackRulesCacheRaw = null;
+var parsedFontFallbackRulesCache = {};
+var resolvedFontFallbackFamilyCache = {};
+var fontFallbackWarningCache = {};
+
+function getInstalledFontFamilyLookup() {
+    if (installedFontFamilyLookupCache !== null) return installedFontFamilyLookupCache;
+    var lookup = {};
+    var fonts = [];
+    try { fonts = app.fonts.everyItem().getElements(); } catch (e) {
+        try { fonts = app.fonts; } catch (e2) { fonts = []; }
+    }
+    for (var i = 0; i < fonts.length; i++) {
+        var font = fonts[i];
+        if (!font) continue;
+        var family = "";
+        var name = "";
+        var fullName = "";
+        try { family = String(font.fontFamily || ""); } catch (familyErr) { family = ""; }
+        try { name = String(font.name || ""); } catch (nameErr) { name = ""; }
+        try { fullName = String(font.fullName || ""); } catch (fullNameErr) { fullName = ""; }
+        if (family !== "") lookup[normalizeFontLookupKey(family)] = family;
+        if (name !== "" && family !== "" && !lookup[normalizeFontLookupKey(name)]) lookup[normalizeFontLookupKey(name)] = family;
+        if (fullName !== "" && family !== "" && !lookup[normalizeFontLookupKey(fullName)]) lookup[normalizeFontLookupKey(fullName)] = family;
+    }
+    installedFontFamilyLookupCache = lookup;
+    return lookup;
+}
+
+function resolveInstalledFontFamily(fontName) {
+    var requested = normalizeFontFallbackRuleValue(fontName);
+    if (requested === "") return "";
+    var cacheKey = normalizeFontLookupKey(requested);
+    if (resolvedFontFallbackFamilyCache.hasOwnProperty(cacheKey)) return resolvedFontFallbackFamilyCache[cacheKey];
+    var lookup = getInstalledFontFamilyLookup();
+    var resolved = lookup[cacheKey] || "";
+    resolvedFontFallbackFamilyCache[cacheKey] = resolved;
+    return resolved;
+}
+
+function pickInstalledFontFamily(candidates) {
+    for (var i = 0; i < candidates.length; i++) {
+        var resolved = resolveInstalledFontFamily(candidates[i]);
+        if (resolved !== "") return resolved;
+    }
+    return "";
+}
+
+function getDefaultFontFallbackRuleDefinitions() {
+    return [
+        { key: "CYRILLIC", candidates: ["Arial", "Arial MT", "Helvetica Neue", "Segoe UI", "Noto Sans"] },
+        { key: "GREEK", candidates: ["Arial", "Arial MT", "Helvetica Neue", "Segoe UI", "Noto Sans"] },
+        { key: "ARABIC", candidates: ["Geeza Pro", "Adobe Arabic", "Arial", "Arial Unicode MS", "Tahoma", "Segoe UI", "Noto Sans Arabic", "Noto Naskh Arabic"] },
+        { key: "HEBREW", candidates: ["Arial Hebrew", "Arial", "Tahoma", "Segoe UI", "Noto Sans Hebrew"] },
+        { key: "DEVANAGARI", candidates: ["Kohinoor Devanagari", "Nirmala UI", "Mangal", "Noto Sans Devanagari"] },
+        { key: "THAI", candidates: ["Thonburi", "Leelawadee UI", "Tahoma", "Noto Sans Thai"] },
+        { key: "ARMENIAN", candidates: ["Mshtakan", "Arial Unicode MS", "Noto Sans Armenian"] },
+        { key: "GEORGIAN", candidates: ["Helvetica Neue", "Sylfaen", "Arial Unicode MS", "Noto Sans Georgian"] },
+        { key: "BENGALI", candidates: ["Bangla MN", "Nirmala UI", "Vrinda", "Noto Sans Bengali"] },
+        { key: "GURMUKHI", candidates: ["Raavi", "Noto Sans Gurmukhi"] },
+        { key: "GUJARATI", candidates: ["Gujarati MT", "Shruti", "Noto Sans Gujarati"] },
+        { key: "TAMIL", candidates: ["Tamil MN", "Latha", "Noto Sans Tamil"] },
+        { key: "TELUGU", candidates: ["Kohinoor Telugu", "Gautami", "Noto Sans Telugu"] },
+        { key: "KANNADA", candidates: ["Kohinoor Kannada", "Tunga", "Noto Sans Kannada"] },
+        { key: "MALAYALAM", candidates: ["Malayalam MN", "Kartika", "Noto Sans Malayalam"] },
+        { key: "SINHALA", candidates: ["Sinhala MN", "Iskoola Pota", "Noto Sans Sinhala"] },
+        { key: "LAO", candidates: ["Lao MN", "DokChampa", "Noto Sans Lao"] },
+        { key: "JA", candidates: ["Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Noto Sans CJK JP"] },
+        { key: "ZH", candidates: ["PingFang SC", "PingFang TC", "Microsoft YaHei", "SimSun", "Noto Sans CJK SC"] },
+        { key: "KO", candidates: ["Apple SD Gothic Neo", "Malgun Gothic", "NanumGothic", "Noto Sans CJK KR"] },
+        { key: "CJK", candidates: ["PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", "Microsoft YaHei", "Yu Gothic", "Malgun Gothic", "Noto Sans CJK SC"] }
+    ];
+}
+
+function buildDefaultFontFallbackRulesSetting() {
+    var defs = getDefaultFontFallbackRuleDefinitions();
+    var lines = [];
+    for (var i = 0; i < defs.length; i++) {
+        lines.push(defs[i].key + "=" + pickInstalledFontFamily(defs[i].candidates));
+    }
+    return lines.join("\n");
+}
+
+function parseFontFallbackRules(rawValue) {
+    var text = normalizeFontFallbackRulesSetting(rawValue);
+    var lines = text.split("\n");
+    var parsed = {};
+    for (var i = 0; i < lines.length; i++) {
+        var line = String(lines[i] || "").replace(/^\s+|\s+$/g, "");
+        if (line === "" || line.indexOf("#") === 0 || line.indexOf("//") === 0 || line.indexOf(";") === 0) continue;
+        var separatorIndex = line.indexOf("=");
+        if (separatorIndex < 0) separatorIndex = line.indexOf(":");
+        if (separatorIndex < 0) continue;
+        var key = normalizeFontFallbackRuleKey(line.substring(0, separatorIndex));
+        var value = normalizeFontFallbackRuleValue(line.substring(separatorIndex + 1));
+        if (key === "") continue;
+        if (value === "") {
+            delete parsed[key];
+        } else {
+            parsed[key] = value;
+        }
+    }
+    return parsed;
+}
+
+function getParsedFontFallbackRules() {
+    var raw = normalizeFontFallbackRulesSetting(fontFallbackRulesSetting);
+    if (parsedFontFallbackRulesCacheRaw !== raw) {
+        parsedFontFallbackRulesCacheRaw = raw;
+        parsedFontFallbackRulesCache = parseFontFallbackRules(raw);
+        fontFallbackWarningCache = {};
+    }
+    return parsedFontFallbackRulesCache;
+}
+
+function countConfiguredFontFallbackRules(rawValue) {
+    var parsed = parseFontFallbackRules(rawValue);
+    var count = 0;
+    for (var key in parsed) {
+        if (!parsed.hasOwnProperty(key)) continue;
+        count++;
+    }
+    return count;
+}
+
+function resetFontFallbackCaches() {
+    parsedFontFallbackRulesCacheRaw = null;
+    parsedFontFallbackRulesCache = {};
+    resolvedFontFallbackFamilyCache = {};
+    fontFallbackWarningCache = {};
+}
+
+function extractPrimaryLanguageSubtag(langCode) {
+    var normalized = normalizeFontFallbackRuleKey(langCode);
+    if (normalized === "") return "";
+    var parts = normalized.split(/[-_]/);
+    return parts.length > 0 ? parts[0] : normalized;
+}
+
+function getFontFallbackScriptKeysForLanguage(langCode) {
+    var primary = extractPrimaryLanguageSubtag(langCode);
+    var keys = [];
+    var addKey = function(key) {
+        if (!key) return;
+        for (var i = 0; i < keys.length; i++) {
+            if (keys[i] === key) return;
+        }
+        keys.push(key);
+    };
+
+    if (primary === "BG" || primary === "RU" || primary === "UK" || primary === "SR" || primary === "MK" || primary === "BE" || primary === "KK" || primary === "KY" || primary === "TG" || primary === "MN") addKey("CYRILLIC");
+    if (primary === "EL") addKey("GREEK");
+    if (primary === "AR" || primary === "FA" || primary === "UR" || primary === "PS" || primary === "KU" || primary === "SD") addKey("ARABIC");
+    if (primary === "HE" || primary === "IW" || primary === "YI") addKey("HEBREW");
+    if (primary === "HI" || primary === "MR" || primary === "NE" || primary === "SA") addKey("DEVANAGARI");
+    if (primary === "TH") addKey("THAI");
+    if (primary === "HY") addKey("ARMENIAN");
+    if (primary === "KA") addKey("GEORGIAN");
+    if (primary === "BN") addKey("BENGALI");
+    if (primary === "PA") addKey("GURMUKHI");
+    if (primary === "GU") addKey("GUJARATI");
+    if (primary === "TA") addKey("TAMIL");
+    if (primary === "TE") addKey("TELUGU");
+    if (primary === "KN") addKey("KANNADA");
+    if (primary === "ML") addKey("MALAYALAM");
+    if (primary === "SI") addKey("SINHALA");
+    if (primary === "LO") addKey("LAO");
+    if (primary === "JA") { addKey("JA"); addKey("CJK"); }
+    if (primary === "ZH") { addKey("ZH"); addKey("CJK"); }
+    if (primary === "KO") { addKey("KO"); addKey("CJK"); }
+
+    return keys;
+}
+
+function detectFontFallbackScriptKeysFromText(text) {
+    var content = String(text || "");
+    var keys = [];
+    var addKey = function(key) {
+        for (var i = 0; i < keys.length; i++) {
+            if (keys[i] === key) return;
+        }
+        keys.push(key);
+    };
+
+    if (/[\u0400-\u04FF\u0500-\u052F]/.test(content)) addKey("CYRILLIC");
+    if (/[\u0370-\u03FF\u1F00-\u1FFF]/.test(content)) addKey("GREEK");
+    if (/[\u0590-\u05FF]/.test(content)) addKey("HEBREW");
+    if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(content)) addKey("ARABIC");
+    if (/[\u0900-\u097F]/.test(content)) addKey("DEVANAGARI");
+    if (/[\u0E00-\u0E7F]/.test(content)) addKey("THAI");
+    if (/[\u0530-\u058F]/.test(content)) addKey("ARMENIAN");
+    if (/[\u10A0-\u10FF]/.test(content)) addKey("GEORGIAN");
+    if (/[\u0980-\u09FF]/.test(content)) addKey("BENGALI");
+    if (/[\u0A00-\u0A7F]/.test(content)) addKey("GURMUKHI");
+    if (/[\u0A80-\u0AFF]/.test(content)) addKey("GUJARATI");
+    if (/[\u0B80-\u0BFF]/.test(content)) addKey("TAMIL");
+    if (/[\u0C00-\u0C7F]/.test(content)) addKey("TELUGU");
+    if (/[\u0C80-\u0CFF]/.test(content)) addKey("KANNADA");
+    if (/[\u0D00-\u0D7F]/.test(content)) addKey("MALAYALAM");
+    if (/[\u0D80-\u0DFF]/.test(content)) addKey("SINHALA");
+    if (/[\u0E80-\u0EFF]/.test(content)) addKey("LAO");
+    if (/[\u3040-\u30FF]/.test(content)) { addKey("JA"); addKey("CJK"); }
+    if (/[\uAC00-\uD7AF]/.test(content)) { addKey("KO"); addKey("CJK"); }
+    if (/[\u3400-\u4DBF\u4E00-\u9FFF]/.test(content)) addKey("CJK");
+
+    return keys;
+}
+
+function buildFontFallbackCandidateKeys(langCode, textContent) {
+    var textScriptKeys = detectFontFallbackScriptKeysFromText(textContent);
+    if (textScriptKeys.length === 0) return [];
+
+    var keys = [];
+    var addKey = function(key) {
+        var normalized = normalizeFontFallbackRuleKey(key);
+        if (normalized === "") return;
+        for (var i = 0; i < keys.length; i++) {
+            if (keys[i] === normalized) return;
+        }
+        keys.push(normalized);
+    };
+
+    var fullCode = normalizeFontFallbackRuleKey(langCode);
+    var primaryCode = extractPrimaryLanguageSubtag(langCode);
+    if (fullCode !== "") addKey(fullCode);
+    if (primaryCode !== "" && primaryCode !== fullCode) addKey(primaryCode);
+
+    var langScriptKeys = getFontFallbackScriptKeysForLanguage(langCode);
+    for (var i = 0; i < langScriptKeys.length; i++) addKey(langScriptKeys[i]);
+    for (var j = 0; j < textScriptKeys.length; j++) addKey(textScriptKeys[j]);
+    return keys;
+}
+
+function resolveFontFallbackForText(langCode, textContent) {
+    if (!fontFallbackEnabled) return null;
+    var parsed = getParsedFontFallbackRules();
+    var candidateKeys = buildFontFallbackCandidateKeys(langCode, textContent);
+    if (candidateKeys.length === 0) return null;
+
+    for (var i = 0; i < candidateKeys.length; i++) {
+        var key = candidateKeys[i];
+        if (!parsed.hasOwnProperty(key)) continue;
+        var requestedFamily = parsed[key];
+        var resolvedFamily = resolveInstalledFontFamily(requestedFamily);
+        if (resolvedFamily !== "") {
+            return { key: key, requestedFamily: requestedFamily, family: resolvedFamily, verifiedInstalled: true };
+        }
+        if (requestedFamily !== "") {
+            return { key: key, requestedFamily: requestedFamily, family: requestedFamily, verifiedInstalled: false };
+        }
+    }
+    return null;
+}
+
+function applyOptionalFontFallback(appliedRange, originalFamily, originalStyle, fallbackInfo, langCode, textContent) {
+    if (!fallbackInfo || !fallbackInfo.family) return;
+    if (normalizeFontLookupKey(fallbackInfo.family) === normalizeFontLookupKey(originalFamily)) return;
+
+    var applied = false;
+    try {
+        appliedRange.appliedFont = fallbackInfo.family;
+        applied = true;
+    } catch (fontErr) {
+        var warningKey = normalizeFontFallbackRuleKey(fallbackInfo.key) + "::apply::" + normalizeFontLookupKey(fallbackInfo.family);
+        if (!fontFallbackWarningCache[warningKey]) {
+            fontFallbackWarningCache[warningKey] = true;
+            writeLog("Schrift-Fallback '" + fallbackInfo.family + "' fuer '" + fallbackInfo.key + "' konnte nicht angewendet werden (" + (fontErr.message || fontErr) + ").", "WARNUNG");
+        }
+    }
+
+    if (!applied) return;
+    try { appliedRange.fontStyle = originalStyle; } catch (styleErr) { try { appliedRange.fontStyle = "Regular"; } catch (styleErr2) {} }
+    writeDebugLog("font_fallback: lang=" + normalizeFontFallbackRuleKey(langCode) + " key=" + fallbackInfo.key + " family=" + fallbackInfo.family + " text=" + normalizeDebugSnippet(textContent, 80));
 }
 
 var UI_LANGUAGE_SETTING = normalizeUILanguageSetting(app.extractLabel(UI_LANGUAGE_LABEL) || "auto");
@@ -143,12 +459,13 @@ var UI_STRINGS = {
     settings_ui_language: { de: "UI-Sprache:", en: "UI language:" },
     settings_ui_language_auto: { de: "Auto (Systemsprache)", en: "Auto (system language)" },
     settings_tab_data_hint: { de: "Glossar, Memory und Übersetzungsoptionen gelten dokumentübergreifend.", en: "Glossary, memory, and translation options apply across documents." },
-    settings_tab_typography_hint: { de: "Hier steuerst du die automatische Copyfitting-Logik und manuelle typografische Grenzen fuer enge Layouts.", en: "Control the automatic copyfitting logic and manual typographic limits for tight layouts here." },
+    settings_tab_typography_hint: { de: "Hier steuerst du die automatische Copyfitting-Logik sowie Fallback-Schriften fuer Zielsprachen und Schriftsysteme.", en: "Control the automatic copyfitting logic and fallback fonts for target languages and scripts here." },
     settings_tab_provider_hint: { de: "Wähle den aktiven Übersetzungsanbieter und hinterlege die passenden Zugangsdaten.", en: "Choose the active translation provider and enter the relevant credentials." },
     settings_tab_auto_hint: { de: "Diese Optionen steuern die BDA-Vollautomatik und das automatische Verlinken.", en: "These options control BDA full automation and automatic hyperlinking." },
     settings_section_resources: { de: "Dateien", en: "Files" },
     settings_section_translation: { de: "Übersetzung", en: "Translation" },
     settings_section_typography_copyfit: { de: "Smart Copyfit", en: "Smart copyfit" },
+    settings_section_typography_font_fallback: { de: "Schrift-Fallbacks", en: "Font fallbacks" },
     settings_section_provider_setup: { de: "Provider-Auswahl", en: "Provider selection" },
     settings_section_provider_credentials: { de: "Zugangsdaten", en: "Credentials" },
     settings_section_auto_options: { de: "Automatik", en: "Automation" },
@@ -214,6 +531,11 @@ var UI_STRINGS = {
     settings_copyfit_summary: { de: "Copyfit: {enabled}, Tracking bis {tracking} in {trackingStep}er Schritten, Scale bis {scale}% in {scaleStep}% Schritten", en: "Copyfit: {enabled}, tracking to {tracking} in steps of {trackingStep}, scale to {scale}% in steps of {scaleStep}%" },
     settings_copyfit_enabled_on: { de: "an", en: "on" },
     settings_copyfit_enabled_off: { de: "aus", en: "off" },
+    font_fallback_enabled: { de: "Fallback-Schriften fuer nicht-lateinische Zielschriften aktivieren", en: "Enable fallback fonts for non-Latin target scripts" },
+    font_fallback_enabled_help: { de: "Wenn aktiv, kann SuperTranslatorPro nach der Uebersetzung die Schriftfamilie austauschen, sobald im Zieltext kyrillische, arabische oder andere nicht-lateinische Zeichen erkannt werden.", en: "When enabled, SuperTranslatorPro can replace the font family after translation when Cyrillic, Arabic, or other non-Latin characters are detected in the target text." },
+    font_fallback_rules: { de: "Fallback-Schriften pro Sprache oder Script:", en: "Fallback fonts per language or script:" },
+    font_fallback_rules_help: { de: "Syntax pro Zeile: RU=Arial oder ARABIC=Adobe Arabic. Exakte Sprachcodes haben Vorrang vor Script-Gruppen. Unterstuetzt z. B. CYRILLIC, GREEK, ARABIC, HEBREW, DEVANAGARI, THAI, ARMENIAN, GEORGIAN, BENGALI, GURMUKHI, GUJARATI, TAMIL, TELUGU, KANNADA, MALAYALAM, SINHALA, LAO, JA, ZH, KO, CJK.", en: "Use one rule per line, for example RU=Arial or ARABIC=Adobe Arabic. Exact language codes override script groups. Supported script keys include CYRILLIC, GREEK, ARABIC, HEBREW, DEVANAGARI, THAI, ARMENIAN, GEORGIAN, BENGALI, GURMUKHI, GUJARATI, TAMIL, TELUGU, KANNADA, MALAYALAM, SINHALA, LAO, JA, ZH, KO, and CJK." },
+    settings_font_fallback_summary: { de: "Font-Fallback: {enabled}, {count} Regeln", en: "Font fallback: {enabled}, {count} rules" },
     memory_path: { de: "Netzwerk-Memory (JSON Pfad):", en: "Network memory (JSON path):" },
     memory_select: { de: "Bitte wähle die Memory JSON-Datei aus", en: "Please choose the memory JSON file" },
     memory_save_new: { de: "Speicherort für neues Memory wählen", en: "Choose a location for a new memory file" },
@@ -1160,6 +1482,8 @@ var smartCopyfitMaxTracking = normalizeCopyfitMaxTrackingSetting(app.extractLabe
 var smartCopyfitMinScale = normalizeCopyfitMinScaleSetting(app.extractLabel(COPYFIT_MIN_SCALE_LABEL) || "98");
 var smartCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(app.extractLabel(COPYFIT_TRACKING_STEP_LABEL) || "2");
 var smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(app.extractLabel(COPYFIT_SCALE_STEP_LABEL) || "1");
+var fontFallbackEnabled = normalizeFontFallbackEnabledSetting(app.extractLabel(FONT_FALLBACK_ENABLED_LABEL) || "1");
+var fontFallbackRulesSetting = decodeFontFallbackRulesSettingFromLabel(app.extractLabel(FONT_FALLBACK_RULES_LABEL) || "");
 
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
 var progressWin, progressBar, progressText;
@@ -3230,6 +3554,7 @@ btnSettings.onClick = function() {
 
     createDialogHint(typographyTab, t("settings_tab_typography_hint"));
     var typographyCopyfitSection = createSettingsSection(typographyTab, t("settings_section_typography_copyfit"));
+    var typographyFontFallbackSection = createSettingsSection(typographyTab, t("settings_section_typography_font_fallback"));
 
     var uiSection = createSettingsSection(uiTab, t("settings_tab_ui"));
     var uiLanguageRow = uiSection.add("group");
@@ -3299,13 +3624,27 @@ btnSettings.onClick = function() {
     var copyfitHint = typographyCopyfitSection.add("statictext", undefined, t("copyfit_settings_help"), { multiline: true });
     copyfitHint.preferredSize.width = 640;
 
+    var fontFallbackEnabledCheckbox = typographyFontFallbackSection.add("checkbox", undefined, t("font_fallback_enabled"));
+    fontFallbackEnabledCheckbox.value = !!fontFallbackEnabled;
+    fontFallbackEnabledCheckbox.helpTip = t("font_fallback_enabled_help");
+    typographyFontFallbackSection.add("statictext", undefined, t("font_fallback_enabled_help"), { multiline: true }).preferredSize.width = 640;
+
+    typographyFontFallbackSection.add("statictext", undefined, t("font_fallback_rules"));
+    var fontFallbackRulesInput = typographyFontFallbackSection.add("edittext", undefined, fontFallbackRulesSetting, { multiline: true, scrolling: true });
+    fontFallbackRulesInput.alignment = ["fill", "top"];
+    fontFallbackRulesInput.preferredSize = [640, 210];
+    fontFallbackRulesInput.helpTip = t("font_fallback_rules_help");
+    typographyFontFallbackSection.add("statictext", undefined, t("font_fallback_rules_help"), { multiline: true }).preferredSize.width = 640;
+
     function refreshTypographySettingsUI() {
-        var enabled = !!copyfitEnabledCheckbox.value;
-        copyfitTrackingField.input.enabled = enabled;
-        copyfitScaleField.input.enabled = enabled;
-        copyfitTrackingStepField.input.enabled = enabled;
-        copyfitScaleStepField.input.enabled = enabled;
+        var copyfitEnabled = !!copyfitEnabledCheckbox.value;
+        copyfitTrackingField.input.enabled = copyfitEnabled;
+        copyfitScaleField.input.enabled = copyfitEnabled;
+        copyfitTrackingStepField.input.enabled = copyfitEnabled;
+        copyfitScaleStepField.input.enabled = copyfitEnabled;
+        fontFallbackRulesInput.enabled = !!fontFallbackEnabledCheckbox.value;
         try { typographyCopyfitSection.layout.layout(true); } catch (typographyLayoutErr) {}
+        try { typographyFontFallbackSection.layout.layout(true); } catch (typographyFallbackLayoutErr) {}
         try { setWin.layout.layout(true); } catch (typographyWinLayoutErr) {}
     }
 
@@ -3333,6 +3672,8 @@ btnSettings.onClick = function() {
         var draftCopyfitScale = normalizeCopyfitMinScaleSetting(copyfitScaleField.input.text);
         var draftCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(copyfitTrackingStepField.input.text);
         var draftCopyfitScaleStep = normalizeCopyfitScaleStepSetting(copyfitScaleStepField.input.text);
+        var draftFontFallbackEnabled = !!fontFallbackEnabledCheckbox.value;
+        var draftFontFallbackRules = normalizeFontFallbackRulesSetting(fontFallbackRulesInput.text);
         settingsOverviewText.text =
             t("status_provider") + " " + getTranslationProviderDisplayName(selectedProviderId) +
             "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvInput.text) + "\n" +
@@ -3344,6 +3685,10 @@ btnSettings.onClick = function() {
                 trackingStep: draftCopyfitTrackingStep,
                 scale: draftCopyfitScale,
                 scaleStep: draftCopyfitScaleStep
+            }) + "   |   " +
+            t("settings_font_fallback_summary", {
+                enabled: draftFontFallbackEnabled ? t("settings_copyfit_enabled_on") : t("settings_copyfit_enabled_off"),
+                count: countConfiguredFontFallbackRules(draftFontFallbackRules)
             }) + "\n" +
             t("settings_ui_language") + " " + buildUILanguageSettingOptions()[(uiLanguageDrop.selection && uiLanguageDrop.selection.index >= 0) ? uiLanguageDrop.selection.index : 0];
     }
@@ -3364,6 +3709,11 @@ btnSettings.onClick = function() {
     copyfitScaleField.input.onChanging = refreshSettingsOverview;
     copyfitTrackingStepField.input.onChanging = refreshSettingsOverview;
     copyfitScaleStepField.input.onChanging = refreshSettingsOverview;
+    fontFallbackEnabledCheckbox.onClick = function() {
+        refreshTypographySettingsUI();
+        refreshSettingsOverview();
+    };
+    fontFallbackRulesInput.onChanging = refreshSettingsOverview;
     uiLanguageDrop.onChange = refreshSettingsOverview;
     refreshTypographySettingsUI();
     refreshSettingsOverview();
@@ -3419,6 +3769,9 @@ btnSettings.onClick = function() {
         smartCopyfitMinScale = normalizeCopyfitMinScaleSetting(copyfitScaleField.input.text);
         smartCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(copyfitTrackingStepField.input.text);
         smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(copyfitScaleStepField.input.text);
+        fontFallbackEnabled = !!fontFallbackEnabledCheckbox.value;
+        fontFallbackRulesSetting = normalizeFontFallbackRulesSetting(fontFallbackRulesInput.text);
+        resetFontFallbackCaches();
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(OPENAI_KEY_LABEL, openAIKey);
         app.insertLabel(OPENAI_MODEL_LABEL, openAIModel);
@@ -3439,6 +3792,8 @@ btnSettings.onClick = function() {
         app.insertLabel(COPYFIT_MIN_SCALE_LABEL, String(smartCopyfitMinScale));
         app.insertLabel(COPYFIT_TRACKING_STEP_LABEL, String(smartCopyfitTrackingStep));
         app.insertLabel(COPYFIT_SCALE_STEP_LABEL, String(smartCopyfitScaleStep));
+        app.insertLabel(FONT_FALLBACK_ENABLED_LABEL, fontFallbackEnabled ? "1" : "0");
+        app.insertLabel(FONT_FALLBACK_RULES_LABEL, encodeFontFallbackRulesSettingForLabel(fontFallbackRulesSetting));
         app.insertLabel(UI_LANGUAGE_LABEL, normalizeUILanguageSetting(selectedUILanguage));
         tableRestoreDebugEnabled = !!debugTableRestoreCheckbox.value;
         app.insertLabel(DEBUG_TABLE_RESTORE_LABEL, tableRestoreDebugEnabled ? "1" : "0");
@@ -8703,6 +9058,7 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode) {
         textContent = normalizeTechnicalTokenSpacingInString(textContent);
         if (textContent.length > 0) {
             var appliedRange = null; var doc = app.activeDocument;
+            var fallbackInfo = resolveFontFallbackForText(inDesignLangCode, textContent);
             try {
                 if (isPartial) {
                     textFlow.insertionPoints.item(currentIdx).contents = textContent;
@@ -8725,6 +9081,7 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode) {
                 try { appliedRange.leading = (lead === "AUTO") ? Leading.AUTO : parseFloat(lead); } catch(e) {}
                 try { if (fCol !== "") { var myColor = doc.swatches.itemByName(fCol); if (myColor.isValid) appliedRange.fillColor = myColor; } } catch(e) {}
                 try { if (cSty !== "" && cSty !== "[None]" && cSty !== "[Ohne]") { var myCStyle = doc.characterStyles.itemByName(cSty); if (myCStyle.isValid) appliedRange.applyCharacterStyle(myCStyle, false); } } catch(e) {}
+                applyOptionalFontFallback(appliedRange, fFam, fSty, fallbackInfo, inDesignLangCode, textContent);
                 try { if (pAli !== "") appliedRange.justification = Justification[pAli]; } catch(e) {}
                 try { appliedRange.leftIndent = parseFloat(lInd); } catch(e) {}
                 try { appliedRange.firstLineIndent = parseFloat(fInd); } catch(e) {}
