@@ -237,8 +237,8 @@ var UI_STRINGS = {
     progress_cancelling: { de: "Wird abgebrochen...", en: "Cancelling..." },
     progress_eta: { de: "Restzeit: ca. {mins} Min. {secs} Sek.", en: "Remaining time: about {mins} min {secs} sec." },
     progress_done: { de: "Verarbeitung abgeschlossen.", en: "Processing completed." },
-    progress_success: { de: "✅ Erfolgreich abgeschlossen!", en: "✅ Completed successfully!" },
-    progress_duration: { de: "Dauer: {mins} Min. {secs} Sek. | API gespart: {saved} Z. | Rahmen gefixt: {frames}", en: "Duration: {mins} min {secs} sec | API saved: {saved} chars | Frames fixed: {frames}" },
+    progress_success: { de: "Erfolgreich abgeschlossen.", en: "Completed successfully." },
+    progress_duration: { de: "Dauer: {mins} Min. {secs} Sek.\nAPI gespart: {saved} Z. | Rahmen gefixt: {frames}", en: "Duration: {mins} min {secs} sec.\nAPI saved: {saved} chars | Frames fixed: {frames}" },
     validation_invalid_lang: { de: "Bitte wähle eine gültige Zielsprache aus, keine Trennlinie.", en: "Please select a valid target language, not a separator." },
     validation_select_something: { de: "Bitte markiere zuerst etwas im Dokument.", en: "Please select something in the document first." },
     validation_enter_pages: { de: "Bitte Seitenzahlen eintragen.", en: "Please enter page numbers." },
@@ -4550,25 +4550,47 @@ function createProgressWindow() {
     startTime = new Date().getTime();
     globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 }; 
     
-    progressWin = new Window("palette", t("progress_title"));
+    progressWin = new Window("palette", t("progress_title"), undefined, { resizeable: true });
     progressWin.orientation = "column";
-    progressWin.alignChildren = "fill";
+    progressWin.alignChildren = ["fill", "top"];
+    progressWin.spacing = 12;
+    progressWin.margins = 16;
+    progressWin.minimumSize = [520, 320];
+    progressWin.preferredSize = [560, 340];
     
-    progressWin.add("statictext", undefined, t("progress_current_step"));
-    progressText = progressWin.add("statictext", undefined, t("progress_preparing"));
-    progressText.preferredSize.width = 350;
-    progressBar = progressWin.add("progressbar", undefined, 0, 100);
-    progressBar.preferredSize.width = 350;
+    var currentPanel = progressWin.add("panel", undefined, t("progress_current_step"));
+    currentPanel.orientation = "column";
+    currentPanel.alignChildren = ["fill", "top"];
+    currentPanel.margins = 12;
+    currentPanel.spacing = 8;
+    progressText = currentPanel.add("statictext", undefined, t("progress_preparing"), { multiline: true });
+    progressText.preferredSize = [480, 42];
+    progressText.minimumSize.height = 42;
+    progressBar = currentPanel.add("progressbar", undefined, 0, 100);
+    progressBar.preferredSize = [480, 18];
     
-    progressWin.add("statictext", undefined, t("progress_overall"));
-    overallText = progressWin.add("statictext", undefined, t("progress_complete_pct", { pct: 0 }));
-    overallBar = progressWin.add("progressbar", undefined, 0, 100);
-    overallBar.preferredSize.width = 350;
+    var overallPanel = progressWin.add("panel", undefined, t("progress_overall"));
+    overallPanel.orientation = "column";
+    overallPanel.alignChildren = ["fill", "top"];
+    overallPanel.margins = 12;
+    overallPanel.spacing = 8;
+    overallText = overallPanel.add("statictext", undefined, t("progress_complete_pct", { pct: 0 }), { multiline: true });
+    overallText.preferredSize = [480, 42];
+    overallText.minimumSize.height = 42;
+    overallBar = overallPanel.add("progressbar", undefined, 0, 100);
+    overallBar.preferredSize = [480, 18];
     
-    etaText = progressWin.add("statictext", undefined, t("progress_eta_calc"));
-    etaText.justify = "center";
+    etaText = progressWin.add("statictext", undefined, t("progress_eta_calc"), { multiline: true });
+    etaText.preferredSize = [480, 44];
+    etaText.minimumSize.height = 44;
+    etaText.justify = "left";
     
-    btnStopProgress = progressWin.add("button", undefined, t("progress_cancel"));
+    var footerRow = progressWin.add("group");
+    footerRow.alignment = "fill";
+    var footerSpacer = footerRow.add("statictext", undefined, "");
+    footerSpacer.alignment = "fill";
+    btnStopProgress = footerRow.add("button", undefined, t("progress_cancel"));
+    btnStopProgress.preferredSize = [140, 30];
     btnStopProgress.onClick = function() {
         if (btnStopProgress.text === t("progress_close")) progressWin.close(); 
         else {
@@ -4577,6 +4599,10 @@ function createProgressWindow() {
             overallText.text = t("progress_cancelling");
             progressWin.update();
         }
+    };
+    
+    progressWin.onResizing = progressWin.onResize = function() {
+        this.layout.resize();
     };
     
     progressWin.show();
