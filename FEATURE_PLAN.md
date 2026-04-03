@@ -18,7 +18,7 @@
 - [x] Hauptfenster mit Live-Refresh für Status, Preflight und Button-Aktivierung
 - [x] Automatische Musterseiten-Generierung inkl. Erkennung, Auswahl/Abwahl und Reihenfolge
 - [x] Wörterbuch-/Glossar-System inkl. Erststart-Setup, Template, Migration und verständlicher Erklärungen
-- [x] Dynamische UI-Sprache DE/EN über `app.locale`
+- [x] UI-Sprache im Settings-Tab wählbar: `Auto (Systemsprache)`, `DE`, `EN`
 - [x] Nachbearbeitung technischer Tokens wie `M5*15`, damit Leerzeichen sauber bleiben
 - [x] Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider
 - [x] Hyperlink-, Einstellungs- und Fortschrittsdialoge visuell überarbeitet und resizable gemacht
@@ -114,7 +114,7 @@
 ---
 
 ## 6. UI/UX Optimierung
-- [x] Dynamische Anpassung der Skript-Sprache an `app.locale` (DE/EN)
+- [x] UI-Sprache über eigenen Settings-Tab wählbar (`Auto`, `DE`, `EN`) inkl. System-Fallback
 - [x] Hauptfenster mit klarerem Modus-Flow, Status- und Preflight-Bereichen aufgebaut
 - [x] Live-Validierung und Live-Refresh des Hauptfensters ohne Fokuswechsel ergänzt
 - [x] Legacy-Dialogtext verbessert, damit auch erkannte Sprachen verständlich erklärt werden
@@ -127,7 +127,7 @@
 - [ ] Weitere UI-Feinschliffe und Usability-Tests in InDesign
 
 **Notizen:**
-- UI wurde in mehreren Phasen deutlich überarbeitet: Das Hauptfenster reagiert live auf Auswahländerungen, Dialoge sind strukturierter und resizable, und das Fortschrittsfenster zeigt jetzt einen sichtbaren Erfolgsstatus. Offen bleiben vor allem Praxistests in InDesign und weitere visuelle Feinschliffe.
+- UI wurde in mehreren Phasen deutlich überarbeitet: Das Hauptfenster reagiert live auf Auswahländerungen, Dialoge sind strukturierter und resizable, die UI-Sprache ist nun separat über `Auto/DE/EN` steuerbar, und das Fortschrittsfenster zeigt einen sichtbaren Erfolgsstatus. Offen bleiben vor allem Praxistests in InDesign und weitere visuelle Feinschliffe.
 
 ---
 
@@ -183,6 +183,7 @@
 ---
 
 ## Änderungslog
+- 3. April 2026: UI-Sprache als eigener Settings-Tab ergänzt (`UI-Sprache` mit `Auto`, `DE`, `EN`) und im Einstellungsdialog nach rechts verschoben
 - 3. April 2026: UI/UX-Phasen 1-5 umgesetzt (klareres Hauptfenster, Live-Validierung, überarbeitete Settings-/Hyperlink-Dialoge, Button-Hierarchie und Fortschrittsfenster-Polish)
 - 3. April 2026: Hauptfenster live aktualisiert, Quellsprachen-Prüfung verallgemeinert und Fortschrittsfenster um grünen Erfolgsstatus erweitert
 - 2. April 2026: Gemini- und Claude-Adapter auf die gemeinsame XML-/Tag-sichere Provider-Schicht gehängt, inklusive UI-Feldern für Keys/Modelle und DeepL-Fallback

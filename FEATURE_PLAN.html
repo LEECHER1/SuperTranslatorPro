@@ -214,7 +214,7 @@
           <li>Hauptfenster mit Live-Refresh für Status, Preflight und Button-Aktivierung</li>
           <li>Automatische Musterseiten-Generierung inkl. Erkennung, Auswahl/Abwahl und Reihenfolge</li>
           <li>Wörterbuch-/Glossar-System inkl. Erststart-Setup, Template, Migration und verständlicher Erklärungen</li>
-          <li>Dynamische UI-Sprache DE/EN über <code>app.locale</code></li>
+          <li>UI-Sprache im Settings-Tab wählbar: <code>Auto (Systemsprache)</code>, <code>DE</code>, <code>EN</code></li>
           <li>Nachbearbeitung technischer Tokens wie <code>M5*15</code>, damit Leerzeichen sauber bleiben</li>
           <li>Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider</li>
           <li>Hyperlink-, Einstellungs- und Fortschrittsdialoge visuell überarbeitet und resizable gemacht</li>
@@ -355,7 +355,7 @@
       <div>
         <h2>6. UI/UX Optimierung</h2>
         <ul class="task-list">
-          <li><input type="checkbox" id="task-6-1" class="plan-checkbox" checked /><label for="task-6-1">Dynamische Anpassung der Skript-Sprache an <code>app.locale</code> (DE/EN)</label></li>
+          <li><input type="checkbox" id="task-6-1" class="plan-checkbox" checked /><label for="task-6-1">UI-Sprache über eigenen Settings-Tab wählbar (<code>Auto</code>, <code>DE</code>, <code>EN</code>) inkl. System-Fallback</label></li>
           <li><input type="checkbox" id="task-6-2" class="plan-checkbox" checked /><label for="task-6-2">Hauptfenster mit klarerem Modus-Flow, Status- und Preflight-Bereichen aufgebaut</label></li>
           <li><input type="checkbox" id="task-6-3" class="plan-checkbox" checked /><label for="task-6-3">Live-Validierung und Live-Refresh des Hauptfensters ohne Fokuswechsel ergänzt</label></li>
           <li><input type="checkbox" id="task-6-4" class="plan-checkbox" checked /><label for="task-6-4">Legacy-Dialogtext verbessert, damit auch erkannte Sprachen verständlich erklärt werden</label></li>
@@ -370,7 +370,7 @@
       </div>
       <div class="small">
         <strong>Notizen</strong>
-        <textarea id="note-6">UI wurde in mehreren Phasen deutlich überarbeitet: Das Hauptfenster reagiert live auf Auswahländerungen, Dialoge sind strukturierter und resizable, und das Fortschrittsfenster zeigt jetzt einen sichtbaren Erfolgsstatus. Offen bleiben vor allem Praxistests in InDesign und weitere visuelle Feinschliffe.</textarea>
+        <textarea id="note-6">UI wurde in mehreren Phasen deutlich überarbeitet: Das Hauptfenster reagiert live auf Auswahländerungen, Dialoge sind strukturierter und resizable, die UI-Sprache ist nun separat über Auto/DE/EN steuerbar, und das Fortschrittsfenster zeigt einen sichtbaren Erfolgsstatus. Offen bleiben vor allem Praxistests in InDesign und weitere visuelle Feinschliffe.</textarea>
       </div>
     </div>
   </section>
@@ -447,6 +447,7 @@
   <section>
     <h2>Änderungslog</h2>
     <ul class="plain-list">
+      <li>3. April 2026: UI-Sprache als eigener Settings-Tab ergänzt (<code>UI-Sprache</code> mit <code>Auto</code>, <code>DE</code>, <code>EN</code>) und im Einstellungsdialog nach rechts verschoben</li>
       <li>3. April 2026: UI/UX-Phasen 1-5 umgesetzt (klareres Hauptfenster, Live-Validierung, überarbeitete Settings-/Hyperlink-Dialoge, Button-Hierarchie und Fortschrittsfenster-Polish)</li>
       <li>3. April 2026: Hauptfenster live aktualisiert, Quellsprachen-Prüfung verallgemeinert und Fortschrittsfenster um grünen Erfolgsstatus erweitert</li>
       <li>2. April 2026: Gemini- und Claude-Adapter auf die gemeinsame XML-/Tag-sichere Provider-Schicht gehängt, inklusive UI-Feldern für Keys/Modelle und DeepL-Fallback</li>
