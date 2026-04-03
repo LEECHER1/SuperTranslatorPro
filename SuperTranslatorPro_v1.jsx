@@ -3339,13 +3339,13 @@ btnSettings.onClick = function() {
     overviewPanel.alignChildren = ["fill", "top"];
     overviewPanel.margins = 12;
     var settingsOverviewText = overviewPanel.add("statictext", undefined, "", { multiline: true });
-    settingsOverviewText.preferredSize.width = 700;
+    settingsOverviewText.preferredSize = [700, 58];
 
     var tabs = setWin.add("tabbedpanel");
     tabs.alignment = ["fill", "fill"];
     tabs.alignChildren = ["fill", "fill"];
-    tabs.minimumSize = [700, 420];
-    tabs.preferredSize = [700, 420];
+    tabs.minimumSize = [700, 360];
+    tabs.preferredSize = [700, 380];
 
     var dataTab = tabs.add("tab", undefined, t("settings_tab_data"));
     dataTab.orientation = "column";
@@ -3362,6 +3362,71 @@ btnSettings.onClick = function() {
     var typographyTab = tabs.add("tab", undefined, t("settings_tab_typography"));
     typographyTab.orientation = "column";
     typographyTab.alignChildren = ["fill", "top"];
+
+    var typographyScrollWrap = typographyTab.add("group");
+    typographyScrollWrap.orientation = "row";
+    typographyScrollWrap.alignment = ["fill", "fill"];
+    typographyScrollWrap.alignChildren = ["fill", "fill"];
+    typographyScrollWrap.spacing = 8;
+
+    var typographyViewport = typographyScrollWrap.add("group");
+    typographyViewport.orientation = "stack";
+    typographyViewport.alignment = ["fill", "fill"];
+    typographyViewport.alignChildren = ["fill", "top"];
+    typographyViewport.minimumSize = [0, 300];
+
+    var typographyScrollbar = typographyScrollWrap.add("scrollbar", undefined, 0, 0, 100);
+    typographyScrollbar.alignment = ["right", "fill"];
+    typographyScrollbar.preferredSize.width = 18;
+    typographyScrollbar.visible = false;
+
+    var typographyContent = typographyViewport.add("group");
+    typographyContent.orientation = "column";
+    typographyContent.alignChildren = ["fill", "top"];
+    typographyContent.alignment = ["fill", "top"];
+    typographyContent.spacing = 10;
+
+    var typographyScrollBaseLocation = null;
+
+    function setTypographyScrollOffset(offsetValue) {
+        if (!typographyScrollBaseLocation) typographyScrollBaseLocation = [typographyContent.location[0], typographyContent.location[1]];
+        var maxOffset = typographyScrollbar.maxvalue || 0;
+        var offset = Math.max(0, Math.min(offsetValue, maxOffset));
+        typographyScrollbar.value = offset;
+        typographyContent.location = [typographyScrollBaseLocation[0], typographyScrollBaseLocation[1] - offset];
+    }
+
+    function refreshTypographyScrollUI() {
+        var currentScrollValue = typographyScrollbar.value || 0;
+        try { typographyContent.location = [0, 0]; } catch (resetTypographyLocationErr) {}
+        try { typographyContent.layout.layout(true); } catch (typographyContentLayoutErr) {}
+        try { typographyScrollWrap.layout.layout(true); } catch (typographyScrollWrapLayoutErr) {}
+        typographyScrollBaseLocation = [typographyContent.location[0], typographyContent.location[1]];
+
+        var contentHeight = 0;
+        var viewportHeight = 0;
+        try { contentHeight = typographyContent.bounds[3] - typographyContent.bounds[1]; } catch (contentBoundsErr) { contentHeight = 0; }
+        try { viewportHeight = typographyViewport.bounds[3] - typographyViewport.bounds[1]; } catch (viewportBoundsErr) { viewportHeight = 0; }
+
+        var maxOffset = Math.max(0, contentHeight - viewportHeight + 12);
+        typographyScrollbar.visible = maxOffset > 0;
+        typographyScrollbar.enabled = maxOffset > 0;
+        typographyScrollbar.maximumSize = maxOffset > 0 ? [18, 10000] : [0, 0];
+        typographyScrollbar.minimumSize = maxOffset > 0 ? [18, 0] : [0, 0];
+        typographyScrollbar.preferredSize.width = maxOffset > 0 ? 18 : 0;
+        typographyScrollbar.maxvalue = maxOffset;
+        typographyScrollbar.minvalue = 0;
+        typographyScrollbar.stepdelta = 24;
+        typographyScrollbar.jumpdelta = Math.max(80, Math.floor(viewportHeight * 0.8));
+        setTypographyScrollOffset(typographyScrollbar.visible ? currentScrollValue : 0);
+    }
+
+    typographyScrollbar.onChanging = function() {
+        setTypographyScrollOffset(this.value);
+    };
+    typographyScrollbar.onChange = function() {
+        setTypographyScrollOffset(this.value);
+    };
 
     var uiTab = tabs.add("tab", undefined, t("settings_tab_ui"));
     uiTab.orientation = "column";
@@ -3552,9 +3617,9 @@ btnSettings.onClick = function() {
 
     tabs.selection = dataTab;
 
-    createDialogHint(typographyTab, t("settings_tab_typography_hint"));
-    var typographyCopyfitSection = createSettingsSection(typographyTab, t("settings_section_typography_copyfit"));
-    var typographyFontFallbackSection = createSettingsSection(typographyTab, t("settings_section_typography_font_fallback"));
+    createDialogHint(typographyContent, t("settings_tab_typography_hint"));
+    var typographyCopyfitSection = createSettingsSection(typographyContent, t("settings_section_typography_copyfit"));
+    var typographyFontFallbackSection = createSettingsSection(typographyContent, t("settings_section_typography_font_fallback"));
 
     var uiSection = createSettingsSection(uiTab, t("settings_tab_ui"));
     var uiLanguageRow = uiSection.add("group");
@@ -3676,6 +3741,7 @@ btnSettings.onClick = function() {
         fontFallbackRulesInput.enabled = !!fontFallbackEnabledCheckbox.value;
         try { typographyCopyfitSection.layout.layout(true); } catch (typographyLayoutErr) {}
         try { typographyFontFallbackSection.layout.layout(true); } catch (typographyFallbackLayoutErr) {}
+        try { refreshTypographyScrollUI(); } catch (typographyScrollErr) {}
         try { setWin.layout.layout(true); } catch (typographyWinLayoutErr) {}
     }
 
@@ -3748,6 +3814,7 @@ btnSettings.onClick = function() {
     uiLanguageDrop.onChange = refreshSettingsOverview;
     refreshTypographySettingsUI();
     refreshSettingsOverview();
+    refreshTypographyScrollUI();
 
     var g = setWin.add("group");
     g.alignment = "fill";
@@ -3865,9 +3932,14 @@ btnSettings.onClick = function() {
     btnCancelSet.onClick = function() { setWin.close(); };
     setWin.onShow = function() {
         positionDialogRightOfMainWindow(setWin, 760, 620);
+        try { refreshTypographyScrollUI(); } catch (showScrollErr) {}
     };
     setWin.onResizing = setWin.onResize = function() {
         this.layout.resize();
+        try { refreshTypographyScrollUI(); } catch (resizeScrollErr) {}
+    };
+    tabs.onChange = function() {
+        try { refreshTypographyScrollUI(); } catch (tabScrollErr) {}
     };
     setWin.show();
 };
