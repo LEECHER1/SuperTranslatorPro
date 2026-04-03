@@ -18,6 +18,7 @@
 - [x] Hauptfenster mit Live-Refresh für Status, Preflight und Button-Aktivierung
 - [x] Automatische Musterseiten-Generierung inkl. Erkennung, Auswahl/Abwahl und Reihenfolge
 - [x] Wörterbuch-/Glossar-System inkl. Erststart-Setup, Template, Migration und verständlicher Erklärungen
+- [x] Robustes Translation Memory mit Sperrlogik, Delta-Merge, Backup und atomarem Schreiben für parallele Nutzung
 - [x] UI-Sprache im Settings-Tab wählbar: `Auto (Systemsprache)`, `DE`, `EN`
 - [x] Nachbearbeitung technischer Tokens wie `M5*15`, damit Leerzeichen sauber bleiben
 - [x] Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider
@@ -41,6 +42,7 @@
 - [ ] UI/UX Optimierung
 - [x] Verlinken (Linking Features)
 - [x] Wörterbuch / Glossar-System
+- [x] Translation Memory / Mehrbenutzer-Schutz
 
 ---
 
@@ -161,6 +163,22 @@
 
 ---
 
+## 9. Translation Memory / Mehrbenutzer-Schutz
+- [x] Translation Memory als gemeinsame JSON-Datei konfigurierbar
+- [x] Schreibzugriffe mit Sperrlogik abgesichert
+- [x] Vor dem Speichern aktuellen Stand frisch laden und neue Einträge mergen
+- [x] Nur Delta des aktuellen Laufs speichern statt altes Komplett-Snapshot zurückzuschreiben
+- [x] Atomisches Schreiben über Temp-Datei plus Backup ergänzt
+- [x] Backup-Fallback und Sicherung beschädigter Hauptdateien ergänzt
+- [x] `Memory leeren` auf dieselbe sichere Schreiblogik umgestellt
+- [ ] Parallele Praxis-Tests mit zwei Clients auf Netzlaufwerk durchführen
+- [ ] Optional später: zentrale TM-Datenhaltung statt einzelner JSON-Datei prüfen
+
+**Notizen:**
+- Das Risiko für Datenverlust bei zwei gleichzeitigen Nutzern ist jetzt deutlich reduziert. Offen bleibt vor allem der Fall, dass zwei Personen exakt denselben neuen Text nahezu gleichzeitig erstmals übersetzen; dabei können weiterhin doppelte API-Calls entstehen, auch wenn die Datei selbst geschützt ist.
+
+---
+
 ## Prioritäten
 1. UI/UX Feinschliff und echte InDesign-Tests
 2. Optionaler Hybrid-Modus zwischen DeepL und LLMs
@@ -175,13 +193,16 @@
 - [ ] Gemini-/Claude-Live-Tests inkl. Grenzfällen mit XML, Tabellen und langen BDA-Läufen durchführen
 - [ ] Lokale LLM-Live-Tests mit LM Studio und Ollama durchführen
 - [ ] Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren
+- [ ] Translation-Memory-Mehrbenutzerlauf mit zwei Rechnern auf Netzlaufwerk testen
 - [ ] UXP-Refactoring-Plan erstellen
 - [ ] Glossar-Validator für fehlerhafte CSV-Struktur ergänzen
+- [ ] Optionalen Pfad Richtung zentrale TM-Datenhaltung oder Service evaluieren
 - [ ] Erweiterte Cross-Reference-Logik für Spezialfälle ausbauen
 
 ---
 
 ## Änderungslog
+- 4. April 2026: Translation Memory für Mehrbenutzerbetrieb abgesichert, inklusive Sperrlogik, Delta-Merge, Backup-Fallback und atomarem Schreiben
 - 4. April 2026: Konfigurierbare Schrift-Fallbacks im Tab `Typografie` ergänzt, inklusive Script-Erkennung und Regeln für z. B. Kyrillisch, Arabisch, Hebräisch, Devanagari und CJK
 - 3. April 2026: `Typografie`-Tab erweitert um Smart-Copyfit Ein/Aus sowie konfigurierbare Tracking- und Scale-Schrittweiten
 - 3. April 2026: Smart-Copyfit-Einstellungen ergänzt, damit Tracking-Limit und minimale Horizontal Scale im Einstellungsdialog manuell anpassbar sind (Default `-10` / `98%`)

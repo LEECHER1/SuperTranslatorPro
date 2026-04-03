@@ -198,7 +198,7 @@
     <ul class="meta-list">
       <li><strong>Version</strong>28.2</li>
       <li><strong>Datum</strong>4. April 2026</li>
-      <li><strong>Status</strong>Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Copyfit, Provider-Stabilisierung, Hybrid-Modus und UXP-Planung.</li>
+      <li><strong>Status</strong>Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Provider-Stabilisierung, Hybrid-Modus, echten InDesign-Tests und UXP-Planung.</li>
     </ul>
   </section>
 
@@ -214,6 +214,7 @@
           <li>Hauptfenster mit Live-Refresh für Status, Preflight und Button-Aktivierung</li>
           <li>Automatische Musterseiten-Generierung inkl. Erkennung, Auswahl/Abwahl und Reihenfolge</li>
           <li>Wörterbuch-/Glossar-System inkl. Erststart-Setup, Template, Migration und verständlicher Erklärungen</li>
+          <li>Robustes Translation Memory mit Sperrlogik, Delta-Merge, Backup und atomarem Schreiben fuer parallele Nutzung</li>
           <li>UI-Sprache im Settings-Tab wählbar: <code>Auto (Systemsprache)</code>, <code>DE</code>, <code>EN</code></li>
           <li>Nachbearbeitung technischer Tokens wie <code>M5*15</code>, damit Leerzeichen sauber bleiben</li>
           <li>Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider</li>
@@ -244,6 +245,7 @@
       <li><input type="checkbox" id="overview-6" class="plan-checkbox" /><label for="overview-6">UI/UX Optimierung</label></li>
       <li><input type="checkbox" id="overview-7" class="plan-checkbox" checked /><label for="overview-7">Verlinken (Linking Features)</label></li>
       <li><input type="checkbox" id="overview-8" class="plan-checkbox" checked /><label for="overview-8">Wörterbuch / Glossar-System</label></li>
+      <li><input type="checkbox" id="overview-9" class="plan-checkbox" checked /><label for="overview-9">Translation Memory / Mehrbenutzer-Schutz</label></li>
     </ul>
   </section>
 
@@ -420,15 +422,40 @@
   </section>
 
   <section>
+    <div class="section-row">
+      <div>
+        <h2>9. Translation Memory / Mehrbenutzer-Schutz</h2>
+        <ul class="task-list">
+          <li><input type="checkbox" id="task-9-1" class="plan-checkbox" checked /><label for="task-9-1">Translation Memory als gemeinsame JSON-Datei konfigurierbar</label></li>
+          <li><input type="checkbox" id="task-9-2" class="plan-checkbox" checked /><label for="task-9-2">Schreibzugriffe mit Sperrlogik abgesichert</label></li>
+          <li><input type="checkbox" id="task-9-3" class="plan-checkbox" checked /><label for="task-9-3">Vor dem Speichern aktuellen Stand frisch laden und neue Einträge mergen</label></li>
+          <li><input type="checkbox" id="task-9-4" class="plan-checkbox" checked /><label for="task-9-4">Nur Delta des aktuellen Laufs speichern statt altes Komplett-Snapshot zurückzuschreiben</label></li>
+          <li><input type="checkbox" id="task-9-5" class="plan-checkbox" checked /><label for="task-9-5">Atomisches Schreiben über Temp-Datei plus Backup ergänzt</label></li>
+          <li><input type="checkbox" id="task-9-6" class="plan-checkbox" checked /><label for="task-9-6">Backup-Fallback und Sicherung beschädigter Hauptdateien ergänzt</label></li>
+          <li><input type="checkbox" id="task-9-7" class="plan-checkbox" checked /><label for="task-9-7"><code>Memory leeren</code> auf dieselbe sichere Schreiblogik umgestellt</label></li>
+          <li><input type="checkbox" id="task-9-8" class="plan-checkbox" /><label for="task-9-8">Parallele Praxis-Tests mit zwei Clients auf Netzlaufwerk durchführen</label></li>
+          <li><input type="checkbox" id="task-9-9" class="plan-checkbox" /><label for="task-9-9">Optional später: zentrale TM-Datenhaltung statt einzelner JSON-Datei prüfen</label></li>
+        </ul>
+      </div>
+      <div class="small">
+        <strong>Notizen</strong>
+        <textarea id="note-9">Das Risiko fuer Datenverlust bei zwei gleichzeitigen Nutzern ist jetzt deutlich reduziert. Offen bleibt vor allem der Fall, dass zwei Personen exakt denselben neuen Text nahezu gleichzeitig erstmals uebersetzen; dabei koennen weiterhin doppelte API-Calls entstehen, auch wenn die Datei selbst geschuetzt ist.</textarea>
+      </div>
+    </div>
+  </section>
+
+  <section>
     <h2>Offene Aufgaben</h2>
     <ul class="task-list">
       <li><input type="checkbox" id="task-open-3" class="plan-checkbox" /><label for="task-open-3">Legacy-BDA, Auto-Hyperlinks und Glossar-Flow in echten Projekten breit testen</label></li>
       <li><input type="checkbox" id="task-open-4" class="plan-checkbox" /><label for="task-open-4">Gemini-/Claude-Live-Tests inkl. Grenzfällen mit XML, Tabellen und langen BDA-Läufen durchführen</label></li>
       <li><input type="checkbox" id="task-open-5" class="plan-checkbox" /><label for="task-open-5">Lokale LLM-Live-Tests mit LM Studio und Ollama durchführen</label></li>
+      <li><input type="checkbox" id="task-open-9" class="plan-checkbox" /><label for="task-open-9">Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren</label></li>
+      <li><input type="checkbox" id="task-open-10" class="plan-checkbox" /><label for="task-open-10">Translation-Memory-Mehrbenutzerlauf mit zwei Rechnern auf Netzlaufwerk testen</label></li>
       <li><input type="checkbox" id="task-open-6" class="plan-checkbox" /><label for="task-open-6">UXP-Refactoring-Plan erstellen</label></li>
       <li><input type="checkbox" id="task-open-7" class="plan-checkbox" /><label for="task-open-7">Glossar-Validator für fehlerhafte CSV-Struktur ergänzen</label></li>
+      <li><input type="checkbox" id="task-open-11" class="plan-checkbox" /><label for="task-open-11">Optionalen Pfad Richtung zentrale TM-Datenhaltung oder Service evaluieren</label></li>
       <li><input type="checkbox" id="task-open-8" class="plan-checkbox" /><label for="task-open-8">Erweiterte Cross-Reference-Logik für Spezialfälle ausbauen</label></li>
-      <li><input type="checkbox" id="task-open-9" class="plan-checkbox" /><label for="task-open-9">Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren</label></li>
     </ul>
   </section>
 
@@ -446,6 +473,7 @@
   <section>
     <h2>Änderungslog</h2>
     <ul class="plain-list">
+      <li>4. April 2026: Translation Memory fuer Mehrbenutzerbetrieb abgesichert, inklusive Sperrlogik, Delta-Merge, Backup-Fallback und atomarem Schreiben</li>
       <li>4. April 2026: Konfigurierbare Schrift-Fallbacks im Tab <code>Typografie</code> ergänzt, inklusive Script-Erkennung und Regeln fuer z. B. Kyrillisch, Arabisch, Hebraeisch, Devanagari und CJK</li>
       <li>3. April 2026: <code>Typografie</code>-Tab erweitert um Smart-Copyfit Ein/Aus sowie konfigurierbare Tracking- und Scale-Schrittweiten</li>
       <li>3. April 2026: Smart-Copyfit-Einstellungen ergänzt, damit Tracking-Limit und minimale Horizontal Scale im Einstellungsdialog manuell anpassbar sind (Default <code>-10</code> / <code>98%</code>)</li>

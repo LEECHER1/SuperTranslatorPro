@@ -514,6 +514,9 @@ var UI_STRINGS = {
     glossary_setup_current_path: { de: "Aktueller Pfad:", en: "Current path:" },
     glossary_template_created: { de: "Wörterbuch-Template erstellt:\n{path}", en: "Glossary template created:\n{path}" },
     glossary_template_failed: { de: "Wörterbuch-Template konnte nicht erstellt werden:\n{message}", en: "Glossary template could not be created:\n{message}" },
+    glossary_read_warning: { de: "Glossar-Warnung: Die CSV konnte nicht sicher gelesen werden. Wenn vorhanden, wird die letzte Sicherung verwendet.", en: "Glossary warning: the CSV could not be read safely. If available, the latest backup will be used." },
+    glossary_write_warning: { de: "Glossar-Warnung: Die CSV konnte nicht sicher geschrieben werden.", en: "Glossary warning: the CSV could not be written safely." },
+    glossary_busy_warning: { de: "Glossar-Warnung: Die CSV wird gerade von einem anderen Benutzer aktualisiert. Bitte versuche es gleich noch einmal.", en: "Glossary warning: the CSV is currently being updated by another user. Please try again in a moment." },
     formality: { de: "Anrede-Form (für unterstützte Sprachen):", en: "Formality (for supported languages):" },
     formality_default: { de: "Standard", en: "Default" },
     formality_formal: { de: "Formell (Sie)", en: "Formal" },
@@ -1482,6 +1485,11 @@ var TM_LOCK_POLL_MS = 250;
 var TM_LOCK_STALE_MS = 120000;
 var tmRuntimeId = String(new Date().getTime()) + "_" + String(Math.floor(Math.random() * 100000));
 var tmWarningCache = {};
+var CSV_LOCK_TIMEOUT_MS = 15000;
+var CSV_LOCK_POLL_MS = 250;
+var CSV_LOCK_STALE_MS = 120000;
+var glossaryRuntimeId = String(new Date().getTime()) + "_" + String(Math.floor(Math.random() * 100000));
+var glossaryWarningCache = {};
 var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
 var hyperlinkPageMappings = loadHyperlinkPageMappings(app.extractLabel(HYPERLINK_PAGE_MAP_LABEL) || "");
 var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
@@ -1885,17 +1893,33 @@ function buildGlossaryTemplateCSV() {
 }
 
 function writeGlossaryTemplateFile(path) {
-    var file = new File(path);
-    try {
-        file.encoding = "UTF-8";
-        if (!file.open("w")) return false;
-        file.write(buildGlossaryTemplateCSV());
-        file.close();
-        return true;
-    } catch (e) {
-        try { if (file.opened) file.close(); } catch (closeErr) {}
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return false;
+
+    var lockHandle = acquireGlossaryLock(normalizedPath, CSV_LOCK_TIMEOUT_MS);
+    if (!lockHandle) {
+        reportGlossaryWarningOnce(
+            "glossary_write_busy",
+            "glossary_busy_warning",
+            "Glossar-Datei ist aktuell gesperrt. Template konnte nicht geschrieben werden: " + normalizedPath
+        );
         return false;
     }
+
+    var success = false;
+    try {
+        success = writeGlossaryContentAtomically(normalizedPath, buildGlossaryTemplateCSV());
+        if (!success) {
+            reportGlossaryWarningOnce(
+                "glossary_write_failed",
+                "glossary_write_warning",
+                "Glossar-Datei konnte nicht sicher geschrieben werden: " + normalizedPath
+            );
+        }
+    } finally {
+        releaseGlossaryLock(lockHandle);
+    }
+    return success;
 }
 
 function promptForGlossaryPath(currentPath, allowLater) {
@@ -1924,10 +1948,7 @@ function promptForGlossaryPath(currentPath, allowLater) {
         var suggestedPath = currentPath && currentPath !== "" ? currentPath : "";
         var saveFile = File.saveDialog(t("glossary_create_select"), "*.csv");
         if (!saveFile) return;
-        if (!writeGlossaryTemplateFile(saveFile.fsName)) {
-            alert(t("glossary_template_failed", { message: saveFile.fsName }));
-            return;
-        }
+        if (!writeGlossaryTemplateFile(saveFile.fsName)) return;
         resultPath = saveFile.fsName;
         dlg.close(1);
     };
@@ -2542,6 +2563,310 @@ function clearTM() {
     return success;
 }
 
+function normalizeExplicitFilePath(path) {
+    return String(path === null || path === undefined ? "" : path).replace(/^\s+|\s+$/g, "");
+}
+
+function getGlossaryBackupFileForPath(path) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return null;
+    return new File(normalizedPath + ".bak");
+}
+
+function getGlossaryLockFolderForPath(path) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return null;
+    return new Folder(normalizedPath + ".lock");
+}
+
+function getGlossaryLockInfoFile(lockFolder) {
+    if (!lockFolder) return null;
+    return new File(lockFolder.fsName + "/owner.txt");
+}
+
+function buildGlossaryTempFileForPath(path) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return null;
+    return new File(normalizedPath + ".tmp." + glossaryRuntimeId + "_" + String(new Date().getTime()));
+}
+
+function buildGlossaryCorruptSnapshotFileForPath(path) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return null;
+    var d = new Date();
+    var stamp = d.getFullYear() +
+        ("0" + (d.getMonth() + 1)).slice(-2) +
+        ("0" + d.getDate()).slice(-2) + "_" +
+        ("0" + d.getHours()).slice(-2) +
+        ("0" + d.getMinutes()).slice(-2) +
+        ("0" + d.getSeconds()).slice(-2);
+    return new File(normalizedPath + ".corrupt." + stamp + ".csv");
+}
+
+function reportGlossaryWarningOnce(cacheKey, messageKey, logMessage) {
+    if (logMessage) writeLog(logMessage, "WARNUNG");
+    if (glossaryWarningCache[cacheKey]) return;
+    glossaryWarningCache[cacheKey] = true;
+    try { alert(t(messageKey)); } catch (e) {}
+}
+
+function writeGlossaryLockInfo(lockFolder) {
+    var infoFile = getGlossaryLockInfoFile(lockFolder);
+    var opened = false;
+    if (!infoFile) return false;
+    try {
+        infoFile.encoding = "UTF-8";
+        opened = infoFile.open('w');
+        if (!opened) return false;
+        infoFile.write("owner=" + glossaryRuntimeId + "\ncreated=" + String(new Date().getTime()) + "\n");
+        infoFile.close();
+        return true;
+    } catch (e) {
+        try { if (opened) infoFile.close(); } catch (closeErr) {}
+        return false;
+    }
+}
+
+function getGlossaryLockTimestamp(lockFolder) {
+    if (!lockFolder || !lockFolder.exists) return 0;
+    var infoFile = getGlossaryLockInfoFile(lockFolder);
+    var modDate = null;
+    try {
+        if (infoFile && infoFile.exists) modDate = infoFile.modified;
+        else modDate = lockFolder.modified;
+    } catch (e) { modDate = null; }
+    try {
+        if (modDate && modDate.getTime) return modDate.getTime();
+    } catch (e2) {}
+    return 0;
+}
+
+function removeGlossaryLockFolder(lockFolder) {
+    if (!lockFolder || !lockFolder.exists) return true;
+    try {
+        var items = lockFolder.getFiles();
+        for (var i = 0; i < items.length; i++) {
+            try { items[i].remove(); } catch (childErr) {}
+        }
+        if (!lockFolder.exists) return true;
+        return lockFolder.remove();
+    } catch (e) {
+        return !lockFolder.exists;
+    }
+}
+
+function breakStaleGlossaryLock(lockFolder) {
+    var broken = removeGlossaryLockFolder(lockFolder);
+    if (broken) writeLog("Veraltete Glossar-Sperre wurde entfernt: " + lockFolder.fsName, "WARNUNG");
+    return broken;
+}
+
+function waitForGlossaryLockRelease(path, maxWaitMs) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return false;
+    var waitMs = (maxWaitMs && maxWaitMs > 0) ? maxWaitMs : CSV_LOCK_TIMEOUT_MS;
+    var startMs = new Date().getTime();
+    var lockFolder = getGlossaryLockFolderForPath(normalizedPath);
+    while (lockFolder && lockFolder.exists) {
+        var lockTimestamp = getGlossaryLockTimestamp(lockFolder);
+        if (lockTimestamp > 0 && (new Date().getTime() - lockTimestamp) >= CSV_LOCK_STALE_MS) {
+            if (breakStaleGlossaryLock(lockFolder)) continue;
+        }
+        if ((new Date().getTime() - startMs) >= waitMs) return false;
+        try { $.sleep(CSV_LOCK_POLL_MS); } catch (sleepErr) {}
+    }
+    return true;
+}
+
+function acquireGlossaryLock(path, timeoutMs) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return null;
+    var waitMs = (timeoutMs && timeoutMs > 0) ? timeoutMs : CSV_LOCK_TIMEOUT_MS;
+    var startMs = new Date().getTime();
+    var lockFolder = getGlossaryLockFolderForPath(normalizedPath);
+    while ((new Date().getTime() - startMs) < waitMs) {
+        if (lockFolder && !lockFolder.exists) {
+            try {
+                if (lockFolder.create()) {
+                    writeGlossaryLockInfo(lockFolder);
+                    return { folder: lockFolder, path: normalizedPath };
+                }
+            } catch (e) {}
+        }
+        var lockTimestamp = getGlossaryLockTimestamp(lockFolder);
+        if (lockTimestamp > 0 && (new Date().getTime() - lockTimestamp) >= CSV_LOCK_STALE_MS) {
+            if (breakStaleGlossaryLock(lockFolder)) continue;
+        }
+        try { $.sleep(CSV_LOCK_POLL_MS); } catch (sleepErr) {}
+    }
+    return null;
+}
+
+function releaseGlossaryLock(lockHandle) {
+    if (!lockHandle || !lockHandle.folder) return;
+    if (!removeGlossaryLockFolder(lockHandle.folder)) {
+        writeLog("Glossar-Sperre konnte nicht sauber entfernt werden: " + lockHandle.folder.fsName, "WARNUNG");
+    }
+}
+
+function snapshotCorruptGlossaryFile(path) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return null;
+    var glossaryFile = new File(normalizedPath);
+    if (!glossaryFile.exists) return null;
+    var snapshot = buildGlossaryCorruptSnapshotFileForPath(normalizedPath);
+    if (!snapshot) return null;
+    try {
+        if (glossaryFile.copy(snapshot.fsName)) return snapshot;
+    } catch (e) {}
+    return null;
+}
+
+function tryReadCSVContentStable(path, encoding, maxAttempts) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return null;
+    var attempts = (maxAttempts && maxAttempts > 0) ? maxAttempts : 3;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+        var beforeTick = 0;
+        var afterTick = 0;
+        try {
+            var beforeFile = new File(normalizedPath);
+            if (!beforeFile.exists) return null;
+            try {
+                if (beforeFile.modified && beforeFile.modified.getTime) beforeTick = beforeFile.modified.getTime();
+            } catch (beforeModErr) {}
+        } catch (beforeErr) {}
+
+        var content = tryReadCSVContent(normalizedPath, encoding);
+
+        try {
+            var afterFile = new File(normalizedPath);
+            if (!afterFile.exists) return null;
+            try {
+                if (afterFile.modified && afterFile.modified.getTime) afterTick = afterFile.modified.getTime();
+            } catch (afterModErr) {}
+        } catch (afterErr) {}
+
+        if (content !== null && (beforeTick === 0 || afterTick === 0 || beforeTick === afterTick)) return content;
+        if (attempt + 1 < attempts) {
+            try { $.sleep(CSV_LOCK_POLL_MS); } catch (sleepErr) {}
+        }
+    }
+    return null;
+}
+
+function loadBestCSVRowsFromPath(path) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return { ok: false, path: normalizedPath };
+    var f = new File(normalizedPath);
+    if (!f.exists) return { ok: false, path: normalizedPath, missing: true };
+
+    var rows = null;
+    var bestScore = 999999;
+    var encodings = ["UTF-8", "CP1252", "Macintosh", "UTF-16", "UTF-16LE", "UTF-16BE", ""];
+    for (var encIdx = 0; encIdx < encodings.length; encIdx++) {
+        var candidateContent = tryReadCSVContentStable(normalizedPath, encodings[encIdx], 3);
+        if (!candidateContent || candidateContent === "") continue;
+        var candidateSep = guessCSVSeparator(candidateContent);
+        var candidateRows = parseCSVRows(candidateContent, candidateSep);
+        var candidateScore = getCSVDecodeScore(candidateContent, candidateRows);
+        if (candidateRows.length >= 2 && candidateRows[0] && candidateRows[0].length >= 2 && candidateScore < bestScore) {
+            bestScore = candidateScore;
+            rows = candidateRows;
+        }
+    }
+
+    if (!rows || rows.length < 2) return { ok: false, path: normalizedPath };
+    return { ok: true, rows: rows, path: normalizedPath };
+}
+
+function loadGlossaryRowsState(path) {
+    var resolvedPath = resolveCSVPath(path);
+    if (!resolvedPath || resolvedPath === "") return { ok: false, path: "" };
+
+    waitForGlossaryLockRelease(resolvedPath, CSV_LOCK_TIMEOUT_MS);
+
+    var primaryResult = loadBestCSVRowsFromPath(resolvedPath);
+    if (primaryResult.ok) {
+        primaryResult.source = "primary";
+        return primaryResult;
+    }
+
+    var backupFile = getGlossaryBackupFileForPath(resolvedPath);
+    if (backupFile && backupFile.exists) {
+        var backupResult = loadBestCSVRowsFromPath(backupFile.fsName);
+        if (backupResult.ok) {
+            backupResult.source = "backup";
+            backupResult.primaryPath = resolvedPath;
+            return backupResult;
+        }
+    }
+
+    primaryResult.source = "primary";
+    return primaryResult;
+}
+
+function writeGlossaryContentAtomically(path, content, options) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return false;
+    var opts = options || {};
+    var targetFile = new File(normalizedPath);
+    var tempFile = buildGlossaryTempFileForPath(normalizedPath);
+    var backupFile = getGlossaryBackupFileForPath(normalizedPath);
+    var opened = false;
+    var targetExisted = false;
+    if (!tempFile || !backupFile) return false;
+
+    try {
+        var parentFolder = targetFile.parent;
+        if (parentFolder && !parentFolder.exists) {
+            try { parentFolder.create(); } catch (parentErr) {}
+        }
+
+        targetExisted = targetFile.exists;
+        if (tempFile.exists) {
+            try { tempFile.remove(); } catch (tempCleanupErr) {}
+        }
+
+        tempFile.encoding = "UTF-8";
+        opened = tempFile.open('w');
+        if (!opened) throw new Error("Glossary temp file could not be opened for writing.");
+        if (!tempFile.write(content)) throw new Error("Glossary temp file could not be written.");
+        tempFile.close();
+        opened = false;
+
+        if (!opts.preserveBackup && backupFile.exists) {
+            try { backupFile.remove(); } catch (oldBackupErr) {}
+        }
+
+        if (targetExisted) {
+            if (!opts.preserveBackup) {
+                try {
+                    if (!targetFile.copy(backupFile.fsName)) {
+                        writeLog("Glossar-Backup konnte nicht erstellt werden: " + backupFile.fsName, "WARNUNG");
+                    }
+                } catch (backupErr) {
+                    writeLog("Glossar-Backup fehlgeschlagen: " + (backupErr.message || backupErr), "WARNUNG");
+                }
+            }
+            if (!targetFile.remove()) throw new Error("Glossary target file could not be replaced.");
+        }
+
+        if (!tempFile.rename(targetFile.name)) {
+            if (!tempFile.copy(targetFile.fsName)) throw new Error("Glossary temp file could not be moved into place.");
+            try { tempFile.remove(); } catch (tempRemoveErr) {}
+        }
+        return true;
+    } catch (e) {
+        try { if (opened) tempFile.close(); } catch (closeErr) {}
+        try { if (tempFile.exists) tempFile.remove(); } catch (cleanupErr) {}
+        if (!targetFile.exists && backupFile.exists) {
+            try { backupFile.copy(targetFile.fsName); } catch (restoreErr) {}
+        }
+        return false;
+    }
+}
+
 function guessCSVSeparator(content) {
     var firstRow = "";
     var inQuotes = false;
@@ -2671,26 +2996,31 @@ function getCSVDecodeScore(content, rows) {
 }
 
 function loadCSVGlossary(path) {
-    path = resolveCSVPath(path);
-    if (!path || path === "") return null;
-    var f = new File(path);
-    if (!f.exists) return null;
+    var state = loadGlossaryRowsState(path);
+    if (!state.ok) {
+        if (state.path && !state.missing) {
+            reportGlossaryWarningOnce(
+                "glossary_read_failed",
+                "glossary_read_warning",
+                "Glossar-Datei konnte nicht sicher gelesen werden: " + state.path
+            );
+        }
+        return null;
+    }
+
+    if (state.source === "backup") {
+        var corruptSnapshot = snapshotCorruptGlossaryFile(state.primaryPath || path);
+        reportGlossaryWarningOnce(
+            "glossary_read_backup",
+            "glossary_read_warning",
+            "Glossar-Hauptdatei war nicht lesbar. Sicherung wird verwendet." +
+                (corruptSnapshot ? " Defekte Datei gesichert unter: " + corruptSnapshot.fsName : "")
+        );
+    }
+
     var glossary = {};
     try {
-        var rows = null;
-        var bestScore = 999999;
-        var encodings = ["UTF-8", "CP1252", "Macintosh", "UTF-16", "UTF-16LE", "UTF-16BE", ""];
-        for (var encIdx = 0; encIdx < encodings.length; encIdx++) {
-            var candidateContent = tryReadCSVContent(path, encodings[encIdx]);
-            if (!candidateContent || candidateContent === "") continue;
-            var candidateSep = guessCSVSeparator(candidateContent);
-            var candidateRows = parseCSVRows(candidateContent, candidateSep);
-            var candidateScore = getCSVDecodeScore(candidateContent, candidateRows);
-            if (candidateRows.length >= 2 && candidateRows[0] && candidateRows[0].length >= 2 && candidateScore < bestScore) {
-                bestScore = candidateScore;
-                rows = candidateRows;
-            }
-        }
+        var rows = state.rows;
         if (!rows) return null;
         if (rows.length < 2) return null;
 
@@ -4990,8 +5320,8 @@ function promptLegacyTargetLanguageSelection(preselectedCodes, doc, includeExten
     var buttonRow = dlg.add("group");
     buttonRow.alignment = "right";
     var btnMore = null;
-    if (!showExtendedLanguages) btnMore = buttonRow.add("button", undefined, t("legacy_more_languages"));
     var btnOk = buttonRow.add("button", undefined, t("legacy_create"));
+    if (!showExtendedLanguages) btnMore = buttonRow.add("button", undefined, t("legacy_more_languages"));
     var btnCancel = buttonRow.add("button", undefined, t("cancel"));
 
     var action = "cancel";
@@ -7003,9 +7333,14 @@ function getDocSnapshotKey(doc) {
 function getGlossaryVersionToken(path) {
     path = resolveCSVPath(path);
     if (!path || path === "") return "";
+    waitForGlossaryLockRelease(path, CSV_LOCK_TIMEOUT_MS);
     try {
         var f = new File(path);
-        if (!f.exists) return "";
+        if (!f.exists) {
+            var backupFile = getGlossaryBackupFileForPath(path);
+            if (!backupFile || !backupFile.exists) return "";
+            return backupFile.fsName + "|" + String(backupFile.modified) + "|backup";
+        }
         return f.fsName + "|" + String(f.modified);
     } catch (e) {
         return String(path);
