@@ -2074,8 +2074,8 @@ myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 myWindow.spacing = 10;
 myWindow.margins = 14;
-myWindow.minimumSize = [840, 420];
-myWindow.preferredSize = [980, 500];
+myWindow.minimumSize = [780, 420];
+myWindow.preferredSize = [900, 500];
 
 var headerGroup = myWindow.add("group");
 headerGroup.orientation = "row";
@@ -2107,20 +2107,20 @@ statusPanel.orientation = "column";
 statusPanel.alignChildren = ["fill", "top"];
 statusPanel.alignment = ["fill", "fill"];
 statusPanel.margins = 12;
-statusPanel.preferredSize.width = 520;
+statusPanel.preferredSize.width = 480;
 var statusSummaryText = statusPanel.add("statictext", undefined, " ", { multiline: true });
-statusSummaryText.preferredSize = [460, 68];
-statusSummaryText.minimumSize = [460, 68];
+statusSummaryText.preferredSize = [430, 74];
+statusSummaryText.minimumSize = [430, 74];
 
 var validationPanel = summaryRow.add("panel", undefined, t("validation_title"));
 validationPanel.orientation = "column";
 validationPanel.alignChildren = ["fill", "top"];
 validationPanel.alignment = ["fill", "fill"];
 validationPanel.margins = 12;
-validationPanel.preferredSize.width = 400;
+validationPanel.preferredSize.width = 360;
 var validationText = validationPanel.add("statictext", undefined, " ", { multiline: true });
-validationText.preferredSize = [360, 68];
-validationText.minimumSize = [360, 68];
+validationText.preferredSize = [320, 68];
+validationText.minimumSize = [320, 68];
 
 var modePanel = myWindow.add("panel", undefined, t("mode_title"));
 modePanel.orientation = "column";
@@ -2140,7 +2140,7 @@ contentPanel.orientation = "column";
 contentPanel.alignChildren = ["fill", "top"];
 contentPanel.margins = 15;
 contentPanel.spacing = 10;
-contentPanel.minimumSize = [780, 160];
+contentPanel.minimumSize = [700, 160];
 
 var selectionModeGroup = contentPanel.add("group");
 selectionModeGroup.orientation = "column";
@@ -2213,13 +2213,17 @@ var btnTranslate = groupButtons.add("button", undefined, t("translate_start"));
 btnTranslate.preferredSize = [180, 32];
 var buttonSpacer = groupButtons.add("statictext", undefined, "");
 buttonSpacer.alignment = "fill";
-var btnLinkReferences = groupButtons.add("button", undefined, t("hyperlink_settings_button"));
+var rightButtonGroup = groupButtons.add("group");
+rightButtonGroup.alignment = ["right", "center"];
+rightButtonGroup.alignChildren = ["left", "center"];
+rightButtonGroup.spacing = 8;
+var btnLinkReferences = rightButtonGroup.add("button", undefined, t("hyperlink_settings_button"));
 btnLinkReferences.helpTip = t("hyperlink_settings_help");
 btnLinkReferences.preferredSize = [130, 28];
-var btnSpellCheck = groupButtons.add("button", undefined, t("spellcheck_button"));
+var btnSpellCheck = rightButtonGroup.add("button", undefined, t("spellcheck_button"));
 btnSpellCheck.helpTip = t("spellcheck_help");
 btnSpellCheck.preferredSize = [130, 28];
-var btnCancel = groupButtons.add("button", undefined, t("close_button"));
+var btnCancel = rightButtonGroup.add("button", undefined, t("close_button"));
 btnCancel.preferredSize = [120, 28];
 
 function setMainGroupVisible(group, isVisible) {
