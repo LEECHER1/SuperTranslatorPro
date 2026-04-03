@@ -553,6 +553,8 @@ var UI_STRINGS = {
     memory_write_warning: { de: "Memory-Warnung: Datei konnte nicht geschrieben werden.", en: "Memory warning: the file could not be written." },
     legacy_missing_title: { de: "Fehlende Musterseiten erzeugen", en: "Create Missing Master Pages" },
     legacy_missing_info: { de: "Zielsprachen auswählen oder abwählen.\nBereits erkannte Sprachen sind automatisch aktiviert.\nMit Reihenfolge bestimmst du die Position der Musterseiten (1 = zuerst).", en: "Select or deselect target languages.\nDetected languages are enabled automatically.\nUse the order field to control the master-page position (1 = first)." },
+    legacy_more_languages: { de: "Weitere Sprachen", en: "More Languages" },
+    legacy_all_languages_hint: { de: "Erweiterte Ansicht: Alle aktuell von DeepL unterstützten Zielsprachen sind jetzt auswählbar.", en: "Extended view: all target languages currently supported by DeepL are now selectable." },
     legacy_create: { de: "Übernehmen", en: "Apply" },
     legacy_language_label: { de: "Sprache", en: "Language" },
     legacy_order_label: { de: "Reihenfolge", en: "Order" },
@@ -971,12 +973,12 @@ function extractReferenceNumber(text) {
 }
 
 function getLocalizedLanguageName(code) {
-    var upper = String(code || "").toUpperCase();
+    var upper = normalizeTranslationLanguageCode(code);
     if (upper === "DE") return UI_IS_GERMAN ? "Deutsch" : "German";
-    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
-        if (LEGACY_BDA_LANGUAGE_OPTIONS[i].code === upper) {
-            return UI_IS_GERMAN ? LEGACY_BDA_LANGUAGE_OPTIONS[i].labelDe : LEGACY_BDA_LANGUAGE_OPTIONS[i].labelEn;
-        }
+    var option = getTranslationLanguageOption(upper);
+    if (option) {
+        if (UI_IS_GERMAN) return option.labelDe || option.labelEn || upper;
+        return option.labelEn || option.labelDe || upper;
     }
     return upper;
 }
@@ -1012,10 +1014,10 @@ function buildManualLanguageList() {
 
 function getHyperlinkLanguageEntries() {
     var entries = [{ code: "DE", label: getLocalizedLanguageName("DE") }];
-    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
+    for (var i = 0; i < LEGACY_BDA_EXTENDED_LANGUAGE_OPTIONS.length; i++) {
         entries.push({
-            code: LEGACY_BDA_LANGUAGE_OPTIONS[i].code,
-            label: getLocalizedLanguageName(LEGACY_BDA_LANGUAGE_OPTIONS[i].code)
+            code: LEGACY_BDA_EXTENDED_LANGUAGE_OPTIONS[i].code,
+            label: getLocalizedLanguageName(LEGACY_BDA_EXTENDED_LANGUAGE_OPTIONS[i].code)
         });
     }
     return entries;
@@ -1031,8 +1033,8 @@ function buildHyperlinkLanguageList() {
 }
 
 function extractLanguageCodeFromOption(optionText) {
-    var match = String(optionText || "").match(/^[A-Za-z]{2}/);
-    return match ? match[0].toUpperCase() : "";
+    var match = String(optionText || "").match(/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/);
+    return match ? normalizeTranslationLanguageCode(match[0]) : "";
 }
 
 function normalizeHyperlinkPageMappings(rawMappings) {
@@ -1040,8 +1042,8 @@ function normalizeHyperlinkPageMappings(rawMappings) {
     if (!rawMappings) return normalized;
     for (var key in rawMappings) {
         if (!rawMappings.hasOwnProperty(key)) continue;
-        var code = String(key || "").replace(/^\s+|\s+$/g, "").toUpperCase();
-        if (!code.match(/^[A-Z]{2}$/)) continue;
+        var code = normalizeTranslationLanguageCode(key);
+        if (!isSupportedLegacyLanguageCode(code)) continue;
         var pageValue = String(rawMappings[key] === null || rawMappings[key] === undefined ? "" : rawMappings[key]).replace(/^\s+|\s+$/g, "");
         if (pageValue === "") continue;
         normalized[code] = pageValue;
@@ -1144,9 +1146,8 @@ function getTOCItemContents(itemEntry) {
 
 function extractTOCLanguageCodeFromItem(itemEntry) {
     var rawText = getTOCItemContents(itemEntry);
-    var compact = String(rawText || "").replace(/[\s\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, "").toUpperCase();
-    if (!compact.match(/^[A-Z]{2}$/) || !isSupportedLegacyLanguageCode(compact)) return "";
-    return compact;
+    var code = extractSupportedLanguageCode(rawText);
+    return code ? code.toUpperCase() : "";
 }
 
 function hasTOCPageMarkerText(text) {
@@ -1254,8 +1255,8 @@ function findPageLanguageBadgeCode(page) {
             if (!story) continue;
             textObj = story;
         }
-        var code = normalizeLanguageBadgeText(textObj.contents);
-        if (code.length !== 2 || !isSupportedLegacyLanguageCode(code)) continue;
+        var code = extractSupportedLanguageCode(textObj.contents);
+        if (!code) continue;
         var score = 0;
         try { if (hasBlackBadgeBackground(tf)) score += 40; } catch (e2) {}
         try {
@@ -1496,29 +1497,213 @@ var germanFocusState = { activePageKey: null, fittedPageKey: null };
 var germanSpellDialogLocation = null;
 var mainWindowIdleTask = null;
 var mainWindowLiveSignature = "";
-var LEGACY_BDA_LANGUAGE_OPTIONS = [
-    { code: "EN", labelDe: "Englisch", labelEn: "English" },
-    { code: "FR", labelDe: "Französisch", labelEn: "French" },
-    { code: "IT", labelDe: "Italienisch", labelEn: "Italian" },
-    { code: "ES", labelDe: "Spanisch", labelEn: "Spanish" },
-    { code: "CS", labelDe: "Tschechisch", labelEn: "Czech" },
-    { code: "HU", labelDe: "Ungarisch", labelEn: "Hungarian" },
+var DEEPL_TARGET_LANGUAGE_OPTIONS = [
+    { code: "ACE", labelEn: "Acehnese" },
+    { code: "AF", labelEn: "Afrikaans" },
+    { code: "AN", labelEn: "Aragonese" },
+    { code: "AR", labelDe: "Arabisch", labelEn: "Arabic" },
+    { code: "AS", labelEn: "Assamese" },
+    { code: "AY", labelEn: "Aymara" },
+    { code: "AZ", labelDe: "Aserbaidschanisch", labelEn: "Azerbaijani" },
+    { code: "BA", labelEn: "Bashkir" },
+    { code: "BE", labelDe: "Belarussisch", labelEn: "Belarusian" },
     { code: "BG", labelDe: "Bulgarisch", labelEn: "Bulgarian" },
+    { code: "BHO", labelEn: "Bhojpuri" },
+    { code: "BN", labelDe: "Bengalisch", labelEn: "Bengali" },
+    { code: "BR", labelEn: "Breton" },
+    { code: "BS", labelDe: "Bosnisch", labelEn: "Bosnian" },
+    { code: "CA", labelDe: "Katalanisch", labelEn: "Catalan" },
+    { code: "CEB", labelEn: "Cebuano" },
+    { code: "CKB", labelEn: "Kurdish (Sorani)" },
+    { code: "CS", labelDe: "Tschechisch", labelEn: "Czech" },
+    { code: "CY", labelDe: "Walisisch", labelEn: "Welsh" },
     { code: "DA", labelDe: "Dänisch", labelEn: "Danish" },
+    { code: "DE", labelDe: "Deutsch", labelEn: "German" },
     { code: "EL", labelDe: "Griechisch", labelEn: "Greek" },
+    { code: "EN", labelDe: "Englisch", labelEn: "English" },
+    { code: "EN-GB", labelDe: "Englisch (UK)", labelEn: "English (British)" },
+    { code: "EN-US", labelDe: "Englisch (US)", labelEn: "English (American)" },
+    { code: "EO", labelDe: "Esperanto", labelEn: "Esperanto" },
+    { code: "ES", labelDe: "Spanisch", labelEn: "Spanish" },
+    { code: "ES-419", labelDe: "Spanisch (Lateinamerika)", labelEn: "Spanish (Latin American)" },
     { code: "ET", labelDe: "Estnisch", labelEn: "Estonian" },
+    { code: "EU", labelDe: "Baskisch", labelEn: "Basque" },
+    { code: "FA", labelDe: "Persisch", labelEn: "Persian" },
     { code: "FI", labelDe: "Finnisch", labelEn: "Finnish" },
+    { code: "FR", labelDe: "Französisch", labelEn: "French" },
+    { code: "GA", labelDe: "Irisch", labelEn: "Irish" },
+    { code: "GL", labelDe: "Galicisch", labelEn: "Galician" },
+    { code: "GN", labelEn: "Guarani" },
+    { code: "GOM", labelEn: "Konkani" },
+    { code: "GU", labelDe: "Gujarati", labelEn: "Gujarati" },
+    { code: "HA", labelEn: "Hausa" },
+    { code: "HE", labelDe: "Hebräisch", labelEn: "Hebrew" },
+    { code: "HI", labelDe: "Hindi", labelEn: "Hindi" },
+    { code: "HR", labelDe: "Kroatisch", labelEn: "Croatian" },
+    { code: "HT", labelEn: "Haitian Creole" },
+    { code: "HU", labelDe: "Ungarisch", labelEn: "Hungarian" },
+    { code: "HY", labelDe: "Armenisch", labelEn: "Armenian" },
+    { code: "ID", labelDe: "Indonesisch", labelEn: "Indonesian" },
+    { code: "IG", labelEn: "Igbo" },
+    { code: "IS", labelDe: "Isländisch", labelEn: "Icelandic" },
+    { code: "IT", labelDe: "Italienisch", labelEn: "Italian" },
+    { code: "JA", labelDe: "Japanisch", labelEn: "Japanese" },
+    { code: "JV", labelEn: "Javanese" },
+    { code: "KA", labelDe: "Georgisch", labelEn: "Georgian" },
+    { code: "KK", labelDe: "Kasachisch", labelEn: "Kazakh" },
+    { code: "KMR", labelEn: "Kurdish (Kurmanji)" },
+    { code: "KO", labelDe: "Koreanisch", labelEn: "Korean" },
+    { code: "KY", labelEn: "Kyrgyz" },
+    { code: "LA", labelDe: "Latein", labelEn: "Latin" },
+    { code: "LB", labelEn: "Luxembourgish" },
+    { code: "LMO", labelEn: "Lombard" },
+    { code: "LN", labelEn: "Lingala" },
     { code: "LT", labelDe: "Litauisch", labelEn: "Lithuanian" },
     { code: "LV", labelDe: "Lettisch", labelEn: "Latvian" },
+    { code: "MAI", labelEn: "Maithili" },
+    { code: "MG", labelDe: "Malagasy", labelEn: "Malagasy" },
+    { code: "MI", labelEn: "Maori" },
+    { code: "MK", labelDe: "Mazedonisch", labelEn: "Macedonian" },
+    { code: "ML", labelDe: "Malayalam", labelEn: "Malayalam" },
+    { code: "MN", labelDe: "Mongolisch", labelEn: "Mongolian" },
+    { code: "MR", labelDe: "Marathi", labelEn: "Marathi" },
+    { code: "MS", labelDe: "Malaiisch", labelEn: "Malay" },
+    { code: "MT", labelDe: "Maltesisch", labelEn: "Maltese" },
+    { code: "MY", labelEn: "Burmese" },
+    { code: "NB", labelDe: "Norwegisch (Bokmål)", labelEn: "Norwegian Bokmål" },
+    { code: "NE", labelDe: "Nepalesisch", labelEn: "Nepali" },
     { code: "NL", labelDe: "Niederländisch", labelEn: "Dutch" },
+    { code: "OC", labelDe: "Okzitanisch", labelEn: "Occitan" },
+    { code: "OM", labelEn: "Oromo" },
+    { code: "PA", labelDe: "Punjabi", labelEn: "Punjabi" },
+    { code: "PAG", labelEn: "Pangasinan" },
+    { code: "PAM", labelEn: "Kapampangan" },
     { code: "PL", labelDe: "Polnisch", labelEn: "Polish" },
+    { code: "PRS", labelEn: "Dari" },
+    { code: "PS", labelEn: "Pashto" },
     { code: "PT", labelDe: "Portugiesisch", labelEn: "Portuguese" },
+    { code: "PT-BR", labelDe: "Portugiesisch (Brasilien)", labelEn: "Portuguese (Brazilian)" },
+    { code: "PT-PT", labelDe: "Portugiesisch (Europa)", labelEn: "Portuguese (European)" },
+    { code: "QU", labelEn: "Quechua" },
     { code: "RO", labelDe: "Rumänisch", labelEn: "Romanian" },
     { code: "RU", labelDe: "Russisch", labelEn: "Russian" },
+    { code: "SA", labelDe: "Sanskrit", labelEn: "Sanskrit" },
+    { code: "SCN", labelEn: "Sicilian" },
     { code: "SK", labelDe: "Slowakisch", labelEn: "Slovak" },
     { code: "SL", labelDe: "Slowenisch", labelEn: "Slovenian" },
-    { code: "SV", labelDe: "Schwedisch", labelEn: "Swedish" }
+    { code: "SQ", labelDe: "Albanisch", labelEn: "Albanian" },
+    { code: "SR", labelDe: "Serbisch", labelEn: "Serbian" },
+    { code: "ST", labelEn: "Sesotho" },
+    { code: "SU", labelEn: "Sundanese" },
+    { code: "SV", labelDe: "Schwedisch", labelEn: "Swedish" },
+    { code: "SW", labelDe: "Suaheli", labelEn: "Swahili" },
+    { code: "TA", labelDe: "Tamil", labelEn: "Tamil" },
+    { code: "TE", labelDe: "Telugu", labelEn: "Telugu" },
+    { code: "TG", labelDe: "Tadschikisch", labelEn: "Tajik" },
+    { code: "TH", labelDe: "Thailändisch", labelEn: "Thai" },
+    { code: "TK", labelEn: "Turkmen" },
+    { code: "TL", labelEn: "Tagalog" },
+    { code: "TN", labelEn: "Tswana" },
+    { code: "TR", labelDe: "Türkisch", labelEn: "Turkish" },
+    { code: "TS", labelEn: "Tsonga" },
+    { code: "TT", labelDe: "Tatarisch", labelEn: "Tatar" },
+    { code: "UK", labelDe: "Ukrainisch", labelEn: "Ukrainian" },
+    { code: "UR", labelDe: "Urdu", labelEn: "Urdu" },
+    { code: "UZ", labelDe: "Usbekisch", labelEn: "Uzbek" },
+    { code: "VI", labelDe: "Vietnamesisch", labelEn: "Vietnamese" },
+    { code: "WO", labelEn: "Wolof" },
+    { code: "XH", labelEn: "Xhosa" },
+    { code: "YI", labelDe: "Jiddisch", labelEn: "Yiddish" },
+    { code: "YUE", labelDe: "Kantonesisch", labelEn: "Cantonese" },
+    { code: "ZH", labelDe: "Chinesisch", labelEn: "Chinese" },
+    { code: "ZH-HANS", labelDe: "Chinesisch (vereinfacht)", labelEn: "Chinese (Simplified)" },
+    { code: "ZH-HANT", labelDe: "Chinesisch (traditionell)", labelEn: "Chinese (Traditional)" },
+    { code: "ZU", labelEn: "Zulu" }
 ];
+var LEGACY_BDA_DEFAULT_LANGUAGE_CODES = ["EN", "FR", "IT", "ES", "CS", "HU", "BG", "DA", "EL", "ET", "FI", "LT", "LV", "NL", "PL", "PT", "RO", "RU", "SK", "SL", "SV"];
+var LEGACY_BDA_LANGUAGE_OPTIONS = buildTranslationLanguageOptionSubset(LEGACY_BDA_DEFAULT_LANGUAGE_CODES);
+var LEGACY_BDA_EXTENDED_LANGUAGE_OPTIONS = buildExtendedTranslationLanguageOptions(LEGACY_BDA_DEFAULT_LANGUAGE_CODES);
+var TRANSLATION_LANGUAGE_OPTION_LOOKUP = buildTranslationLanguageOptionLookup(DEEPL_TARGET_LANGUAGE_OPTIONS);
+var SUPPORTED_TRANSLATION_LANGUAGE_CODES = buildSupportedTranslationLanguageCodeList(false);
+var SUPPORTED_TRANSLATION_LANGUAGE_CODES_WITH_GERMAN = buildSupportedTranslationLanguageCodeList(true);
+
+function normalizeTranslationLanguageCode(code) {
+    return String(code || "").replace(/[\u2010-\u2015]/g, "-").replace(/^\s+|\s+$/g, "").replace(/\s+/g, "").toUpperCase();
+}
+
+function buildTranslationLanguageOptionLookup(options) {
+    var lookup = {};
+    for (var i = 0; i < options.length; i++) {
+        var code = normalizeTranslationLanguageCode(options[i].code);
+        if (code === "" || lookup[code]) continue;
+        lookup[code] = options[i];
+    }
+    return lookup;
+}
+
+function buildTranslationLanguageOptionSubset(codes) {
+    var subset = [];
+    var seen = {};
+    for (var i = 0; i < codes.length; i++) {
+        var targetCode = normalizeTranslationLanguageCode(codes[i]);
+        if (targetCode === "" || seen[targetCode]) continue;
+        for (var j = 0; j < DEEPL_TARGET_LANGUAGE_OPTIONS.length; j++) {
+            var optionCode = normalizeTranslationLanguageCode(DEEPL_TARGET_LANGUAGE_OPTIONS[j].code);
+            if (optionCode !== targetCode) continue;
+            subset.push(DEEPL_TARGET_LANGUAGE_OPTIONS[j]);
+            seen[targetCode] = true;
+            break;
+        }
+    }
+    return subset;
+}
+
+function buildExtendedTranslationLanguageOptions(baseCodes) {
+    var options = buildTranslationLanguageOptionSubset(baseCodes);
+    var seen = {};
+    for (var i = 0; i < options.length; i++) {
+        var existingCode = normalizeTranslationLanguageCode(options[i].code);
+        if (existingCode !== "") seen[existingCode] = true;
+    }
+    for (var j = 0; j < DEEPL_TARGET_LANGUAGE_OPTIONS.length; j++) {
+        var code = normalizeTranslationLanguageCode(DEEPL_TARGET_LANGUAGE_OPTIONS[j].code);
+        if (code === "" || code === "DE" || seen[code]) continue;
+        options.push(DEEPL_TARGET_LANGUAGE_OPTIONS[j]);
+        seen[code] = true;
+    }
+    return options;
+}
+
+function getTranslationLanguageOption(code) {
+    var normalized = normalizeTranslationLanguageCode(code);
+    return normalized === "" ? null : (TRANSLATION_LANGUAGE_OPTION_LOOKUP[normalized] || null);
+}
+
+function buildSupportedTranslationLanguageCodeList(includeGerman) {
+    var codes = [];
+    var seen = {};
+    if (includeGerman) {
+        codes.push("DE");
+        seen.DE = true;
+    }
+    for (var i = 0; i < DEEPL_TARGET_LANGUAGE_OPTIONS.length; i++) {
+        var code = normalizeTranslationLanguageCode(DEEPL_TARGET_LANGUAGE_OPTIONS[i].code);
+        if (code === "" || (!includeGerman && code === "DE") || seen[code]) continue;
+        codes.push(code);
+        seen[code] = true;
+    }
+    codes.sort(function(a, b) {
+        if (a.length !== b.length) return b.length - a.length;
+        if (a < b) return -1;
+        if (a > b) return 1;
+        return 0;
+    });
+    return codes;
+}
+
+function getLegacyDialogLanguageOptions(includeExtended) {
+    return includeExtended ? LEGACY_BDA_EXTENDED_LANGUAGE_OPTIONS : LEGACY_BDA_LANGUAGE_OPTIONS;
+}
 
 function getSupportedGlossaryLanguageHeaders() {
     var headers = ["DE"];
@@ -1549,12 +1734,7 @@ function isMatchingGlossaryLanguageCode(a, b) {
 }
 
 function isSupportedGlossaryLanguageHeader(header) {
-    var upper = normalizeGlossaryLanguageCode(header);
-    if (upper === "DE" || upper === "EN-US" || upper === "EN-GB" || upper === "PT-PT") return true;
-    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
-        if (LEGACY_BDA_LANGUAGE_OPTIONS[i].code === upper) return true;
-    }
-    return false;
+    return isSupportedLegacyLanguageCode(normalizeGlossaryLanguageCode(header));
 }
 
 function isGlossaryMetaHeader(header) {
@@ -2440,7 +2620,7 @@ function updateLanguageMasterVersionLabels(doc) {
     var masterSpreads = doc.masterSpreads;
     for (var m = 0; m < masterSpreads.length; m++) {
         var masterName = masterSpreads[m].name;
-        if (!masterName.match(/[-_]([a-z]{2})(?:[-_]|$)/i)) continue;
+        if (!getMasterLang(masterName)) continue;
         var pages = masterSpreads[m].pages;
         for (var p = 0; p < pages.length; p++) {
             var allItems = pages[p].allPageItems;
@@ -2899,6 +3079,38 @@ function positionDialogRightOfMainWindow(dialog, dialogWidth, dialogHeight) {
 
         dialog.location = [left, top];
     } catch (e3) {}
+}
+
+function positionDialogCenteredOnMainWindow(dialog, dialogWidth, dialogHeight) {
+    if (!dialog || !myWindow) return;
+    try {
+        var anchorBounds = myWindow.bounds;
+        var anchorLeft = getBoundsCoordinate(anchorBounds, "left", 0, 0);
+        var anchorTop = getBoundsCoordinate(anchorBounds, "top", 1, 0);
+        var anchorRight = getBoundsCoordinate(anchorBounds, "right", 2, anchorLeft + dialogWidth);
+        var anchorBottom = getBoundsCoordinate(anchorBounds, "bottom", 3, anchorTop + dialogHeight);
+
+        var anchorWidth = anchorRight - anchorLeft;
+        var anchorHeight = anchorBottom - anchorTop;
+        var left = anchorLeft + Math.round((anchorWidth - dialogWidth) / 2);
+        var top = anchorTop + Math.round((anchorHeight - dialogHeight) / 2);
+
+        try {
+            if ($.screens && $.screens.length > 0) {
+                var screenBounds = $.screens[0].visibleBounds || $.screens[0].bounds;
+                var screenLeft = getBoundsCoordinate(screenBounds, "left", 0, 0);
+                var screenTop = getBoundsCoordinate(screenBounds, "top", 1, 0);
+                var screenRight = getBoundsCoordinate(screenBounds, "right", 2, left + dialogWidth);
+                var screenBottom = getBoundsCoordinate(screenBounds, "bottom", 3, top + dialogHeight);
+                if (left < screenLeft + 20) left = screenLeft + 20;
+                if (top < screenTop + 20) top = screenTop + 20;
+                if (left + dialogWidth > screenRight) left = Math.max(screenLeft + 20, screenRight - dialogWidth - 20);
+                if (top + dialogHeight > screenBottom) top = Math.max(screenTop + 20, screenBottom - dialogHeight - 20);
+            }
+        } catch (screenErr) {}
+
+        dialog.location = [left, top];
+    } catch (e4) {}
 }
 
 function refreshMainInlineHints() {
@@ -3823,10 +4035,7 @@ btnSettings.onClick = function() {
         copyfitTrackingStepField.input.enabled = copyfitEnabled;
         copyfitScaleStepField.input.enabled = copyfitEnabled;
         fontFallbackRulesInput.enabled = !!fontFallbackEnabledCheckbox.value;
-        try { typographyCopyfitSection.layout.layout(true); } catch (typographyLayoutErr) {}
-        try { typographyFontFallbackSection.layout.layout(true); } catch (typographyFallbackLayoutErr) {}
         try { refreshTypographyScrollUI(); } catch (typographyScrollErr) {}
-        try { setWin.layout.layout(true); } catch (typographyWinLayoutErr) {}
     }
 
     createDialogHint(autoTab, t("settings_tab_auto_hint"));
@@ -4029,7 +4238,7 @@ btnSettings.onClick = function() {
             width = bounds[2] - bounds[0];
             height = bounds[3] - bounds[1];
         } catch (boundsErr) {}
-        positionDialogRightOfMainWindow(setWin, width, height);
+        positionDialogCenteredOnMainWindow(setWin, width, height);
         try { refreshTypographyScrollUI(); } catch (showScrollErr) {}
     };
     setWin.onResizing = setWin.onResize = function() {
@@ -4054,17 +4263,39 @@ function isGermanMasterName(name) {
 
 function normalizeLanguageBadgeText(text) {
     if (text === null || text === undefined) return "";
-    return String(text).replace(/^\s+|\s+$/g, "").replace(/[\r\n\t ]+/g, "").replace(/[^A-Za-z]/g, "").toLowerCase();
+    return String(text).replace(/[\u2010-\u2015]/g, "-").replace(/^\s+|\s+$/g, "").replace(/[\r\n\t ]+/g, "").replace(/[^A-Za-z0-9-]/g, "").replace(/-+/g, "-").replace(/^-+|-+$/g, "").toLowerCase();
+}
+
+function extractSupportedLanguageCode(text) {
+    var normalized = normalizeLanguageBadgeText(text);
+    return isSupportedLegacyLanguageCode(normalized) ? normalized : "";
+}
+
+function findSupportedTranslationLanguageCodeMatch(text, includeGerman) {
+    var raw = String(text || "").replace(/[\u2010-\u2015]/g, "-");
+    if (raw === "") return null;
+    var probe = raw.toUpperCase();
+    var supportedCodes = includeGerman ? SUPPORTED_TRANSLATION_LANGUAGE_CODES_WITH_GERMAN : SUPPORTED_TRANSLATION_LANGUAGE_CODES;
+    for (var i = 0; i < supportedCodes.length; i++) {
+        var code = supportedCodes[i];
+        var searchIndex = probe.indexOf(code);
+        while (searchIndex !== -1) {
+            var beforeChar = searchIndex > 0 ? probe.charAt(searchIndex - 1) : "";
+            var afterIndex = searchIndex + code.length;
+            var afterChar = afterIndex < probe.length ? probe.charAt(afterIndex) : "";
+            var beforeOk = searchIndex === 0 || !/[A-Z0-9]/.test(beforeChar);
+            var afterOk = afterIndex >= probe.length || !/[A-Z0-9]/.test(afterChar);
+            if (beforeOk && afterOk) return { code: code, index: searchIndex, end: afterIndex };
+            searchIndex = probe.indexOf(code, searchIndex + 1);
+        }
+    }
+    return null;
 }
 
 function isSupportedLegacyLanguageCode(code) {
-    if (!code) return false;
-    var upper = String(code).toUpperCase();
+    var upper = normalizeTranslationLanguageCode(code);
     if (upper === "DE") return true;
-    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
-        if (LEGACY_BDA_LANGUAGE_OPTIONS[i].code === upper) return true;
-    }
-    return false;
+    return !!getTranslationLanguageOption(upper);
 }
 
 function isBlackLikeSwatch(swatch) {
@@ -4130,8 +4361,8 @@ function collectMasterLanguageBadges(masterSpread, preferredCode) {
                 if (!story) continue;
                 textObj = story;
             }
-            var code = normalizeLanguageBadgeText(textObj.contents);
-            if (code.length !== 2 || !isSupportedLegacyLanguageCode(code)) continue;
+            var code = extractSupportedLanguageCode(textObj.contents);
+            if (!code) continue;
             if (preferred !== "" && code !== preferred) continue;
 
             var score = 0;
@@ -4227,13 +4458,17 @@ function findGermanLegacyMasterSpread(doc) {
     return null;
 }
 
-function promptLegacyTargetLanguageSelection(preselectedCodes, doc) {
+function promptLegacyTargetLanguageSelection(preselectedCodes, doc, includeExtendedLanguages, preservedSelection) {
+    var showExtendedLanguages = !!includeExtendedLanguages;
+    var languageOptions = getLegacyDialogLanguageOptions(showExtendedLanguages);
     var dlg = new Window("dialog", t("legacy_missing_title"));
     dlg.orientation = "column";
     dlg.alignChildren = ["fill", "top"];
 
-    var info = dlg.add("statictext", undefined, t("legacy_missing_info"), { multiline: true });
-    info.preferredSize.width = 360;
+    var infoText = t("legacy_missing_info");
+    if (showExtendedLanguages) infoText += "\n\n" + t("legacy_all_languages_hint");
+    var info = dlg.add("statictext", undefined, infoText, { multiline: true });
+    info.preferredSize.width = showExtendedLanguages ? 840 : 360;
 
     var listGroup = dlg.add("group");
     listGroup.orientation = "column";
@@ -4241,7 +4476,16 @@ function promptLegacyTargetLanguageSelection(preselectedCodes, doc) {
 
     var defaultMap = { en: true, fr: true, it: true, es: true, cs: true, hu: true };
     var selectedMap = {};
-    if (preselectedCodes && preselectedCodes.length > 0) {
+    var orderMap = buildLegacyLanguageOrderMap(doc, languageOptions);
+    if (preservedSelection && preservedSelection.entries && preservedSelection.entries.length > 0) {
+        for (var entryIndex = 0; entryIndex < preservedSelection.entries.length; entryIndex++) {
+            var preservedEntry = preservedSelection.entries[entryIndex];
+            var preservedCode = String(preservedEntry.code || "").toLowerCase();
+            if (preservedCode === "") continue;
+            selectedMap[preservedCode] = !!preservedEntry.enabled;
+            orderMap[preservedCode] = normalizeLegacyOrderValue(preservedEntry.order, orderMap[preservedCode] || (entryIndex + 1));
+        }
+    } else if (preselectedCodes && preselectedCodes.length > 0) {
         for (var pre = 0; pre < preselectedCodes.length; pre++) {
             var preCode = String(preselectedCodes[pre] || "").toLowerCase();
             if (preCode !== "") selectedMap[preCode] = true;
@@ -4251,52 +4495,97 @@ function promptLegacyTargetLanguageSelection(preselectedCodes, doc) {
             if (defaultMap.hasOwnProperty(fallbackCode)) selectedMap[fallbackCode] = true;
         }
     }
-    var orderMap = buildLegacyLanguageOrderMap(doc);
-    var headerRow = listGroup.add("group");
-    headerRow.orientation = "row";
-    headerRow.alignChildren = ["left", "center"];
-    var languageHeader = headerRow.add("statictext", undefined, t("legacy_language_label"));
-    languageHeader.preferredSize.width = 220;
-    var orderHeader = headerRow.add("statictext", undefined, t("legacy_order_label"));
-    orderHeader.preferredSize.width = 90;
+    if (!showExtendedLanguages) {
+        var headerRow = listGroup.add("group");
+        headerRow.orientation = "row";
+        headerRow.alignChildren = ["left", "center"];
+        var languageHeader = headerRow.add("statictext", undefined, t("legacy_language_label"));
+        languageHeader.preferredSize.width = 220;
+        var orderHeader = headerRow.add("statictext", undefined, t("legacy_order_label"));
+        orderHeader.preferredSize.width = 90;
+    }
+
+    var gridRow = listGroup.add("group");
+    gridRow.orientation = "row";
+    gridRow.alignChildren = ["left", "top"];
+    var columnCount = 1;
+    if (showExtendedLanguages) {
+        if (languageOptions.length > 100) columnCount = 5;
+        else if (languageOptions.length > 72) columnCount = 4;
+        else columnCount = 3;
+    }
+    var rowsPerColumn = Math.ceil(languageOptions.length / columnCount);
+    var columnGroups = [];
+    for (var col = 0; col < columnCount; col++) {
+        var columnGroup = gridRow.add("group");
+        columnGroup.orientation = "column";
+        columnGroup.alignChildren = ["left", "top"];
+        columnGroup.spacing = 2;
+        columnGroups.push(columnGroup);
+    }
 
     var rows = [];
-    for (var i = 0; i < LEGACY_BDA_LANGUAGE_OPTIONS.length; i++) {
-        var opt = LEGACY_BDA_LANGUAGE_OPTIONS[i];
-        var row = listGroup.add("group");
+    for (var i = 0; i < languageOptions.length; i++) {
+        var opt = languageOptions[i];
+        var targetColumnIndex = Math.min(columnCount - 1, Math.floor(i / rowsPerColumn));
+        var row = columnGroups[targetColumnIndex].add("group");
         row.orientation = "row";
         row.alignChildren = ["left", "center"];
+        row.spacing = 6;
         var cb = row.add("checkbox", undefined, opt.code + " (" + getLocalizedLanguageName(opt.code) + ")");
-        cb.preferredSize.width = 220;
+        cb.preferredSize.width = showExtendedLanguages ? (columnCount >= 5 ? 160 : 175) : 220;
         cb.value = !!selectedMap[opt.code.toLowerCase()];
         var orderInput = row.add("edittext", undefined, String(orderMap[opt.code.toLowerCase()] || (i + 1)));
-        orderInput.characters = 4;
+        orderInput.characters = showExtendedLanguages ? 3 : 4;
         orderInput.justify = "center";
+        orderInput.enabled = cb.value;
+        cb._orderField = orderInput;
+        cb.onClick = function() {
+            if (this._orderField) this._orderField.enabled = !!this.value;
+        };
         rows.push({ code: opt.code.toLowerCase(), box: cb, orderField: orderInput });
+    }
+
+    function collectSelectionEntries() {
+        var entries = [];
+        for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+            var rowInfo = rows[rowIndex];
+            entries.push({
+                code: rowInfo.code,
+                enabled: !!rowInfo.box.value,
+                order: normalizeLegacyOrderValue(rowInfo.orderField.text, orderMap[rowInfo.code] || (rowIndex + 1))
+            });
+        }
+        return buildLegacyLanguageSelectionResult(entries, orderMap);
     }
 
     var buttonRow = dlg.add("group");
     buttonRow.alignment = "right";
+    var btnMore = null;
+    if (!showExtendedLanguages) btnMore = buttonRow.add("button", undefined, t("legacy_more_languages"));
     var btnOk = buttonRow.add("button", undefined, t("legacy_create"));
     var btnCancel = buttonRow.add("button", undefined, t("cancel"));
 
     var action = "cancel";
-    btnOk.onClick = function() { action = "ok"; dlg.close(); };
+    var capturedSelection = null;
+    if (btnMore) {
+        btnMore.onClick = function() {
+            action = "expand";
+            capturedSelection = collectSelectionEntries();
+            dlg.close();
+        };
+    }
+    btnOk.onClick = function() {
+        action = "ok";
+        capturedSelection = collectSelectionEntries();
+        dlg.close();
+    };
     btnCancel.onClick = function() { action = "cancel"; dlg.close(); };
 
     dlg.show();
+    if (action === "expand") return promptLegacyTargetLanguageSelection(preselectedCodes, doc, true, capturedSelection);
     if (action !== "ok") return null;
-
-    var entries = [];
-    for (var j = 0; j < rows.length; j++) {
-        var rowInfo = rows[j];
-        entries.push({
-            code: rowInfo.code,
-            enabled: !!rowInfo.box.value,
-            order: normalizeLegacyOrderValue(rowInfo.orderField.text, orderMap[rowInfo.code] || (j + 1))
-        });
-    }
-    return buildLegacyLanguageSelectionResult(entries, orderMap);
+    return capturedSelection || collectSelectionEntries();
 }
 
 function collectLegacyBDALanguageTasks(doc, preferredCodes) {
@@ -4347,15 +4636,16 @@ function collectLegacyMasterCodesInDocumentOrder(doc) {
     return codes;
 }
 
-function buildLegacyLanguageOrderMap(doc) {
+function buildLegacyLanguageOrderMap(doc, languageOptions) {
     var orderMap = {};
     var nextOrder = 1;
     var existingCodes = collectLegacyMasterCodesInDocumentOrder(doc);
     for (var i = 0; i < existingCodes.length; i++) {
         orderMap[existingCodes[i]] = nextOrder++;
     }
-    for (var j = 0; j < LEGACY_BDA_LANGUAGE_OPTIONS.length; j++) {
-        var code = String(LEGACY_BDA_LANGUAGE_OPTIONS[j].code || "").toLowerCase();
+    var options = (languageOptions && languageOptions.length) ? languageOptions : LEGACY_BDA_LANGUAGE_OPTIONS;
+    for (var j = 0; j < options.length; j++) {
+        var code = String(options[j].code || "").toLowerCase();
         if (!orderMap[code]) orderMap[code] = nextOrder++;
     }
     return orderMap;
@@ -6223,7 +6513,7 @@ function updateLanguageMasterVersionLabels(doc) {
     var masterSpreads = doc.masterSpreads;
     for (var m = 0; m < masterSpreads.length; m++) {
         var masterName = masterSpreads[m].name;
-        if (!masterName.match(/[-_]([a-z]{2})(?:[-_]|$)/i)) continue;
+        if (!getMasterLang(masterName)) continue;
         var pages = masterSpreads[m].pages;
         for (var p = 0; p < pages.length; p++) {
             var allItems = pages[p].allPageItems;
@@ -6537,9 +6827,8 @@ function getBDATargetPagesByLang(doc) {
         try {
             var applied = doc.pages[i].appliedMaster;
             if (!applied) continue;
-            var match = applied.name.match(/[-_]([a-z]{2})(?:[-_]|$)/i);
-            if (!match) continue;
-            var code = match[1].toLowerCase();
+            var code = getMasterLang(applied.name);
+            if (!code) continue;
             if (code === "de") continue;
             if (!pagesByLang[code]) pagesByLang[code] = [];
             pagesByLang[code].push(doc.pages[i]);
@@ -6883,14 +7172,19 @@ function serializeJSON(obj) {
 
 function getMasterLang(masterName) {
     var normalized = String(masterName || "").replace(/^\s+|\s+$/g, "");
-    if (/^[a-z]{2}$/i.test(normalized)) return normalized.toLowerCase();
-    var match = normalized.match(/(?:^|[-_])([a-z]{2})(?:[-_]|$)/i);
-    return match ? match[1].toLowerCase() : null;
+    var directCode = normalizeTranslationLanguageCode(normalized);
+    if (isSupportedLegacyLanguageCode(directCode)) return directCode.toLowerCase();
+    var match = findSupportedTranslationLanguageCodeMatch(normalized, true);
+    return match ? match.code.toLowerCase() : null;
 }
 
 function getMasterPrefix(masterName) {
-    var match = masterName.match(/^(.*?)(?:[-_][a-z]{2})(?:[-_]|$)/i);
-    return match ? match[1] : masterName;
+    var raw = String(masterName || "");
+    var match = findSupportedTranslationLanguageCodeMatch(raw, true);
+    if (!match) return raw;
+    var prefixEnd = match.index;
+    while (prefixEnd > 0 && !/[A-Za-z0-9]/.test(raw.charAt(prefixEnd - 1))) prefixEnd--;
+    return raw.substring(0, prefixEnd);
 }
 
 function buildMasterTextSnapshot(doc) {
