@@ -2364,7 +2364,7 @@ function ensureMainWindowLiveRefresh() {
         }
     } catch (e2) {}
     try {
-        mainWindowIdleTask = app.idleTasks.add({ name: "SuperTranslatorPRO_MainWindowLiveRefresh", sleep: 250 });
+        mainWindowIdleTask = app.idleTasks.add({ name: "SuperTranslatorPRO_MainWindowLiveRefresh", sleep: 125 });
         mainWindowIdleTask.addEventListener("onIdle", handleMainWindowIdle);
     } catch (e3) {
         mainWindowIdleTask = null;
