@@ -191,6 +191,7 @@ var UI_STRINGS = {
     link_error: { de: "Hyperlink-Verarbeitung fehlgeschlagen:\n{message}", en: "Hyperlink processing failed:\n{message}" },
     german_frame_dialog_title: { de: "Suchen/Ersetzen Quellsprache {current}/{total}", en: "Find/Replace Source Language {current}/{total}" },
     german_frame_hint_count: { de: "{count} konkrete Hinweis(e) in diesem Textrahmen", en: "{count} specific suggestion(s) in this text frame" },
+    german_frame_action_hint: { de: "Nur echte Schreibtreffer werden angezeigt. Enter übernimmt den Vorschlag.", en: "Only actual spelling suggestions are shown. Press Enter to apply the suggestion." },
     german_findings: { de: "Auffälligkeiten:", en: "Findings:" },
     german_current_hit: { de: "Aktueller Treffer", en: "Current Match" },
     german_hint: { de: "Hinweis:", en: "Hint:" },
@@ -3845,6 +3846,51 @@ function buildGermanContextParts(originalText, offset, length) {
     };
 }
 
+function normalizeSpellcheckComparableText(text) {
+    return String(text || "").replace(/\s+$/g, "").replace(/^\s+/g, "");
+}
+
+function normalizeSpellcheckLetterText(text) {
+    return String(text || "").toLowerCase().replace(/[^a-z0-9à-öø-ÿā-žа-яёά-ώ]/g, "");
+}
+
+function getLanguageToolIssueType(matchObj) {
+    try {
+        if (matchObj && matchObj.rule && matchObj.rule.issueType) return String(matchObj.rule.issueType).toLowerCase();
+    } catch (e) {}
+    return "";
+}
+
+function getLanguageToolRuleFingerprint(matchObj) {
+    var parts = [];
+    try { if (matchObj && matchObj.rule && matchObj.rule.id) parts.push(String(matchObj.rule.id)); } catch (e) {}
+    try { if (matchObj && matchObj.rule && matchObj.rule.category && matchObj.rule.category.id) parts.push(String(matchObj.rule.category.id)); } catch (e2) {}
+    try { if (matchObj && matchObj.rule && matchObj.rule.category && matchObj.rule.category.name) parts.push(String(matchObj.rule.category.name)); } catch (e3) {}
+    try { if (matchObj && matchObj.message) parts.push(String(matchObj.message)); } catch (e4) {}
+    return parts.join(" ").toLowerCase();
+}
+
+function shouldIgnoreLanguageToolEdit(matchObj, issueText, replacementText) {
+    var issueRaw = String(issueText || "");
+    var replacementRaw = String(replacementText || "");
+    if (issueRaw === "" || replacementRaw === "") return true;
+    if (issueRaw === replacementRaw) return true;
+    if (normalizeSpellcheckComparableText(issueRaw) === normalizeSpellcheckComparableText(replacementRaw) && issueRaw.replace(/\s/g, "") === replacementRaw.replace(/\s/g, "")) {
+        return true;
+    }
+    if (normalizeSpellcheckLetterText(issueRaw) === normalizeSpellcheckLetterText(replacementRaw)) {
+        return true;
+    }
+
+    var issueType = getLanguageToolIssueType(matchObj);
+    var fingerprint = getLanguageToolRuleFingerprint(matchObj);
+    if (issueType !== "" && issueType !== "misspelling") return true;
+    if (fingerprint.match(/whitespace|typograph|duplication|double.?space|ellipsis|dash|quotation|quotes|style|grammar|register|locale|punctuat/)) {
+        return true;
+    }
+    return false;
+}
+
 function buildLanguageToolEdits(originalText, matches) {
     var rawEdits = [];
     if (!matches || matches.length === 0) return rawEdits;
@@ -3855,10 +3901,12 @@ function buildLanguageToolEdits(originalText, matches) {
         if (matchObj.offset === undefined || matchObj.length === undefined) continue;
 
         var issueText = originalText.substring(matchObj.offset, matchObj.offset + matchObj.length);
+        var replacementText = String(matchObj.replacements[0].value || "");
+        if (shouldIgnoreLanguageToolEdit(matchObj, issueText, replacementText)) continue;
         rawEdits.push({
             offset: matchObj.offset,
             length: matchObj.length,
-            replacement: matchObj.replacements[0].value,
+            replacement: replacementText,
             issueText: issueText,
             message: matchObj.message || t("languagetool_hint"),
             contextParts: buildGermanContextParts(originalText, matchObj.offset, matchObj.length)
@@ -4085,17 +4133,29 @@ function openGermanFrameCorrectionDialog(corrections) {
                 break;
             }
 
-            var dlg = new Window("dialog", t("german_frame_dialog_title", { current: (i + 1), total: corrections.length }));
+            var dlg = new Window("dialog", t("german_frame_dialog_title", { current: (i + 1), total: corrections.length }), undefined, { resizeable: true });
             dlg.orientation = "column";
-            dlg.alignChildren = "fill";
+            dlg.alignChildren = ["fill", "top"];
+            dlg.spacing = 10;
+            dlg.minimumSize = [620, 500];
+            dlg.preferredSize = [700, 560];
 
-            dlg.add("statictext", undefined, correction.location);
-            var summaryText = dlg.add("statictext", undefined, t("german_frame_hint_count", { count: correction.issueCount }));
-            summaryText.preferredSize.width = 440;
+            var headerPanel = dlg.add("panel", undefined, correction.location);
+            headerPanel.orientation = "column";
+            headerPanel.alignChildren = ["fill", "top"];
+            headerPanel.margins = 12;
+            headerPanel.spacing = 6;
+            var summaryText = headerPanel.add("statictext", undefined, t("german_frame_hint_count", { count: correction.issueCount }));
+            summaryText.preferredSize.width = 640;
+            var actionHint = headerPanel.add("statictext", undefined, t("german_frame_action_hint"), { multiline: true });
+            actionHint.preferredSize.width = 640;
 
-            dlg.add("statictext", undefined, t("german_findings"));
-            var issueList = dlg.add("listbox", undefined, [], { multiselect: false });
-            issueList.preferredSize = [440, 120];
+            var listPanel = dlg.add("panel", undefined, t("german_findings"));
+            listPanel.orientation = "column";
+            listPanel.alignChildren = ["fill", "top"];
+            listPanel.margins = 12;
+            var issueList = listPanel.add("listbox", undefined, [], { multiselect: false });
+            issueList.preferredSize = [640, 150];
             for (var issueIndex = 0; issueIndex < correction.edits.length; issueIndex++) {
                 var issue = correction.edits[issueIndex];
                 issueList.add("item", (issueIndex + 1) + ". " + makeGermanTextVisible(issue.issueText) + " -> " + makeGermanTextVisible(issue.replacement));
@@ -4103,18 +4163,35 @@ function openGermanFrameCorrectionDialog(corrections) {
 
             var detailPanel = dlg.add("panel", undefined, t("german_current_hit"));
             detailPanel.orientation = "column";
-            detailPanel.alignChildren = "fill";
+            detailPanel.alignChildren = ["fill", "top"];
+            detailPanel.margins = 12;
+            detailPanel.spacing = 8;
+
+            detailPanel.add("statictext", undefined, t("german_find_label"));
+            var issueBox = detailPanel.add("edittext", undefined, "", { readonly: true });
+            issueBox.preferredSize.width = 640;
+
+            detailPanel.add("statictext", undefined, t("german_replace_label"));
+            var replacementBox = detailPanel.add("edittext", undefined, "", { readonly: true });
+            replacementBox.preferredSize.width = 640;
 
             detailPanel.add("statictext", undefined, t("german_hint"));
             var messageBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true });
-            messageBox.preferredSize = [440, 70];
+            messageBox.preferredSize = [640, 60];
+
+            detailPanel.add("statictext", undefined, t("german_context"));
+            var contextBox = detailPanel.add("edittext", undefined, "", { multiline: true, readonly: true, scrolling: true });
+            contextBox.preferredSize = [640, 110];
 
             var selectedEditIndex = 0;
             function updateIssuePreview() {
                 if (!issueList.selection) return;
                 selectedEditIndex = issueList.selection.index;
                 var selectedIssue = correction.edits[selectedEditIndex];
-                messageBox.text = "Fehler: " + makeGermanTextVisible(selectedIssue.issueText) + "\nVorschlag: " + makeGermanTextVisible(selectedIssue.replacement) + "\nHinweis: " + selectedIssue.message;
+                issueBox.text = makeGermanTextVisible(selectedIssue.issueText);
+                replacementBox.text = makeGermanTextVisible(selectedIssue.replacement);
+                messageBox.text = selectedIssue.message;
+                contextBox.text = selectedIssue.contextParts.before + "[" + selectedIssue.contextParts.issue + "]" + selectedIssue.contextParts.after;
                 highlightGermanIssue(correction, selectedIssue);
             }
             if (issueList.items.length > 0) {
@@ -4124,10 +4201,16 @@ function openGermanFrameCorrectionDialog(corrections) {
             issueList.onChange = updateIssuePreview;
 
             var btnGroup = dlg.add("group");
-            btnGroup.alignment = "right";
-            var btnSkip = btnGroup.add("button", undefined, t("german_keep"));
-            var btnReplace = btnGroup.add("button", undefined, t("german_apply"));
+            btnGroup.alignment = "fill";
+            btnGroup.spacing = 10;
+            var btnSkip = btnGroup.add("button", undefined, t("german_keep"), { name: "cancel" });
+            btnSkip.preferredSize = [120, 28];
+            var btnSpacer = btnGroup.add("statictext", undefined, "");
+            btnSpacer.alignment = "fill";
+            var btnReplace = btnGroup.add("button", undefined, t("german_apply"), { name: "ok" });
+            btnReplace.preferredSize = [140, 30];
             var btnStop = btnGroup.add("button", undefined, t("german_finish"));
+            btnStop.preferredSize = [120, 28];
 
             var action = "skip";
             btnSkip.onClick = function() {
@@ -4148,6 +4231,12 @@ function openGermanFrameCorrectionDialog(corrections) {
             dlg.onClose = function() {
                 clearGermanIssueHighlight();
                 return true;
+            };
+            dlg.onShow = function() {
+                positionDialogRightOfMainWindow(dlg, 700, 560);
+            };
+            dlg.onResizing = dlg.onResize = function() {
+                this.layout.resize();
             };
 
             dlg.show();
