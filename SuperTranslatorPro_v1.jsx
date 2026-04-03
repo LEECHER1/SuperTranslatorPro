@@ -58,7 +58,7 @@ var UI_STRINGS = {
     target_language_short: { de: "Zielsprache:", en: "Target language:" },
     lang_group_favorites: { de: "--- FAVORITEN ---", en: "--- FAVORITES ---" },
     lang_group_other_eu: { de: "--- SONSTIGE EU SPRACHEN ---", en: "--- OTHER EU LANGUAGES ---" },
-    auto_mode: { de: "Vollautomatik (BDA)", en: "Full automatic (BDA)" },
+    auto_mode: { de: "Vollautomatik", en: "Full automatic" },
     auto_settings: { de: "Automatik-Optionen", en: "Automatic options" },
     original_pages: { de: "Quellseiten:", en: "Source pages:" },
     auto_source_help: { de: "Übersetzt die Quellsprache automatisch in die ausgewählten Sprachen.", en: "Automatically translates the source language into the selected languages." },
