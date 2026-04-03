@@ -77,6 +77,9 @@ var UI_STRINGS = {
     status_on: { de: "an", en: "on" },
     status_off: { de: "aus", en: "off" },
     status_settings_required: { de: "Einstellungen prüfen", en: "check settings" },
+    validation_title: { de: "Vor dem Start", en: "Before starting" },
+    validation_ready: { de: "Alles ist bereit. Du kannst die Uebersetzung direkt starten.", en: "Everything is ready. You can start the translation now." },
+    validation_needs_attention: { de: "Bitte zuerst pruefen:", en: "Please check first:" },
     settings_overview_title: { de: "Übersicht", en: "Overview" },
     settings_tab_data_hint: { de: "Glossar, Memory und Übersetzungsoptionen gelten dokumentübergreifend.", en: "Glossary, memory, and translation options apply across documents." },
     settings_tab_provider_hint: { de: "Wähle den aktiven Übersetzungsanbieter und hinterlege die passenden Zugangsdaten.", en: "Choose the active translation provider and enter the relevant credentials." },
@@ -1999,6 +2002,13 @@ contentPanel.margins = 15;
 contentPanel.spacing = 10;
 contentPanel.minimumSize = [520, 170];
 
+var validationPanel = myWindow.add("panel", undefined, t("validation_title"));
+validationPanel.orientation = "column";
+validationPanel.alignChildren = ["fill", "top"];
+validationPanel.margins = 12;
+var validationText = validationPanel.add("statictext", undefined, "", { multiline: true });
+validationText.preferredSize.width = 520;
+
 var selectionModeGroup = contentPanel.add("group");
 selectionModeGroup.orientation = "column";
 selectionModeGroup.alignChildren = ["fill", "top"];
@@ -2099,10 +2109,70 @@ function getProviderStatusSummaryText() {
     return validationMessage === "" ? display : (display + " (" + t("status_settings_required") + ")");
 }
 
+function getActiveDocumentSafe() {
+    try {
+        return app.activeDocument;
+    } catch (e) {
+        return null;
+    }
+}
+
+function hasDocumentSelectionSafe() {
+    try {
+        return !!(app.selection && app.selection.length > 0);
+    } catch (e) {
+        return false;
+    }
+}
+
 function refreshMainStatusUI() {
     var autoLinksEnabled = checkAutoBDAHyperlinks ? !!checkAutoBDAHyperlinks.value : !!autoBDAHyperlinksSetting;
     statusLineTop.text = t("status_provider") + " " + getProviderStatusSummaryText() + "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvPath);
     statusLineBottom.text = t("status_memory") + " " + getStatusPathLabel(tmPath) + "   |   " + t("status_links") + " " + (autoLinksEnabled ? t("status_on") : t("status_off")) + "   |   " + t("status_symbols") + " " + normalizeRefSymbols(refSymbolsSetting);
+    try { myWindow.layout.layout(true); } catch (layoutErr) {}
+}
+
+function getMainValidationIssues() {
+    var issues = [];
+    normalizeLanguageDropdownSelection();
+
+    var doc = getActiveDocumentSafe();
+    if (!doc || !doc.isValid) {
+        issues.push(t("no_document_open"));
+    } else {
+        if (radioSelection.value && !hasDocumentSelectionSafe()) issues.push(t("validation_select_something"));
+        if (radioPages.value && String(editPages.text || "").replace(/\s/g, "") === "") issues.push(t("validation_enter_pages"));
+        if (radioBDA.value && String(bdaSourceInput.text || "").replace(/\s/g, "") === "") issues.push(t("validation_enter_pages_or_auto"));
+    }
+
+    if (!radioBDA.value) {
+        var selectedLangText = dropdownLang.selection ? dropdownLang.selection.text : "";
+        if (!dropdownLang.selection || isLanguageSeparatorText(selectedLangText) || String(selectedLangText || "").indexOf("-") !== -1) {
+            issues.push(t("validation_invalid_lang"));
+        }
+    }
+
+    var providerValidationMessage = getProviderValidationMessage(getActiveTranslationProvider());
+    if (providerValidationMessage !== "") issues.push(providerValidationMessage || t("validation_enter_api_key"));
+
+    return issues;
+}
+
+function refreshMainValidationUI() {
+    var issues = getMainValidationIssues();
+    var doc = getActiveDocumentSafe();
+    var hasDoc = !!(doc && doc.isValid);
+
+    btnSpellCheck.enabled = hasDoc;
+    btnLinkReferences.enabled = hasDoc;
+    btnTranslate.enabled = (issues.length === 0);
+
+    if (issues.length === 0) {
+        validationText.text = t("validation_ready");
+    } else {
+        validationText.text = t("validation_needs_attention") + "\n- " + issues.join("\n- ");
+    }
+
     try { myWindow.layout.layout(true); } catch (layoutErr) {}
 }
 
@@ -2148,6 +2218,7 @@ function setActiveMainMode(mode) {
     else contentPanel.text = t("auto_settings");
 
     try { myWindow.layout.layout(true); } catch (layoutErr) {}
+    refreshMainValidationUI();
 }
 
 radioSelection.onClick = function() {
@@ -2164,27 +2235,36 @@ radioBDA.onClick = function() {
 
 dropdownLang.onChange = function() {
     normalizeLanguageDropdownSelection();
+    refreshMainValidationUI();
 };
 
 editPages.onActivate = function() {
     setActiveMainMode("PAGES");
 };
+editPages.onChanging = refreshMainValidationUI;
 
 bdaSourceInput.onActivate = function() {
     setActiveMainMode("BDA");
 };
+bdaSourceInput.onChanging = refreshMainValidationUI;
 
 checkAutoBDAHyperlinks.onClick = function() {
     updateBDAHyperlinkControls(radioBDA.value);
     refreshMainStatusUI();
+    refreshMainValidationUI();
 };
 
 setActiveMainMode("SELECTION");
 normalizeLanguageDropdownSelection();
 refreshMainStatusUI();
+refreshMainValidationUI();
 
 myWindow.onResizing = myWindow.onResize = function() {
     this.layout.resize();
+};
+myWindow.onShow = myWindow.onActivate = function() {
+    refreshMainStatusUI();
+    refreshMainValidationUI();
 };
 
 btnSpellCheck.onClick = function() {
@@ -2388,6 +2468,8 @@ btnLinkReferences.onClick = function() {
     try { doc = app.activeDocument; } catch (e) { alert(t("no_document_open")); return; }
     var hyperlinkConfig = showHyperlinkDialog(doc);
     if (!hyperlinkConfig) return;
+    refreshMainStatusUI();
+    refreshMainValidationUI();
     try {
         app.doScript(
             function() {
@@ -2740,6 +2822,7 @@ btnSettings.onClick = function() {
         app.insertLabel(FORMALITY_LABEL, selForm); formalitySetting = selForm;
         app.insertLabel(DNT_LABEL, dntInput.text); dntStyles = dntInput.text;
         refreshMainStatusUI();
+        refreshMainValidationUI();
         
         alert(t("settings_saved"));
         setWin.close();
@@ -4141,8 +4224,18 @@ function closeProgressWindow() {
 
 // --- 3. KLICK-LOGIK & START ---
 btnTranslate.onClick = function() {
-    var doc = null;
-    try { doc = app.activeDocument; } catch(e) { alert(t("no_document_open")); return; }
+    refreshMainValidationUI();
+    var validationIssues = getMainValidationIssues();
+    if (validationIssues.length > 0) {
+        alert(validationIssues[0]);
+        return;
+    }
+
+    var doc = getActiveDocumentSafe();
+    if (!doc || !doc.isValid) {
+        alert(t("no_document_open"));
+        return;
+    }
 
     var config = {
         mode: radioBDA.value ? "BDA" : (radioPages.value ? "PAGES" : "SELECTION"),
