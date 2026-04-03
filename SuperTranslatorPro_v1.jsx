@@ -64,8 +64,8 @@ var UI_STRINGS = {
     back_page_not_found_notice: { de: "Hinweis: Es konnte keine Rückseite sicher erkannt werden.\nDer Automatiklauf wird trotzdem fortgesetzt.\nWenn nötig, bitte die Rückseiten-Suche in den Einstellungen anpassen.", en: "Note: No back page could be identified with confidence.\nThe automatic run will continue anyway.\nIf needed, adjust the back-page search in the settings." },
     only_text_update: { de: "Nur Textänderungen übernehmen", en: "Only update changed text" },
     translate_start: { de: "Übersetzung starten", en: "Start Translation" },
-    spellcheck_button: { de: "Deutsch prüfen", en: "Check German" },
-    spellcheck_help: { de: "Prüft Texte auf Seiten, die automatisch der deutschen Musterseite zugeordnet werden.", en: "Checks text on pages that are automatically assigned to the German master." },
+    spellcheck_button: { de: "Quellsprache prüfen", en: "Check source language" },
+    spellcheck_help: { de: "Prüft Texte auf Seiten der automatisch erkannten Quellsprache.", en: "Checks text on pages of the automatically detected source language." },
     close_button: { de: "Schließen", en: "Close" },
     status_title: { de: "Aktueller Status", en: "Current status" },
     status_provider: { de: "Provider:", en: "Provider:" },
@@ -189,7 +189,7 @@ var UI_STRINGS = {
     link_no_matches: { de: "Es wurden weder Referenzen mit den definierten Symbolen noch Web-URLs im Dokument gefunden.", en: "Neither references using the configured symbols nor web URLs were found in the document." },
     hyperlink_page_required: { de: "Bitte trage eine Zielseite für {language} ein.", en: "Please enter a target page for {language}." },
     link_error: { de: "Hyperlink-Verarbeitung fehlgeschlagen:\n{message}", en: "Hyperlink processing failed:\n{message}" },
-    german_frame_dialog_title: { de: "Suchen/Ersetzen Deutsch {current}/{total}", en: "Find/Replace German {current}/{total}" },
+    german_frame_dialog_title: { de: "Suchen/Ersetzen Quellsprache {current}/{total}", en: "Find/Replace Source Language {current}/{total}" },
     german_frame_hint_count: { de: "{count} konkrete Hinweis(e) in diesem Textrahmen", en: "{count} specific suggestion(s) in this text frame" },
     german_findings: { de: "Auffälligkeiten:", en: "Findings:" },
     german_current_hit: { de: "Aktueller Treffer", en: "Current Match" },
@@ -198,7 +198,7 @@ var UI_STRINGS = {
     german_apply: { de: "Übernehmen", en: "Apply" },
     german_finish: { de: "Beenden", en: "Finish" },
     german_replace_failed: { de: "Die Stelle konnte nicht übernommen werden:\n{location}", en: "This location could not be applied:\n{location}" },
-    german_dialog_title: { de: "Deutsch korrigieren {current}/{total}", en: "Correct German {current}/{total}" },
+    german_dialog_title: { de: "Quellsprache korrigieren {current}/{total}", en: "Correct Source Language {current}/{total}" },
     german_match: { de: "Treffer: {text}", en: "Match: {text}" },
     german_context: { de: "Kontext:", en: "Context:" },
     german_find_label: { de: "Suchen nach:", en: "Find:" },
@@ -212,14 +212,16 @@ var UI_STRINGS = {
     german_skip: { de: "Überspringen", en: "Skip" },
     german_replace: { de: "Ersetzen", en: "Replace" },
     german_auto_replace_failed: { de: "Die Stelle konnte nicht automatisch ersetzt werden:\n{summary}", en: "This location could not be replaced automatically:\n{summary}" },
-    german_no_targets: { de: "Keine Texte auf automatisch erkannten deutschen Seiten gefunden.", en: "No text was found on automatically detected German pages." },
-    german_progress_title: { de: "Deutsche Rechtschreibprüfung", en: "German Spell Check" },
+    german_no_targets: { de: "Keine Texte auf automatisch erkannten Quellsprach-Seiten gefunden.", en: "No text was found on automatically detected source-language pages." },
+    german_progress_title: { de: "Rechtschreibprüfung Quellsprache", en: "Source Language Spell Check" },
     german_prepare_check: { de: "Bereite Prüfung vor...", en: "Preparing check..." },
-    german_check_progress: { de: "Prüfe Dokumentseiten mit deutscher Musterseite: Text {current} von {total}...", en: "Checking document pages based on the German master: text {current} of {total}..." },
-    german_check_ok: { de: "Korrekturprüfung für Dokumentseiten mit deutscher Musterseite abgeschlossen. Keine Änderungen vorgeschlagen.", en: "Correction check for document pages based on the German master completed. No changes suggested." },
+    german_check_progress: { de: "Prüfe Quellsprache {lang}: Text {current} von {total}...", en: "Checking source language {lang}: text {current} of {total}..." },
+    german_check_ok: { de: "Korrekturprüfung für die erkannte Quellsprache ({lang}) abgeschlossen. Keine Änderungen vorgeschlagen.", en: "Correction check for the detected source language ({lang}) completed. No changes suggested." },
     german_check_notice_skipped: { de: "\n\nHinweis: {count} Textblöcke konnten nicht geprüft werden.", en: "\n\nNote: {count} text block(s) could not be checked." },
     german_check_notice_skipped_with_reason: { de: "\n\nHinweis: {count} Textblöcke konnten nicht geprüft werden.\nGrund: {reason}", en: "\n\nNote: {count} text block(s) could not be checked.\nReason: {reason}" },
-    german_check_failed_all_skipped: { de: "Die Deutsch-Prüfung konnte nicht ausgeführt werden.\n\nAlle {count} Textblöcke wurden übersprungen.\nGrund: {reason}\n\nDie Funktion nutzt LanguageTool per externem Aufruf.", en: "The German check could not be completed.\n\nAll {count} text block(s) were skipped.\nReason: {reason}\n\nThis feature uses LanguageTool via an external call." },
+    german_check_failed_all_skipped: { de: "Die Quellsprachen-Prüfung konnte nicht ausgeführt werden.\n\nAlle {count} Textblöcke wurden übersprungen.\nGrund: {reason}\n\nDie Funktion nutzt LanguageTool per externem Aufruf.", en: "The source-language check could not be completed.\n\nAll {count} text block(s) were skipped.\nReason: {reason}\n\nThis feature uses LanguageTool via an external call." },
+    source_lang_not_detected: { de: "Die Quellsprache konnte nicht automatisch erkannt werden.", en: "The source language could not be detected automatically." },
+    languagetool_lang_not_supported: { de: "Die Quellsprache {lang} wird für die Prüfung noch nicht unterstützt.", en: "The source language {lang} is not yet supported for checking." },
     german_dialog_done: { de: "Korrekturdialog beendet.\nErsetzt: {replaced}\nÜbersprungen: {skipped}", en: "Correction dialog finished.\nReplaced: {replaced}\nSkipped: {skipped}" },
     german_dialog_done_stopped: { de: "\nVorzeitig beendet.", en: "\nStopped early." },
     progress_title: { de: "Übersetzung läuft...", en: "Translation in Progress..." },
@@ -875,6 +877,111 @@ function getPageLanguageCode(page) {
         }
     } catch (e2) {}
     return "";
+}
+
+function getSelectionParentPageSafe(item) {
+    if (!item || !item.isValid) return null;
+    try {
+        if (item.parentPage && item.parentPage.isValid) return item.parentPage;
+    } catch (e) {}
+    try {
+        var textPage = getTextObjectParentPage(item);
+        if (textPage && textPage.isValid) return textPage;
+    } catch (e2) {}
+    try {
+        if (item.parent && item.parent.parentPage && item.parent.parentPage.isValid) return item.parent.parentPage;
+    } catch (e3) {}
+    return null;
+}
+
+function addUniquePageById(targetPages, seenPageIds, page) {
+    if (!page || !page.isValid) return;
+    var pageId = null;
+    try { pageId = page.id; } catch (e) { pageId = null; }
+    var pageKey = (pageId !== null) ? String(pageId) : String(page.name || targetPages.length);
+    if (seenPageIds[pageKey]) return;
+    seenPageIds[pageKey] = true;
+    targetPages.push(page);
+}
+
+function getPagesFromCurrentSpellcheckContext(doc) {
+    var pages = [];
+    var seen = {};
+    if (!doc || !doc.isValid) return pages;
+
+    if (radioSelection && radioSelection.value) {
+        try {
+            var selectionItems = app.selection || [];
+            for (var i = 0; i < selectionItems.length; i++) {
+                addUniquePageById(pages, seen, getSelectionParentPageSafe(selectionItems[i]));
+            }
+        } catch (eSel) {}
+        if (pages.length > 0) return pages;
+    }
+
+    if (radioPages && radioPages.value) {
+        try {
+            var manualPages = getPagesFromString(doc, editPages.text);
+            for (var j = 0; j < manualPages.length; j++) addUniquePageById(pages, seen, manualPages[j]);
+        } catch (ePages) {}
+        if (pages.length > 0) return pages;
+    }
+
+    if (radioBDA && radioBDA.value) {
+        var rawSourcePages = String(bdaSourceInput && bdaSourceInput.text ? bdaSourceInput.text : "").replace(/^\s+|\s+$/g, "");
+        if (rawSourcePages !== "" && rawSourcePages.toUpperCase() !== "AUTO") {
+            try {
+                var bdaPages = getPagesFromString(doc, rawSourcePages);
+                for (var k = 0; k < bdaPages.length; k++) addUniquePageById(pages, seen, bdaPages[k]);
+            } catch (eBda) {}
+            if (pages.length > 0) return pages;
+        }
+    }
+
+    return pages;
+}
+
+function detectSourceLanguageCode(doc) {
+    var contextualPages = getPagesFromCurrentSpellcheckContext(doc);
+    var i;
+    for (i = 0; i < contextualPages.length; i++) {
+        var contextualCode = getPageLanguageCode(contextualPages[i]);
+        if (contextualCode) return String(contextualCode).toUpperCase();
+    }
+    for (i = 0; i < doc.pages.length; i++) {
+        var code = getPageLanguageCode(doc.pages[i]);
+        if (code) return String(code).toUpperCase();
+    }
+    return "";
+}
+
+function getLanguageToolCodeForLanguage(langCode) {
+    var upper = String(langCode || "").toUpperCase();
+    var map = {
+        DE: "de-DE",
+        EN: "en-GB",
+        FR: "fr",
+        IT: "it",
+        ES: "es",
+        CS: "cs",
+        HU: "hu",
+        BG: "bg",
+        DA: "da",
+        EL: "el",
+        ET: "et",
+        FI: "fi",
+        LT: "lt",
+        LV: "lv",
+        NL: "nl",
+        PL: "pl",
+        PT: "pt-PT",
+        RO: "ro",
+        RU: "ru",
+        SK: "sk",
+        SL: "sl",
+        SV: "sv"
+    };
+    return map[upper] || "";
 }
 
 function buildFormalityOptions() {
@@ -3516,27 +3623,30 @@ function shouldCheckGermanText(text) {
     var normalized = String(text).replace(/[\r\n\t]/g, " ").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
     if (normalized.length < 3) return false;
     if (normalized.match(/^#+(?:TBL|IMG)_\d+#+$/)) return false;
-    var lettersOnly = normalized.replace(/[^A-Za-zÄÖÜäöüß]/g, "");
+    var lettersOnly = normalized.replace(/[^A-Za-zÀ-ÖØ-öø-ÿĀ-žА-Яа-яЁёΆ-ώ]/g, "");
     return lettersOnly.length >= 3;
 }
 
-function addGermanSpellTarget(targets, textObj, story, locationLabel, page, frame) {
+function addGermanSpellTarget(targets, textObj, story, locationLabel, page, frame, langCode) {
     if (!textObj || !textObj.isValid) return;
     if (!story || !story.isValid) return;
     var storyText = "";
     try { storyText = textObj.contents; } catch (e) { storyText = ""; }
     if (!shouldCheckGermanText(storyText)) return;
 
-    targets.push({ textObj: textObj, story: story, text: storyText, location: locationLabel, page: page || null, frame: frame || null });
+    targets.push({ textObj: textObj, story: story, text: storyText, location: locationLabel, page: page || null, frame: frame || null, langCode: String(langCode || "").toUpperCase() });
 }
 
-function collectGermanSpellTargets(doc) {
+function collectGermanSpellTargets(doc, sourceLangCode) {
     var targets = [];
+    var normalizedSourceLang = String(sourceLangCode || "").toUpperCase();
+    if (normalizedSourceLang === "") return targets;
 
     for (var pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {
         var page = doc.pages[pageIndex];
-        if (!page.appliedMaster || !page.appliedMaster.isValid) continue;
-        if (getPageLanguageCode(page) !== "DE") continue;
+        if (getPageLanguageCode(page) !== normalizedSourceLang) continue;
+        var masterName = "";
+        try { masterName = (page.appliedMaster && page.appliedMaster.isValid) ? String(page.appliedMaster.name) : "ohne Musterseite"; } catch (eMaster) { masterName = "ohne Musterseite"; }
 
         var pageItems = [];
         try { pageItems = page.allPageItems; } catch (e) { pageItems = []; }
@@ -3546,7 +3656,7 @@ function collectGermanSpellTargets(doc) {
             var pageStory = getTextFrameStory(pageItems[pf]);
             var textObj = null;
             try { if (pageItems[pf].texts && pageItems[pf].texts.length > 0) textObj = pageItems[pf].texts[0]; } catch (e2) { textObj = null; }
-            addGermanSpellTarget(targets, textObj, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Musterseite " + page.appliedMaster.name, page, pageItems[pf]);
+            addGermanSpellTarget(targets, textObj, pageStory, "Dokumentseite " + (page.name || (pageIndex + 1)) + " / Musterseite " + masterName, page, pageItems[pf], normalizedSourceLang);
         }
     }
 
@@ -3661,12 +3771,17 @@ function buildInDesignSpellingFinding(item, errorText) {
     };
 }
 
-function runLanguageToolGermanFrameCheck(text) {
+function runLanguageToolGermanFrameCheck(text, langCode) {
     var endpoint = "https://api.languagetool.org/v2/check";
+    var languageToolCode = getLanguageToolCodeForLanguage(langCode);
+    if (languageToolCode === "") {
+        return { ok: false, error: t("languagetool_lang_not_supported", { lang: getLocalizedLanguageName(langCode) }) };
+    }
     var requestId = new Date().getTime() + "_" + Math.floor(Math.random() * 100000);
     var payloadFile = new File(Folder.temp + "/lt_payload_" + requestId + ".txt");
     var outFile = new File(Folder.temp + "/lt_out_" + requestId + ".json");
-    var payload = "language=de-DE&motherTongue=de&level=picky&text=" + encodeURIComponent(String(text).replace(/\r/g, "\n"));
+    var motherTongue = languageToolCode.substring(0, 2).toLowerCase();
+    var payload = "language=" + encodeURIComponent(languageToolCode) + "&motherTongue=" + encodeURIComponent(motherTongue) + "&level=picky&text=" + encodeURIComponent(String(text).replace(/\r/g, "\n"));
 
     payloadFile.encoding = "UTF-8";
     if (!payloadFile.open("w")) {
@@ -3769,6 +3884,7 @@ function buildGermanFrameCorrection(item, matches) {
     if (edits.length === 0) return null;
 
     return {
+        langCode: item.langCode || "",
         textObj: item.textObj,
         story: item.story,
         page: item.page,
@@ -3788,9 +3904,10 @@ function refreshGermanFrameCorrection(correction) {
     if (currentText === "") return null;
 
     try {
-        var response = runLanguageToolGermanFrameCheck(currentText);
+        var response = runLanguageToolGermanFrameCheck(currentText, correction.langCode || "");
         if (!response.ok || !response.data) return null;
         return buildGermanFrameCorrection({
+            langCode: correction.langCode || "",
             textObj: correction.textObj,
             story: correction.story,
             page: correction.page,
@@ -4250,7 +4367,13 @@ function openGermanCorrectionDialog(findings) {
 }
 
 function runMasterSpellingCheck(doc) {
-    var targets = collectGermanSpellTargets(doc);
+    var sourceLangCode = detectSourceLanguageCode(doc);
+    if (sourceLangCode === "") {
+        alert(t("source_lang_not_detected"));
+        return;
+    }
+    var sourceLangLabel = getLocalizedLanguageName(sourceLangCode);
+    var targets = collectGermanSpellTargets(doc, sourceLangCode);
     if (targets.length === 0) {
         alert(t("german_no_targets"));
         return;
@@ -4271,10 +4394,10 @@ function runMasterSpellingCheck(doc) {
     for (var i = 0; i < targets.length; i++) {
         var item = targets[i];
         progressBarLocal.value = i + 1;
-        progressTextLocal.text = t("german_check_progress", { current: (i + 1), total: targets.length });
+        progressTextLocal.text = t("german_check_progress", { lang: sourceLangLabel, current: (i + 1), total: targets.length });
         progressWin.update();
         try {
-            var response = runLanguageToolGermanFrameCheck(item.text);
+            var response = runLanguageToolGermanFrameCheck(item.text, sourceLangCode);
             if (!response.ok || !response.data) {
                 skippedTexts++;
                 if (!firstCheckError && response && response.error) firstCheckError = String(response.error);
@@ -4296,7 +4419,7 @@ function runMasterSpellingCheck(doc) {
             alert(t("german_check_failed_all_skipped", { count: skippedTexts, reason: firstCheckError }));
             return;
         }
-        var okMessage = t("german_check_ok");
+        var okMessage = t("german_check_ok", { lang: sourceLangLabel });
         if (skippedTexts > 0) {
             okMessage += firstCheckError !== ""
                 ? t("german_check_notice_skipped_with_reason", { count: skippedTexts, reason: firstCheckError })
