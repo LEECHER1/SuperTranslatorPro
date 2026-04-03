@@ -3492,7 +3492,13 @@ btnSettings.onClick = function() {
         tabs.preferredSize = [700, Math.max(160, desiredTabsHeight)];
         setWin.minimumSize = [760, minWindowHeight];
         setWin.preferredSize = [760, desiredWindowHeight];
-        try { setWin.size = [760, desiredWindowHeight]; } catch (sizeErr) {}
+        try {
+            var currentHeight = 0;
+            try { currentHeight = setWin.bounds[3] - setWin.bounds[1]; } catch (boundsErr) { currentHeight = 0; }
+            if (Math.abs(currentHeight - desiredWindowHeight) > 6) {
+                setWin.size = [760, desiredWindowHeight];
+            }
+        } catch (sizeErr) {}
         try { setWin.layout.layout(true); } catch (layoutErr2) {}
         try { refreshTypographyScrollUI(); } catch (typographyGeometryScrollErr2) {}
     }
@@ -3894,29 +3900,31 @@ btnSettings.onClick = function() {
     refreshTypographyScrollUI();
 
     var g = setWin.add("group");
+    g.orientation = "stack";
     g.alignment = "fill";
     g.alignChildren = ["fill", "center"];
     g.margins.top = 8;
-    g.spacing = 10;
-    
-    var leftGrp = g.add("group");
-    leftGrp.alignment = "left";
-    leftGrp.spacing = 10;
-    var btnClearTM = leftGrp.add("button", undefined, t("clear_memory"));
+
+    var footerLeftWrap = g.add("group");
+    footerLeftWrap.orientation = "row";
+    footerLeftWrap.alignment = ["left", "center"];
+    footerLeftWrap.alignChildren = ["left", "center"];
+    footerLeftWrap.spacing = 10;
+
+    var btnClearTM = footerLeftWrap.add("button", undefined, t("clear_memory"));
     btnClearTM.preferredSize = [140, 28];
-    var btnFeedbackReport = leftGrp.add("button", undefined, t("feedback_report"));
+    var btnFeedbackReport = footerLeftWrap.add("button", undefined, t("feedback_report"));
     btnFeedbackReport.preferredSize = [150, 28];
-    
-    var spacer = g.add("statictext", undefined, "");
-    spacer.alignment = "fill";
-    
-    var rightGrp = g.add("group");
-    rightGrp.alignment = ["right", "center"];
-    rightGrp.alignChildren = ["right", "center"];
-    rightGrp.spacing = 10;
-    var btnSave = rightGrp.add("button", undefined, t("save"), { name: "ok" });
+
+    var footerRightWrap = g.add("group");
+    footerRightWrap.orientation = "row";
+    footerRightWrap.alignment = ["right", "center"];
+    footerRightWrap.alignChildren = ["right", "center"];
+    footerRightWrap.spacing = 10;
+
+    var btnSave = footerRightWrap.add("button", undefined, t("save"), { name: "ok" });
     btnSave.preferredSize = [130, 30];
-    var btnCancelSet = rightGrp.add("button", undefined, t("cancel"), { name: "cancel" });
+    var btnCancelSet = footerRightWrap.add("button", undefined, t("cancel"), { name: "cancel" });
     btnCancelSet.preferredSize = [120, 28];
     
     btnSave.onClick = function() {
