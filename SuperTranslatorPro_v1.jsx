@@ -2180,11 +2180,12 @@ btnLinkReferences.onClick = function() {
 
 // --- EINSTELLUNGEN FENSTER ---
 btnSettings.onClick = function() {
-    var setWin = new Window("dialog", t("settings_title"));
+    var setWin = new Window("dialog", t("settings_title"), undefined, { resizeable: true });
     setWin.orientation = "column";
     setWin.alignChildren = ["fill", "top"];
     setWin.spacing = 10;
-    setWin.minimumSize = [760, 520];
+    setWin.minimumSize = [760, 620];
+    setWin.preferredSize = [760, 620];
     
     var topGrp = setWin.add("group");
     topGrp.alignment = "fill";
@@ -2197,9 +2198,10 @@ btnSettings.onClick = function() {
     btnInfo.preferredSize = [80, 25];
 
     var tabs = setWin.add("tabbedpanel");
-    tabs.alignment = ["fill", "top"];
+    tabs.alignment = ["fill", "fill"];
     tabs.alignChildren = ["fill", "fill"];
-    tabs.preferredSize = [700, 320];
+    tabs.minimumSize = [700, 420];
+    tabs.preferredSize = [700, 420];
 
     var dataTab = tabs.add("tab", undefined, t("settings_tab_data"));
     dataTab.orientation = "column";
@@ -2471,6 +2473,9 @@ btnSettings.onClick = function() {
         alert(buildAboutText(), t("about_title"));
     };
     btnCancelSet.onClick = function() { setWin.close(); };
+    setWin.onResizing = setWin.onResize = function() {
+        this.layout.resize();
+    };
     setWin.show();
 };
 
