@@ -18,6 +18,7 @@
 - [x] Hauptfenster mit Live-Refresh für Status, Preflight und Button-Aktivierung
 - [x] Automatische Musterseiten-Generierung inkl. Erkennung, Auswahl/Abwahl und Reihenfolge
 - [x] Wörterbuch-/Glossar-System inkl. Erststart-Setup, Template, Migration und verständlicher Erklärungen
+- [x] Glossar-CSV für parallele Nutzung robuster gemacht, inkl. stabilerer Reads, Backup-Fallback und gesichertem Template-Schreiben
 - [x] Robustes Translation Memory mit Sperrlogik, Delta-Merge, Backup und atomarem Schreiben für parallele Nutzung
 - [x] UI-Sprache im Settings-Tab wählbar: `Auto (Systemsprache)`, `DE`, `EN`
 - [x] Nachbearbeitung technischer Tokens wie `M5*15`, damit Leerzeichen sauber bleiben
@@ -156,10 +157,14 @@
 - [x] `_SOURCE` mit leerem Feld = Standard `DE`
 - [x] Bestehendes Wörterbuch auf neues Format migrieren
 - [x] Erklärungen und Beispiele für andere Nutzer verständlicher machen
+- [x] Glossar-Lesezugriffe bei parallelem Speichern robuster gemacht
+- [x] Template-Erstellung mit Sperrlogik, Backup und atomarem Schreiben abgesichert
+- [x] Backup-Fallback für beschädigte oder unvollständig geschriebene Glossar-Dateien ergänzt
+- [ ] Praxis-Test mit zwei Clients bzw. externen CSV-Editoren auf Netzlaufwerk durchführen
 - [ ] Optional: CSV-Validierung oder Glossar-Prüfung ergänzen
 
 **Notizen:**
-- Dieser Bereich ist inzwischen produktiv nutzbar und war im alten Plan noch gar nicht vollständig erfasst.
+- Dieser Bereich ist inzwischen produktiv nutzbar und war im alten Plan noch gar nicht vollständig erfasst. Neu ist zusätzlich ein robusterer Mehrbenutzer-Schutz für CSV-Zugriffe: Das Script liest stabiler bei parallelem Speichern, kann auf eine Sicherung zurückfallen und schreibt neue Template-Dateien abgesichert.
 
 ---
 
@@ -193,6 +198,7 @@
 - [ ] Gemini-/Claude-Live-Tests inkl. Grenzfällen mit XML, Tabellen und langen BDA-Läufen durchführen
 - [ ] Lokale LLM-Live-Tests mit LM Studio und Ollama durchführen
 - [ ] Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren
+- [ ] Glossar-Mehrbenutzerlauf mit zwei Rechnern bzw. externem CSV-Editor auf Netzlaufwerk testen
 - [ ] Translation-Memory-Mehrbenutzerlauf mit zwei Rechnern auf Netzlaufwerk testen
 - [ ] UXP-Refactoring-Plan erstellen
 - [ ] Glossar-Validator für fehlerhafte CSV-Struktur ergänzen
@@ -202,6 +208,7 @@
 ---
 
 ## Änderungslog
+- 4. April 2026: Glossar-CSV für Mehrbenutzerbetrieb robuster gemacht, inklusive stabilerer Lesezugriffe, Backup-Fallback und gesichertem Template-Schreiben
 - 4. April 2026: Translation Memory für Mehrbenutzerbetrieb abgesichert, inklusive Sperrlogik, Delta-Merge, Backup-Fallback und atomarem Schreiben
 - 4. April 2026: Konfigurierbare Schrift-Fallbacks im Tab `Typografie` ergänzt, inklusive Script-Erkennung und Regeln für z. B. Kyrillisch, Arabisch, Hebräisch, Devanagari und CJK
 - 3. April 2026: `Typografie`-Tab erweitert um Smart-Copyfit Ein/Aus sowie konfigurierbare Tracking- und Scale-Schrittweiten
