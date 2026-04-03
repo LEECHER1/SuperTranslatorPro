@@ -77,6 +77,18 @@ var UI_STRINGS = {
     status_on: { de: "an", en: "on" },
     status_off: { de: "aus", en: "off" },
     status_settings_required: { de: "Einstellungen prüfen", en: "check settings" },
+    settings_overview_title: { de: "Übersicht", en: "Overview" },
+    settings_tab_data_hint: { de: "Glossar, Memory und Übersetzungsoptionen gelten dokumentübergreifend.", en: "Glossary, memory, and translation options apply across documents." },
+    settings_tab_provider_hint: { de: "Wähle den aktiven Übersetzungsanbieter und hinterlege die passenden Zugangsdaten.", en: "Choose the active translation provider and enter the relevant credentials." },
+    settings_tab_auto_hint: { de: "Diese Optionen steuern die BDA-Vollautomatik und das automatische Verlinken.", en: "These options control BDA full automation and automatic hyperlinking." },
+    settings_section_resources: { de: "Dateien", en: "Files" },
+    settings_section_translation: { de: "Übersetzung", en: "Translation" },
+    settings_section_provider_setup: { de: "Provider-Auswahl", en: "Provider selection" },
+    settings_section_provider_credentials: { de: "Zugangsdaten", en: "Credentials" },
+    settings_section_auto_options: { de: "Automatik", en: "Automation" },
+    settings_provider_deepl_hint: { de: "DeepL ist der Standardanbieter. Für andere Provider kann der DeepL-Key als Fallback hinterlegt bleiben.", en: "DeepL is the default provider. For other providers, the DeepL key can remain as a fallback." },
+    settings_provider_llm_hint: { de: "Für Cloud-LLMs werden API-Key und Modellname benötigt. Der DeepL-Key bleibt optional als Fallback erhalten.", en: "Cloud LLMs require an API key and model name. The DeepL key can remain as an optional fallback." },
+    settings_provider_local_hint: { de: "Für lokale Modelle werden Base URL und Modellname benötigt. Ein API-Key ist nur optional.", en: "Local models require a base URL and model name. An API key is optional." },
     no_document_open: { de: "Kein Dokument offen!", en: "No document is open." },
     spellcheck_error: { de: "Fehler bei der Rechtschreibprüfung:\n{message}", en: "Spell-check error:\n{message}" },
     settings_title: { de: "⚙️ Einstellungen", en: "⚙️ Settings" },
@@ -151,6 +163,13 @@ var UI_STRINGS = {
     hyperlink_group_title: { de: "Hyperlinks", en: "Hyperlinks" },
     hyperlink_language: { de: "Sprache:", en: "Language:" },
     hyperlink_target_page: { de: "Zielseite:", en: "Target page:" },
+    hyperlink_dialog_hint: { de: "Die Seitenzuordnungen von Seite 1 werden vorbefüllt. Du kannst sie hier anpassen oder ergänzen, bevor die Verlinkung ausgeführt wird.", en: "Page mappings from page 1 are prefilled here. You can adjust or extend them before hyperlinking runs." },
+    hyperlink_detected_title: { de: "Erkannt auf Seite 1", en: "Detected on page 1" },
+    hyperlink_detected_none: { de: "Auf Seite 1 wurden noch keine Sprach-/Seitenzuordnungen erkannt.", en: "No language/page mappings were detected on page 1 yet." },
+    hyperlink_reload_from_cover: { de: "Von Seite 1 neu laden", en: "Reload from page 1" },
+    hyperlink_source_cover: { de: "Seite 1", en: "page 1" },
+    hyperlink_source_manual: { de: "manuell", en: "manual" },
+    hyperlink_source_override: { de: "manuell ueberschreibt", en: "manual override" },
     hyperlink_save_mapping: { de: "Zuordnung speichern", en: "Save mapping" },
     hyperlink_remove_mapping: { de: "Zuordnung entfernen", en: "Remove mapping" },
     hyperlink_saved_mappings: { de: "Aktuelle Zuordnungen:", en: "Current mappings:" },
@@ -605,6 +624,16 @@ function normalizeHyperlinkPageMappings(rawMappings) {
     return normalized;
 }
 
+function mergeHyperlinkPageMappings(baseMappings, overrideMappings) {
+    var merged = normalizeHyperlinkPageMappings(baseMappings);
+    var override = normalizeHyperlinkPageMappings(overrideMappings);
+    for (var key in override) {
+        if (!override.hasOwnProperty(key)) continue;
+        merged[key] = override[key];
+    }
+    return merged;
+}
+
 function loadHyperlinkPageMappings(rawText) {
     var content = String(rawText || "").replace(/^\s+|\s+$/g, "");
     if (content === "") return {};
@@ -613,6 +642,18 @@ function loadHyperlinkPageMappings(rawText) {
     } catch (e) {
         return {};
     }
+}
+
+function serializeHyperlinkPageMappings(pageMappings) {
+    var mappings = normalizeHyperlinkPageMappings(pageMappings);
+    var parts = [];
+    for (var key in mappings) {
+        if (!mappings.hasOwnProperty(key)) continue;
+        var safeKey = String(key).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        var safeValue = String(mappings[key]).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        parts.push('"' + safeKey + '":"' + safeValue + '"');
+    }
+    return "{" + parts.join(",") + "}";
 }
 
 function formatHyperlinkPageMappings(pageMappings) {
@@ -645,7 +686,10 @@ function hasOwnMappings(map) {
 function saveHyperlinkSettings(symbols, pageMappings) {
     refSymbolsSetting = normalizeRefSymbols(symbols || refSymbolsSetting);
     app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
-    if (pageMappings) hyperlinkPageMappings = normalizeHyperlinkPageMappings(pageMappings);
+    if (pageMappings) {
+        hyperlinkPageMappings = normalizeHyperlinkPageMappings(pageMappings);
+        app.insertLabel(HYPERLINK_PAGE_MAP_LABEL, serializeHyperlinkPageMappings(hyperlinkPageMappings));
+    }
 }
 
 function collectTOCTextEntries(page) {
@@ -739,14 +783,11 @@ function collectCoverHyperlinkPageMappings(doc) {
 }
 
 function getHyperlinkPageMappingsForDialog(doc) {
-    return collectCoverHyperlinkPageMappings(doc);
+    return mergeHyperlinkPageMappings(collectCoverHyperlinkPageMappings(doc), hyperlinkPageMappings);
 }
 
 function getRuntimeHyperlinkPageMappings(doc, explicitMappings) {
-    var liveMappings = collectCoverHyperlinkPageMappings(doc);
-    if (hasOwnMappings(liveMappings)) return liveMappings;
-    if (explicitMappings) return normalizeHyperlinkPageMappings(explicitMappings);
-    return {};
+    return mergeHyperlinkPageMappings(collectCoverHyperlinkPageMappings(doc), explicitMappings ? explicitMappings : hyperlinkPageMappings);
 }
 
 function getTextObjectParentPage(textObj) {
@@ -896,7 +937,7 @@ var csvPathSettingRaw = app.extractLabel(CSV_PATH_LABEL) || "";
 var csvPath = resolveCSVPath(csvPathSettingRaw);
 var tmPath = app.extractLabel(TM_PATH_LABEL) || (Folder.userData + "/SuperTranslatorPRO_Memory.json"); 
 var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
-var hyperlinkPageMappings = {};
+var hyperlinkPageMappings = loadHyperlinkPageMappings(app.extractLabel(HYPERLINK_PAGE_MAP_LABEL) || "");
 var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
 var backPageTrackerSetting = normalizeBackPageTrackerSetting(app.extractLabel(BACK_PAGE_TRACKER_LABEL) || "©");
 
@@ -2157,48 +2198,131 @@ btnSpellCheck.onClick = function() {
 };
 
 function showHyperlinkDialog(doc) {
-    var dlg = new Window("dialog", t("hyperlink_dialog_title"));
+    var dlg = new Window("dialog", t("hyperlink_dialog_title"), undefined, { resizeable: true });
     dlg.orientation = "column";
     dlg.alignChildren = ["fill", "top"];
+    dlg.spacing = 10;
+    dlg.minimumSize = [540, 500];
+    dlg.preferredSize = [580, 520];
+
+    var introText = dlg.add("statictext", undefined, t("hyperlink_dialog_hint"), { multiline: true });
+    introText.preferredSize.width = 520;
 
     dlg.add("statictext", undefined, t("reference_symbols"));
     var refSymbolsInput = dlg.add("edittext", undefined, refSymbolsSetting);
+    refSymbolsInput.alignment = "fill";
     refSymbolsInput.characters = 20;
 
-    var hyperlinkMappingsDraft = getHyperlinkPageMappingsForDialog(doc);
+    var coverMappings = collectCoverHyperlinkPageMappings(doc);
+    var hyperlinkMappingsDraft = normalizeHyperlinkPageMappings(hyperlinkPageMappings);
+
+    var detectedPanel = dlg.add("panel", undefined, t("hyperlink_detected_title"));
+    detectedPanel.orientation = "column";
+    detectedPanel.alignChildren = ["fill", "top"];
+    detectedPanel.margins = 12;
+    var detectedView = detectedPanel.add("edittext", undefined, hasOwnMappings(coverMappings) ? formatHyperlinkPageMappings(coverMappings) : t("hyperlink_detected_none"), { multiline: true, readonly: true, scrolling: true });
+    detectedView.preferredSize = [520, 90];
+
     var hyperlinkPanel = dlg.add("panel", undefined, t("hyperlink_group_title"));
     hyperlinkPanel.orientation = "column";
     hyperlinkPanel.alignChildren = ["fill", "top"];
     hyperlinkPanel.margins = 12;
+    hyperlinkPanel.spacing = 8;
 
     var hyperlinkLangGroup = hyperlinkPanel.add("group");
+    hyperlinkLangGroup.alignment = "fill";
+    hyperlinkLangGroup.alignChildren = ["left", "center"];
     hyperlinkLangGroup.add("statictext", undefined, t("hyperlink_language"));
     var hyperlinkLangDropdown = hyperlinkLangGroup.add("dropdownlist", undefined, buildHyperlinkLanguageList());
     hyperlinkLangDropdown.selection = 0;
+    hyperlinkLangDropdown.preferredSize.width = 180;
 
     var hyperlinkPageGroup = hyperlinkPanel.add("group");
+    hyperlinkPageGroup.alignment = "fill";
+    hyperlinkPageGroup.alignChildren = ["left", "center"];
     hyperlinkPageGroup.add("statictext", undefined, t("hyperlink_target_page"));
     var hyperlinkPageInput = hyperlinkPageGroup.add("edittext", undefined, "");
+    hyperlinkPageInput.preferredSize.width = 120;
     hyperlinkPageInput.characters = 10;
 
     var hyperlinkButtonGroup = hyperlinkPanel.add("group");
+    hyperlinkButtonGroup.alignment = "fill";
     var btnSaveHyperlinkMapping = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_save_mapping"));
     var btnRemoveHyperlinkMapping = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_remove_mapping"));
+    var btnReloadFromCover = hyperlinkButtonGroup.add("button", undefined, t("hyperlink_reload_from_cover"));
 
     hyperlinkPanel.add("statictext", undefined, t("hyperlink_saved_mappings"));
-    var hyperlinkMappingsView = hyperlinkPanel.add("edittext", undefined, "", { multiline: true, readonly: true, scrolling: true });
-    hyperlinkMappingsView.preferredSize = [320, 90];
+    var hyperlinkMappingsView = hyperlinkPanel.add("listbox", undefined, [], { multiselect: false });
+    hyperlinkMappingsView.preferredSize = [520, 150];
+    var hyperlinkMappingsMeta = [];
+
+    function getEffectiveHyperlinkMappings() {
+        return mergeHyperlinkPageMappings(coverMappings, hyperlinkMappingsDraft);
+    }
+
+    function buildHyperlinkMappingsMeta() {
+        var effectiveMappings = getEffectiveHyperlinkMappings();
+        var entries = getHyperlinkLanguageEntries();
+        var meta = [];
+        var seen = {};
+        for (var i = 0; i < entries.length; i++) {
+            var code = entries[i].code;
+            if (!effectiveMappings.hasOwnProperty(code)) continue;
+            var sourceLabel = coverMappings.hasOwnProperty(code)
+                ? (hyperlinkMappingsDraft.hasOwnProperty(code) ? t("hyperlink_source_override") : t("hyperlink_source_cover"))
+                : t("hyperlink_source_manual");
+            meta.push({ code: code, page: effectiveMappings[code], source: sourceLabel });
+            seen[code] = true;
+        }
+        for (var key in effectiveMappings) {
+            if (!effectiveMappings.hasOwnProperty(key) || seen[key]) continue;
+            meta.push({ code: key, page: effectiveMappings[key], source: hyperlinkMappingsDraft.hasOwnProperty(key) ? t("hyperlink_source_manual") : t("hyperlink_source_cover") });
+        }
+        return meta;
+    }
+
+    function applyHyperlinkDraftValue(selectedCode, pageValue) {
+        if (!selectedCode) return;
+        var normalizedPageValue = String(pageValue || "").replace(/^\s+|\s+$/g, "");
+        if (normalizedPageValue === "") {
+            if (hyperlinkMappingsDraft.hasOwnProperty(selectedCode)) delete hyperlinkMappingsDraft[selectedCode];
+            return;
+        }
+        if (coverMappings.hasOwnProperty(selectedCode) && coverMappings[selectedCode] === normalizedPageValue) {
+            if (hyperlinkMappingsDraft.hasOwnProperty(selectedCode)) delete hyperlinkMappingsDraft[selectedCode];
+            return;
+        }
+        hyperlinkMappingsDraft[selectedCode] = normalizedPageValue;
+    }
 
     var refreshHyperlinkMappingsView = function() {
-        hyperlinkMappingsView.text = formatHyperlinkPageMappings(hyperlinkMappingsDraft);
+        hyperlinkMappingsMeta = buildHyperlinkMappingsMeta();
+        hyperlinkMappingsView.removeAll();
+        for (var i = 0; i < hyperlinkMappingsMeta.length; i++) {
+            hyperlinkMappingsView.add("item", hyperlinkMappingsMeta[i].code + " -> " + hyperlinkMappingsMeta[i].page + " [" + hyperlinkMappingsMeta[i].source + "]");
+        }
     };
 
     var syncHyperlinkMappingInputs = function() {
         var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
-        hyperlinkPageInput.text = (selectedCode && hyperlinkMappingsDraft.hasOwnProperty(selectedCode)) ? hyperlinkMappingsDraft[selectedCode] : "";
+        if (hyperlinkMappingsView.selection && hyperlinkMappingsMeta[hyperlinkMappingsView.selection.index]) {
+            selectedCode = hyperlinkMappingsMeta[hyperlinkMappingsView.selection.index].code;
+            for (var i = 0; i < hyperlinkLangDropdown.items.length; i++) {
+                if (extractLanguageCodeFromOption(hyperlinkLangDropdown.items[i].text) === selectedCode) {
+                    hyperlinkLangDropdown.selection = i;
+                    break;
+                }
+            }
+        }
+        var effectiveMappings = getEffectiveHyperlinkMappings();
+        hyperlinkPageInput.text = (selectedCode && effectiveMappings.hasOwnProperty(selectedCode)) ? effectiveMappings[selectedCode] : "";
     };
 
-    hyperlinkLangDropdown.onChange = syncHyperlinkMappingInputs;
+    hyperlinkLangDropdown.onChange = function() {
+        hyperlinkMappingsView.selection = null;
+        syncHyperlinkMappingInputs();
+    };
+    hyperlinkMappingsView.onChange = syncHyperlinkMappingInputs;
 
     btnSaveHyperlinkMapping.onClick = function() {
         var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
@@ -2208,37 +2332,50 @@ function showHyperlinkDialog(doc) {
             alert(t("hyperlink_page_required", { language: selectedCode }));
             return;
         }
-        hyperlinkMappingsDraft[selectedCode] = pageValue;
+        applyHyperlinkDraftValue(selectedCode, pageValue);
         refreshHyperlinkMappingsView();
+        syncHyperlinkMappingInputs();
     };
 
     btnRemoveHyperlinkMapping.onClick = function() {
         var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
         if (!selectedCode) return;
         if (hyperlinkMappingsDraft.hasOwnProperty(selectedCode)) delete hyperlinkMappingsDraft[selectedCode];
+        hyperlinkMappingsView.selection = null;
         syncHyperlinkMappingInputs();
         refreshHyperlinkMappingsView();
+    };
+
+    btnReloadFromCover.onClick = function() {
+        coverMappings = collectCoverHyperlinkPageMappings(doc);
+        detectedView.text = hasOwnMappings(coverMappings) ? formatHyperlinkPageMappings(coverMappings) : t("hyperlink_detected_none");
+        hyperlinkMappingsView.selection = null;
+        refreshHyperlinkMappingsView();
+        syncHyperlinkMappingInputs();
     };
 
     refreshHyperlinkMappingsView();
     syncHyperlinkMappingInputs();
 
     var buttonRow = dlg.add("group");
-    buttonRow.alignment = "right";
+    buttonRow.alignment = "fill";
+    var buttonSpacer = buttonRow.add("statictext", undefined, "");
+    buttonSpacer.alignment = "fill";
     var btnRun = buttonRow.add("button", undefined, t("hyperlink_execute"));
     var btnClose = buttonRow.add("button", undefined, t("cancel"));
 
     btnRun.onClick = function() {
         var selectedCode = extractLanguageCodeFromOption(hyperlinkLangDropdown.selection ? hyperlinkLangDropdown.selection.text : "");
         var pageValue = String(hyperlinkPageInput.text || "").replace(/^\s+|\s+$/g, "");
-        if (selectedCode && pageValue !== "") {
-            hyperlinkMappingsDraft[selectedCode] = pageValue;
-        }
+        applyHyperlinkDraftValue(selectedCode, pageValue);
         saveHyperlinkSettings(refSymbolsInput.text, hyperlinkMappingsDraft);
         dlg.close(1);
     };
 
     btnClose.onClick = function() { dlg.close(0); };
+    dlg.onResizing = dlg.onResize = function() {
+        this.layout.resize();
+    };
     if (dlg.show() !== 1) return null;
     return {
         symbols: refSymbolsSetting,
@@ -2286,11 +2423,18 @@ btnSettings.onClick = function() {
     topGrp.alignment = "fill";
     topGrp.alignChildren = ["right", "center"];
     var btnLog = topGrp.add("button", undefined, t("log_file"));
-    btnLog.preferredSize = [90, 25];
+    btnLog.preferredSize = [110, 28];
     var btnDebugLog = topGrp.add("button", undefined, t("debug_log_file"));
-    btnDebugLog.preferredSize = [90, 25];
+    btnDebugLog.preferredSize = [110, 28];
     var btnInfo = topGrp.add("button", undefined, t("info"));
-    btnInfo.preferredSize = [80, 25];
+    btnInfo.preferredSize = [90, 28];
+
+    var overviewPanel = setWin.add("panel", undefined, t("settings_overview_title"));
+    overviewPanel.orientation = "column";
+    overviewPanel.alignChildren = ["fill", "top"];
+    overviewPanel.margins = 12;
+    var settingsOverviewText = overviewPanel.add("statictext", undefined, "", { multiline: true });
+    settingsOverviewText.preferredSize.width = 700;
 
     var tabs = setWin.add("tabbedpanel");
     tabs.alignment = ["fill", "fill"];
@@ -2357,16 +2501,36 @@ btnSettings.onClick = function() {
         input.alignment = ["fill", "center"];
         input.characters = 40;
         var button = row.add("button", undefined, t("browse"));
-        button.preferredSize = [140, 28];
+        button.preferredSize = [160, 28];
         button.onClick = browseHandler;
         return input;
     }
 
-    providerTab.add("statictext", undefined, t("translation_provider"));
+    function createDialogHint(parent, hintText) {
+        var hint = parent.add("statictext", undefined, hintText, { multiline: true });
+        hint.preferredSize.width = 660;
+        return hint;
+    }
+
+    function createSettingsSection(parent, title) {
+        var panel = parent.add("panel", undefined, title);
+        panel.orientation = "column";
+        panel.alignChildren = ["fill", "top"];
+        panel.alignment = "fill";
+        panel.margins = 12;
+        panel.spacing = 8;
+        return panel;
+    }
+
+    createDialogHint(providerTab, t("settings_tab_provider_hint"));
+    var providerSetupSection = createSettingsSection(providerTab, t("settings_section_provider_setup"));
+    providerSetupSection.add("statictext", undefined, t("translation_provider"));
     var providerIds = ["deepl", "openai", "gemini", "claude", "local"];
     var providerLabels = [t("provider_deepl"), t("provider_openai"), t("provider_gemini"), t("provider_claude"), t("provider_local")];
-    var providerDrop = providerTab.add("dropdownlist", undefined, providerLabels);
+    var providerDrop = providerSetupSection.add("dropdownlist", undefined, providerLabels);
     providerDrop.alignment = "fill";
+    var providerHintText = providerSetupSection.add("statictext", undefined, "", { multiline: true });
+    providerHintText.preferredSize.width = 640;
     var activeProviderId = getActiveTranslationProvider();
     var activeProviderIndex = 0;
     for (var providerIndex = 0; providerIndex < providerIds.length; providerIndex++) {
@@ -2377,7 +2541,8 @@ btnSettings.onClick = function() {
     }
     providerDrop.selection = activeProviderIndex;
 
-    var providerSettingsGroup = providerTab.add("group");
+    var providerCredentialsSection = createSettingsSection(providerTab, t("settings_section_provider_credentials"));
+    var providerSettingsGroup = providerCredentialsSection.add("group");
     providerSettingsGroup.orientation = "column";
     providerSettingsGroup.alignChildren = ["fill", "top"];
     providerSettingsGroup.alignment = "fill";
@@ -2422,6 +2587,9 @@ btnSettings.onClick = function() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
         var selectedProviderId = providerIds[selectedProviderIndex] || "deepl";
         deepLField.label.text = (selectedProviderId === "deepl") ? t("deepl_api_key") : t("deepl_fallback_api_key");
+        providerHintText.text = (selectedProviderId === "deepl")
+            ? t("settings_provider_deepl_hint")
+            : (selectedProviderId === "local" ? t("settings_provider_local_hint") : t("settings_provider_llm_hint"));
         setSettingsGroupVisible(providerSpecificGroup, selectedProviderId !== "deepl");
         setSettingsGroupVisible(openAIProviderFields.group, selectedProviderId === "openai");
         setSettingsGroupVisible(geminiProviderFields.group, selectedProviderId === "gemini");
@@ -2436,48 +2604,75 @@ btnSettings.onClick = function() {
 
     tabs.selection = dataTab;
 
-    var csvInput = createPathInputRow(dataTab, t("glossary_path"), csvPath, function() {
+    createDialogHint(dataTab, t("settings_tab_data_hint"));
+    var dataResourcesSection = createSettingsSection(dataTab, t("settings_section_resources"));
+    var csvInput = createPathInputRow(dataResourcesSection, t("glossary_path"), csvPath, function() {
         var chosenGlossaryPath = promptForGlossaryPath(csvInput.text, true);
-        if (chosenGlossaryPath && chosenGlossaryPath !== "") csvInput.text = chosenGlossaryPath;
-    });
-
-    dataTab.add("panel", undefined, "");
-    dataTab.add("statictext", undefined, t("formality"));
-    var formDrop = dataTab.add("dropdownlist", undefined, buildFormalityOptions());
-    formDrop.alignment = "fill";
-    if (formalitySetting === "more") formDrop.selection = 1; else if (formalitySetting === "less") formDrop.selection = 2; else formDrop.selection = 0;
-    
-    dataTab.add("statictext", undefined, t("ignored_styles"));
-    var dntInput = dataTab.add("edittext", undefined, dntStyles);
-    dntInput.characters = 40;
-    dntInput.alignment = "fill";
-
-    dataTab.add("panel", undefined, "");
-    var tmInput = createPathInputRow(dataTab, t("memory_path"), tmPath, function() {
-        var f = File.openDialog(t("memory_select"), "*.json");
-        if (f) {
-            tmInput.text = f.fsName;
-        } else {
-            var saveF = File.saveDialog(t("memory_save_new"), "*.json");
-            if (saveF) tmInput.text = saveF.fsName;
+        if (chosenGlossaryPath && chosenGlossaryPath !== "") {
+            csvInput.text = chosenGlossaryPath;
+            try { refreshSettingsOverview(); } catch (overviewErr1) {}
         }
     });
 
-    var autoSettingsLabel = autoTab.add("statictext", undefined, t("auto_settings"));
-    autoSettingsLabel.graphics.font = ScriptUI.newFont(autoSettingsLabel.graphics.font.family, "BOLD", autoSettingsLabel.graphics.font.size);
-    autoTab.add("statictext", undefined, t("auto_hyperlink_symbols"));
-    var autoHyperlinkSymbolsInput = autoTab.add("edittext", undefined, refSymbolsSetting);
+    var tmInput = createPathInputRow(dataResourcesSection, t("memory_path"), tmPath, function() {
+        var f = File.openDialog(t("memory_select"), "*.json");
+        if (f) {
+            tmInput.text = f.fsName;
+            try { refreshSettingsOverview(); } catch (overviewErr2) {}
+        } else {
+            var saveF = File.saveDialog(t("memory_save_new"), "*.json");
+            if (saveF) {
+                tmInput.text = saveF.fsName;
+                try { refreshSettingsOverview(); } catch (overviewErr3) {}
+            }
+        }
+    });
+
+    var dataTranslationSection = createSettingsSection(dataTab, t("settings_section_translation"));
+    dataTranslationSection.add("statictext", undefined, t("formality"));
+    var formDrop = dataTranslationSection.add("dropdownlist", undefined, buildFormalityOptions());
+    formDrop.alignment = "fill";
+    if (formalitySetting === "more") formDrop.selection = 1; else if (formalitySetting === "less") formDrop.selection = 2; else formDrop.selection = 0;
+    
+    dataTranslationSection.add("statictext", undefined, t("ignored_styles"));
+    var dntInput = dataTranslationSection.add("edittext", undefined, dntStyles);
+    dntInput.characters = 40;
+    dntInput.alignment = "fill";
+
+    createDialogHint(autoTab, t("settings_tab_auto_hint"));
+    var autoSection = createSettingsSection(autoTab, t("settings_section_auto_options"));
+    autoSection.add("statictext", undefined, t("auto_hyperlink_symbols"));
+    var autoHyperlinkSymbolsInput = autoSection.add("edittext", undefined, refSymbolsSetting);
     autoHyperlinkSymbolsInput.characters = 20;
     autoHyperlinkSymbolsInput.alignment = "fill";
     autoHyperlinkSymbolsInput.helpTip = t("reference_symbols");
-    autoTab.add("statictext", undefined, t("back_page_tracker_label"));
-    var backPageTrackerInput = autoTab.add("edittext", undefined, backPageTrackerSetting);
+    autoSection.add("statictext", undefined, t("back_page_tracker_label"));
+    var backPageTrackerInput = autoSection.add("edittext", undefined, backPageTrackerSetting);
     backPageTrackerInput.characters = 40;
     backPageTrackerInput.alignment = "fill";
     backPageTrackerInput.helpTip = t("back_page_tracker_help");
-    var debugTableRestoreCheckbox = autoTab.add("checkbox", undefined, t("debug_tables_images"));
+    var debugTableRestoreCheckbox = autoSection.add("checkbox", undefined, t("debug_tables_images"));
     debugTableRestoreCheckbox.value = tableRestoreDebugEnabled;
     debugTableRestoreCheckbox.helpTip = t("debug_tables_images_help");
+
+    function refreshSettingsOverview() {
+        var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
+        var selectedProviderId = providerIds[selectedProviderIndex] || "deepl";
+        settingsOverviewText.text =
+            t("status_provider") + " " + getTranslationProviderDisplayName(selectedProviderId) +
+            "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvInput.text) + "\n" +
+            t("status_memory") + " " + getStatusPathLabel(tmInput.text) +
+            "   |   " + t("status_symbols") + " " + normalizeRefSymbols(autoHyperlinkSymbolsInput.text);
+    }
+
+    providerDrop.onChange = function() {
+        refreshProviderSettingsUI();
+        refreshSettingsOverview();
+    };
+    csvInput.onChanging = refreshSettingsOverview;
+    tmInput.onChanging = refreshSettingsOverview;
+    autoHyperlinkSymbolsInput.onChanging = refreshSettingsOverview;
+    refreshSettingsOverview();
 
     var g = setWin.add("group");
     g.alignment = "fill";
@@ -2487,9 +2682,9 @@ btnSettings.onClick = function() {
     var leftGrp = g.add("group");
     leftGrp.alignment = "left";
     var btnClearTM = leftGrp.add("button", undefined, t("clear_memory"));
-    btnClearTM.preferredSize = [110, 25];
+    btnClearTM.preferredSize = [140, 28];
     var btnFeedbackReport = leftGrp.add("button", undefined, t("feedback_report"));
-    btnFeedbackReport.preferredSize = [110, 25];
+    btnFeedbackReport.preferredSize = [150, 28];
     
     var spacer = g.add("statictext", undefined, "");
     spacer.alignment = "fill";
@@ -2498,9 +2693,11 @@ btnSettings.onClick = function() {
     rightGrp.alignment = ["fill", "center"];
     rightGrp.alignChildren = ["right", "center"];
     var btnSave = rightGrp.add("button", undefined, t("save"));
+    btnSave.preferredSize = [120, 28];
     var btnSpacer = rightGrp.add("statictext", undefined, "");
     btnSpacer.alignment = "fill";
     var btnCancelSet = rightGrp.add("button", undefined, t("cancel"));
+    btnCancelSet.preferredSize = [120, 28];
     
     btnSave.onClick = function() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
@@ -5371,7 +5568,7 @@ function runAutomaticHyperlinksForBDA(doc, config) {
     if (!hasOwnMappings(pageMappings)) return null;
 
     var normalizedSymbols = normalizeRefSymbols(config.autoReferenceSymbols || refSymbolsSetting);
-    saveHyperlinkSettings(normalizedSymbols, pageMappings);
+    saveHyperlinkSettings(normalizedSymbols);
 
     try {
         updateProgress(99, t("link_working"), 99, t("link_working"));
