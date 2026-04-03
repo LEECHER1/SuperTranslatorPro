@@ -93,9 +93,9 @@ var UI_STRINGS = {
     bda_state_ready: { de: "Quellseiten fuer Vollautomatik: {pages}", en: "Source pages for full automation: {pages}" },
     settings_provider_validation_ready: { de: "Provider-Konfiguration ist vollstaendig.", en: "Provider configuration is complete." },
     settings_overview_title: { de: "Übersicht", en: "Overview" },
+    settings_tab_ui: { de: "UI", en: "UI" },
     settings_ui_language: { de: "UI-Sprache:", en: "UI language:" },
     settings_ui_language_auto: { de: "Auto (Systemsprache)", en: "Auto (system language)" },
-    settings_ui_language_hint: { de: "Steuert die Sprache der Script-Oberfläche. Auto verwendet die InDesign-Systemsprache.", en: "Controls the script interface language. Auto uses the InDesign system language." },
     settings_tab_data_hint: { de: "Glossar, Memory und Übersetzungsoptionen gelten dokumentübergreifend.", en: "Glossary, memory, and translation options apply across documents." },
     settings_tab_provider_hint: { de: "Wähle den aktiven Übersetzungsanbieter und hinterlege die passenden Zugangsdaten.", en: "Choose the active translation provider and enter the relevant credentials." },
     settings_tab_auto_hint: { de: "Diese Optionen steuern die BDA-Vollautomatik und das automatische Verlinken.", en: "These options control BDA full automation and automatic hyperlinking." },
@@ -2952,6 +2952,10 @@ btnSettings.onClick = function() {
     tabs.minimumSize = [700, 420];
     tabs.preferredSize = [700, 420];
 
+    var uiTab = tabs.add("tab", undefined, t("settings_tab_ui"));
+    uiTab.orientation = "column";
+    uiTab.alignChildren = ["fill", "top"];
+
     var dataTab = tabs.add("tab", undefined, t("settings_tab_data"));
     dataTab.orientation = "column";
     dataTab.alignChildren = ["fill", "top"];
@@ -3149,6 +3153,15 @@ btnSettings.onClick = function() {
 
     tabs.selection = dataTab;
 
+    var uiSection = createSettingsSection(uiTab, t("settings_tab_ui"));
+    var uiLanguageRow = uiSection.add("group");
+    uiLanguageRow.alignment = "left";
+    uiLanguageRow.alignChildren = ["left", "center"];
+    uiLanguageRow.add("statictext", undefined, t("settings_ui_language"));
+    var uiLanguageDrop = uiLanguageRow.add("dropdownlist", undefined, buildUILanguageSettingOptions());
+    uiLanguageDrop.preferredSize.width = 180;
+    uiLanguageDrop.selection = getUILanguageSettingSelectionIndex(UI_LANGUAGE_SETTING);
+
     createDialogHint(dataTab, t("settings_tab_data_hint"));
     var dataResourcesSection = createSettingsSection(dataTab, t("settings_section_resources"));
     var csvInput = createPathInputRow(dataResourcesSection, t("glossary_path"), csvPath, function() {
@@ -3174,14 +3187,6 @@ btnSettings.onClick = function() {
     });
 
     var dataTranslationSection = createSettingsSection(dataTab, t("settings_section_translation"));
-    var uiLanguageRow = dataTranslationSection.add("group");
-    uiLanguageRow.alignment = "left";
-    uiLanguageRow.alignChildren = ["left", "center"];
-    uiLanguageRow.add("statictext", undefined, t("settings_ui_language"));
-    var uiLanguageDrop = uiLanguageRow.add("dropdownlist", undefined, buildUILanguageSettingOptions());
-    uiLanguageDrop.preferredSize.width = 180;
-    uiLanguageDrop.selection = getUILanguageSettingSelectionIndex(UI_LANGUAGE_SETTING);
-    createDialogHint(dataTranslationSection, t("settings_ui_language_hint"));
     dataTranslationSection.add("statictext", undefined, t("formality"));
     var formDrop = dataTranslationSection.add("dropdownlist", undefined, buildFormalityOptions());
     formDrop.alignment = "fill";
