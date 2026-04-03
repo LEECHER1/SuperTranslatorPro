@@ -3473,7 +3473,7 @@ btnSettings.onClick = function() {
         return fallback;
     }
 
-    function applySettingsDialogGeometry() {
+    function applySettingsDialogGeometry(allowWindowResize) {
         try { setWin.layout.layout(true); } catch (layoutErr) {}
         try { refreshTypographyScrollUI(); } catch (typographyGeometryScrollErr) {}
 
@@ -3490,15 +3490,17 @@ btnSettings.onClick = function() {
 
         tabs.minimumSize = [700, Math.max(160, desiredTabsHeight)];
         tabs.preferredSize = [700, Math.max(160, desiredTabsHeight)];
-        setWin.minimumSize = [760, minWindowHeight];
-        setWin.preferredSize = [760, desiredWindowHeight];
-        try {
-            var currentHeight = 0;
-            try { currentHeight = setWin.bounds[3] - setWin.bounds[1]; } catch (boundsErr) { currentHeight = 0; }
-            if (Math.abs(currentHeight - desiredWindowHeight) > 6) {
-                setWin.size = [760, desiredWindowHeight];
-            }
-        } catch (sizeErr) {}
+        if (allowWindowResize !== false) {
+            setWin.minimumSize = [760, minWindowHeight];
+            setWin.preferredSize = [760, desiredWindowHeight];
+            try {
+                var currentHeight = 0;
+                try { currentHeight = setWin.bounds[3] - setWin.bounds[1]; } catch (boundsErr) { currentHeight = 0; }
+                if (Math.abs(currentHeight - desiredWindowHeight) > 6) {
+                    setWin.size = [760, desiredWindowHeight];
+                }
+            } catch (sizeErr) {}
+        }
         try { setWin.layout.layout(true); } catch (layoutErr2) {}
         try { refreshTypographyScrollUI(); } catch (typographyGeometryScrollErr2) {}
     }
@@ -3876,7 +3878,7 @@ btnSettings.onClick = function() {
         refreshProviderSettingsUI();
         refreshProviderValidationUI();
         refreshSettingsOverview();
-        try { applySettingsDialogGeometry(); } catch (providerGeometryErr) {}
+        try { refreshTypographyScrollUI(); } catch (providerGeometryErr) {}
     };
     csvInput.onChanging = refreshSettingsOverview;
     tmInput.onChanging = refreshSettingsOverview;
@@ -3910,6 +3912,7 @@ btnSettings.onClick = function() {
     footerLeftWrap.alignment = ["left", "center"];
     footerLeftWrap.alignChildren = ["left", "center"];
     footerLeftWrap.spacing = 10;
+    footerLeftWrap.minimumSize.width = 310;
 
     var btnClearTM = footerLeftWrap.add("button", undefined, t("clear_memory"));
     btnClearTM.preferredSize = [140, 28];
@@ -3921,6 +3924,7 @@ btnSettings.onClick = function() {
     footerRightWrap.alignment = ["right", "center"];
     footerRightWrap.alignChildren = ["right", "center"];
     footerRightWrap.spacing = 10;
+    footerRightWrap.minimumSize.width = 260;
 
     var btnSave = footerRightWrap.add("button", undefined, t("save"), { name: "ok" });
     btnSave.preferredSize = [130, 30];
@@ -4016,7 +4020,7 @@ btnSettings.onClick = function() {
     };
     btnCancelSet.onClick = function() { setWin.close(); };
     setWin.onShow = function() {
-        try { applySettingsDialogGeometry(); } catch (showGeometryErr) {}
+        try { applySettingsDialogGeometry(true); } catch (showGeometryErr) {}
         var bounds = null;
         var width = 760;
         var height = 500;
@@ -4033,10 +4037,9 @@ btnSettings.onClick = function() {
         try { refreshTypographyScrollUI(); } catch (resizeScrollErr) {}
     };
     tabs.onChange = function() {
-        try { applySettingsDialogGeometry(); } catch (tabGeometryErr) {}
         try { refreshTypographyScrollUI(); } catch (tabScrollErr) {}
     };
-    try { applySettingsDialogGeometry(); } catch (initialGeometryErr) {}
+    try { applySettingsDialogGeometry(true); } catch (initialGeometryErr) {}
     setWin.show();
 };
 
