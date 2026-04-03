@@ -197,8 +197,8 @@
     <h2>Aktueller Status</h2>
     <ul class="meta-list">
       <li><strong>Version</strong>28.2</li>
-      <li><strong>Datum</strong>31. März 2026</li>
-      <li><strong>Status</strong>Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Copyfit, Provider-Erweiterung und UXP-Planung.</li>
+      <li><strong>Datum</strong>3. April 2026</li>
+      <li><strong>Status</strong>Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Copyfit, Provider-Stabilisierung, Hybrid-Modus und UXP-Planung.</li>
     </ul>
   </section>
 
@@ -214,14 +214,16 @@
           <li>Automatische Musterseiten-Generierung inkl. Erkennung, Auswahl/Abwahl und Reihenfolge</li>
           <li>Wörterbuch-/Glossar-System inkl. Erststart-Setup, Template, Migration und verständlicher Erklärungen</li>
           <li>Dynamische UI-Sprache DE/EN über <code>app.locale</code></li>
-          <li>Nachbearbeitung technischer Tokens wie <code>M5*15</code></li>
+          <li>Nachbearbeitung technischer Tokens wie <code>M5*15</code>, damit Leerzeichen sauber bleiben</li>
+          <li>Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider</li>
+          <li>Einstellungsfenster im Layout vergrößert und resizable gemacht, damit Felder im Daten-Tab nicht abgeschnitten werden</li>
         </ul>
       </div>
       <div class="status-card open">
         <h3>Noch offen</h3>
         <ul class="plain-list">
           <li>Intelligente Copyfitting-Logik</li>
-          <li>Weitere LLM-Anbieter neben DeepL</li>
+          <li>Optionaler Hybrid-Modus zwischen DeepL und LLMs</li>
           <li>Migration auf UXP / Plugin-Architektur</li>
           <li>Erweiterte End-to-End-Tests mit echten InDesign-Dokumenten</li>
         </ul>
@@ -235,7 +237,7 @@
       <li><input type="checkbox" id="overview-1" class="plan-checkbox" checked /><label for="overview-1">Rechtschreibprüfung in der Mastersprache</label></li>
       <li><input type="checkbox" id="overview-2" class="plan-checkbox" /><label for="overview-2">Intelligente Copyfitting-Logik</label></li>
       <li><input type="checkbox" id="overview-3" class="plan-checkbox" checked /><label for="overview-3">Automatische Musterseiten-Generierung (Legacy-Fallback)</label></li>
-      <li><input type="checkbox" id="overview-4" class="plan-checkbox" /><label for="overview-4">Andere LLMs (ChatGPT / Gemini / Claude)</label></li>
+      <li><input type="checkbox" id="overview-4" class="plan-checkbox" checked /><label for="overview-4">Andere LLMs (ChatGPT / Gemini / Claude)</label></li>
       <li><input type="checkbox" id="overview-5" class="plan-checkbox" /><label for="overview-5">Migration auf UXP</label></li>
       <li><input type="checkbox" id="overview-6" class="plan-checkbox" /><label for="overview-6">UI/UX Optimierung</label></li>
       <li><input type="checkbox" id="overview-7" class="plan-checkbox" checked /><label for="overview-7">Verlinken (Linking Features)</label></li>
@@ -312,15 +314,18 @@
       <div>
         <h2>4. Andere LLMs (ChatGPT / Gemini / Claude)</h2>
         <ul class="task-list">
-          <li><input type="checkbox" id="task-4-1" class="plan-checkbox" /><label for="task-4-1">Provider-Interface für Übersetzungen definieren</label></li>
+          <li><input type="checkbox" id="task-4-1" class="plan-checkbox" checked /><label for="task-4-1">Provider-Interface für Übersetzungen definieren</label></li>
           <li><input type="checkbox" id="task-4-2" class="plan-checkbox" checked /><label for="task-4-2">DeepL als Default behalten</label></li>
-          <li><input type="checkbox" id="task-4-3" class="plan-checkbox" /><label for="task-4-3">Adapter für andere Anbieter vorbereiten (OpenAI, Google, Anthropic)</label></li>
-          <li><input type="checkbox" id="task-4-4" class="plan-checkbox" /><label for="task-4-4">UI für Provider-Auswahl und API-Key-Felder hinzufügen</label></li>
+          <li><input type="checkbox" id="task-4-3" class="plan-checkbox" checked /><label for="task-4-3">OpenAI-Adapter für XML-/Tag-sichere Übersetzungen ergänzen</label></li>
+          <li><input type="checkbox" id="task-4-4" class="plan-checkbox" checked /><label for="task-4-4">Adapter für Google / Gemini ergänzen</label></li>
+          <li><input type="checkbox" id="task-4-5" class="plan-checkbox" checked /><label for="task-4-5">Adapter für Anthropic / Claude ergänzen</label></li>
+          <li><input type="checkbox" id="task-4-6" class="plan-checkbox" checked /><label for="task-4-6">Lokalen OpenAI-kompatiblen Provider für LM Studio / Ollama ergänzen</label></li>
+          <li><input type="checkbox" id="task-4-7" class="plan-checkbox" checked /><label for="task-4-7">UI für Provider-Auswahl und API-Key-Felder hinzufügen</label></li>
         </ul>
       </div>
       <div class="small">
         <strong>Notizen</strong>
-        <textarea id="note-4">Noch nicht begonnen, außer dass DeepL weiterhin die Standardbasis bleibt.</textarea>
+        <textarea id="note-4">DeepL bleibt Standard; OpenAI, Gemini, Claude und lokale OpenAI-kompatible Server hängen jetzt an derselben XML-/Tag-validierten Provider-Schicht. Offene Folgeschritte sind vor allem Live-Tests in echten InDesign-Dokumenten sowie später ein optionaler Hybrid-/Polish-Modus.</textarea>
       </div>
     </div>
   </section>
@@ -351,12 +356,13 @@
           <li><input type="checkbox" id="task-6-2" class="plan-checkbox" checked /><label for="task-6-2">Legacy-Dialogtext verbessert, damit auch erkannte Sprachen verständlich erklärt werden</label></li>
           <li><input type="checkbox" id="task-6-3" class="plan-checkbox" checked /><label for="task-6-3">Auswahl-/Abwahl-Logik im Musterseiten-Dialog erweitert</label></li>
           <li><input type="checkbox" id="task-6-4" class="plan-checkbox" checked /><label for="task-6-4">Reihenfolge-Feld pro Sprache im Musterseiten-Dialog ergänzt</label></li>
-          <li><input type="checkbox" id="task-6-5" class="plan-checkbox" /><label for="task-6-5">Weitere UI-Feinschliffe und Usability-Tests in InDesign</label></li>
+          <li><input type="checkbox" id="task-6-5" class="plan-checkbox" checked /><label for="task-6-5">Einstellungsfenster vergrößert und flexibel gemacht, damit Inhalte im Daten-Tab vollständig sichtbar bleiben</label></li>
+          <li><input type="checkbox" id="task-6-6" class="plan-checkbox" /><label for="task-6-6">Weitere UI-Feinschliffe und Usability-Tests in InDesign</label></li>
         </ul>
       </div>
       <div class="small">
         <strong>Notizen</strong>
-        <textarea id="note-6">UI ist deutlich besser als im ursprünglichen Plan, aber noch nicht vollständig finalisiert.</textarea>
+        <textarea id="note-6">UI ist deutlich besser als im ursprünglichen Plan; zuletzt wurde das Einstellungsfenster vergrößert, damit Formularfelder im Daten-Tab nicht mehr abgeschnitten werden. Vollständig finalisiert ist der Bereich aber noch nicht.</textarea>
       </div>
     </div>
   </section>
@@ -410,11 +416,12 @@
       <li><input type="checkbox" id="task-open-1" class="plan-checkbox" /><label for="task-open-1"><code>applySmartCopyfit(textFrame)</code> mit Tracking/Scale/Frame bauen</label></li>
       <li><input type="checkbox" id="task-open-2" class="plan-checkbox" /><label for="task-open-2">Overflow-Fix in <code>executeTranslation</code> ersetzen</label></li>
       <li><input type="checkbox" id="task-open-3" class="plan-checkbox" /><label for="task-open-3">Legacy-BDA, Auto-Hyperlinks und Glossar-Flow in echten Projekten breit testen</label></li>
-      <li><input type="checkbox" id="task-open-4" class="plan-checkbox" /><label for="task-open-4">Provider-Abstraktion für andere LLMs definieren</label></li>
-      <li><input type="checkbox" id="task-open-5" class="plan-checkbox" /><label for="task-open-5">UI für Provider-Auswahl und zusätzliche API-Keys erweitern</label></li>
+      <li><input type="checkbox" id="task-open-4" class="plan-checkbox" /><label for="task-open-4">Gemini-/Claude-Live-Tests inkl. Grenzfällen mit XML, Tabellen und langen BDA-Läufen durchführen</label></li>
+      <li><input type="checkbox" id="task-open-5" class="plan-checkbox" /><label for="task-open-5">Lokale LLM-Live-Tests mit LM Studio und Ollama durchführen</label></li>
       <li><input type="checkbox" id="task-open-6" class="plan-checkbox" /><label for="task-open-6">UXP-Refactoring-Plan erstellen</label></li>
       <li><input type="checkbox" id="task-open-7" class="plan-checkbox" /><label for="task-open-7">Glossar-Validator für fehlerhafte CSV-Struktur ergänzen</label></li>
       <li><input type="checkbox" id="task-open-8" class="plan-checkbox" /><label for="task-open-8">Erweiterte Cross-Reference-Logik für Spezialfälle ausbauen</label></li>
+      <li><input type="checkbox" id="task-open-9" class="plan-checkbox" /><label for="task-open-9">Optionalen Hybrid-Modus (z. B. DeepL + LLM-Polish) konzipieren</label></li>
     </ul>
   </section>
 
@@ -432,6 +439,10 @@
   <section>
     <h2>Änderungslog</h2>
     <ul class="plain-list">
+      <li>3. April 2026: Einstellungsfenster vergrößert und resizable gemacht, damit Inhalte im Daten-Tab nicht mehr abgeschnitten werden</li>
+      <li>2. April 2026: Gemini- und Claude-Adapter auf die gemeinsame XML-/Tag-sichere Provider-Schicht gehängt, inklusive UI-Feldern für Keys/Modelle und DeepL-Fallback</li>
+      <li>2. April 2026: Lokalen OpenAI-kompatiblen Provider für LM Studio/Ollama ergänzt (Base URL, Modell, optionaler Key)</li>
+      <li>1. April 2026: Phase 1 der Provider-Erweiterung umgesetzt (Provider-Interface, OpenAI-Adapter, UI für Provider- und API-Key-Auswahl)</li>
       <li>31. März 2026: Plan auf realen Entwicklungsstand aktualisiert, Glossar-System ergänzt, Hyperlink- und Legacy-Fallback-Fortschritt eingetragen</li>
       <li>31. März 2026: UI/UX-Optimierung und Verlinken als neue Hauptpunkte ergänzt</li>
       <li>29. März 2026: Checkliste erstellt und als <code>FEATURE_PLAN.md</code> abgelegt</li>

@@ -4,7 +4,7 @@
 
 ## Aktueller Status
 - **Version:** 28.2
-- **Datum:** 2. April 2026
+- **Datum:** 3. April 2026
 - **Status:** Produktiv nutzbare Basis. Fokus aktuell auf Feinschliff, Copyfit, Provider-Stabilisierung, Hybrid-Modus und UXP-Planung.
 
 ---
@@ -20,6 +20,7 @@
 - [x] Dynamische UI-Sprache DE/EN über `app.locale`
 - [x] Nachbearbeitung technischer Tokens wie `M5*15`, damit Leerzeichen sauber bleiben
 - [x] Provider-Abstraktion mit DeepL als Default und OpenAI als optionalem Phase-1-Provider
+- [x] Einstellungsfenster im Layout vergrößert und resizable gemacht, damit Felder im Daten-Tab nicht abgeschnitten werden
 
 ### Noch offen
 - [ ] Intelligente Copyfitting-Logik
@@ -114,10 +115,11 @@
 - [x] Legacy-Dialogtext verbessert, damit auch erkannte Sprachen verständlich erklärt werden
 - [x] Auswahl-/Abwahl-Logik im Musterseiten-Dialog erweitert
 - [x] Reihenfolge-Feld pro Sprache im Musterseiten-Dialog ergänzt
+- [x] Einstellungsfenster vergrößert und flexibel gemacht, damit Inhalte im Daten-Tab vollständig sichtbar bleiben
 - [ ] Weitere UI-Feinschliffe und Usability-Tests in InDesign
 
 **Notizen:**
-- UI ist deutlich besser als im ursprünglichen Plan, aber noch nicht vollständig finalisiert.
+- UI ist deutlich besser als im ursprünglichen Plan; zuletzt wurde das Einstellungsfenster vergrößert, damit Formularfelder im Daten-Tab nicht mehr abgeschnitten werden. Vollständig finalisiert ist der Bereich aber noch nicht.
 
 ---
 
@@ -173,6 +175,7 @@
 ---
 
 ## Änderungslog
+- 3. April 2026: Einstellungsfenster vergrößert und resizable gemacht, damit Inhalte im Daten-Tab nicht mehr abgeschnitten werden
 - 2. April 2026: Gemini- und Claude-Adapter auf die gemeinsame XML-/Tag-sichere Provider-Schicht gehängt, inklusive UI-Feldern für Keys/Modelle und DeepL-Fallback
 - 2. April 2026: Lokalen OpenAI-kompatiblen Provider für LM Studio/Ollama ergänzt (Base URL, Modell, optionaler Key)
 - 1. April 2026: Phase 1 der Provider-Erweiterung umgesetzt (Provider-Interface, OpenAI-Adapter, UI für Provider- und API-Key-Auswahl)

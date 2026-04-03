@@ -37,30 +37,46 @@ var UI_IS_GERMAN = (UI_LANG === "de");
 var UI_STRINGS = {
     main_title: { de: "Was soll übersetzt werden?", en: "What should be translated?" },
     settings_button: { de: "⚙️ Einstellungen", en: "⚙️ Settings" },
-    settings_help: { de: "Einstellungen, Wörterbuch & API-Key", en: "Settings, glossary & API key" },
-    manual_mode: { de: "Manueller Modus", en: "Manual Mode" },
-    selection_mode: { de: "Aktuelle Auswahl (Rahmen/Texte/Tabellen)", en: "Current selection (frames/texts/tables)" },
-    pages_mode: { de: "Bestimmte Seiten übersetzen:", en: "Translate specific pages:" },
-    pages_help: { de: "Z.B. 1, 3, 5-8", en: "E.g. 1, 3, 5-8" },
-    target_language_manual: { de: "Zielsprache (Für Manuelle Auswahl / Einzelne Seiten)", en: "Target language (for manual selection / selected pages)" },
+    settings_help: { de: "Einstellungen, Glossar, Memory und Provider", en: "Settings, glossary, memory, and provider" },
+    manual_mode: { de: "Manueller Modus", en: "Manual mode" },
+    mode_title: { de: "Modus", en: "Mode" },
+    selection_mode: { de: "Aktuelle Auswahl im Dokument", en: "Current selection in document" },
+    selection_settings: { de: "Auswahl übersetzen", en: "Translate selection" },
+    selection_hint: { de: "Übersetzt die aktuell markierten Rahmen, Texte oder Tabellen.", en: "Translates the currently selected frames, texts, or tables." },
+    pages_mode: { de: "Bestimmte Seiten", en: "Specific pages" },
+    pages_settings: { de: "Seiten übersetzen", en: "Translate pages" },
+    pages_label: { de: "Seiten:", en: "Pages:" },
+    pages_help: { de: "Beispiel: 1, 3, 5-8", en: "Example: 1, 3, 5-8" },
+    target_language_manual: { de: "Zielsprache:", en: "Target language:" },
+    target_language_short: { de: "Zielsprache:", en: "Target language:" },
     lang_group_favorites: { de: "--- FAVORITEN ---", en: "--- FAVORITES ---" },
     lang_group_other_eu: { de: "--- SONSTIGE EU SPRACHEN ---", en: "--- OTHER EU LANGUAGES ---" },
-    auto_mode: { de: "Voll Automatik Modus", en: "Full Automatic Mode" },
-    auto_settings: { de: "Auto-Einstellungen", en: "Auto settings" },
+    auto_mode: { de: "Vollautomatik (BDA)", en: "Full automatic (BDA)" },
+    auto_settings: { de: "Automatik-Optionen", en: "Automatic options" },
     original_pages: { de: "Quellseiten:", en: "Source pages:" },
     auto_source_help: { de: "AUTO sucht selbst nach der deutschen Musterseite über das schwarze Sprachkästchen", en: "AUTO detects the German master via the black language badge" },
-    toc_checkbox: { de: "Inhaltsverzeichniss aktualisieren in ()", en: "Update table of contents in ()" },
+    toc_checkbox: { de: "Inhaltsverzeichnis in Klammern aktualisieren", en: "Update table of contents in brackets" },
     auto_hyperlink_checkbox: { de: "Hyperlinks erstellen", en: "Create hyperlinks" },
     auto_hyperlink_symbols: { de: "Klammern/Symbole:", en: "Brackets/symbols:" },
     auto_hyperlink_help: { de: "Verwendet die Sprachcodes und Seitenzahlen von Seite 1, z. B. fr (33) und en (22).", en: "Uses the language codes and page numbers from page 1, for example fr (33) and en (22)." },
     back_page_tracker_label: { de: "Rückseiten-Suche:", en: "Back-page search:" },
     back_page_tracker_help: { de: "Text zur Erkennung der Rückseite. Standard: ©. Mehrere Begriffe mit |, ; oder Zeilenumbruch trennen. Wenn © mehrfach vorkommt, wird zusätzlich automatisch nach 'Steinbach International GmbH' gesucht.", en: "Text used to detect the back page. Default: ©. Separate multiple terms with |, ; or a line break. If © appears multiple times, 'Steinbach International GmbH' is checked automatically as an extra filter." },
     back_page_not_found_notice: { de: "Hinweis: Es konnte keine Rückseite sicher erkannt werden.\nDer Automatiklauf wird trotzdem fortgesetzt.\nWenn nötig, bitte die Rückseiten-Suche in den Einstellungen anpassen.", en: "Note: No back page could be identified with confidence.\nThe automatic run will continue anyway.\nIf needed, adjust the back-page search in the settings." },
-    only_text_update: { de: "Aktiviere es bei Textupdate", en: "Enable for text updates" },
+    only_text_update: { de: "Nur Textänderungen übernehmen", en: "Only update changed text" },
     translate_start: { de: "Übersetzung starten", en: "Start Translation" },
     spellcheck_button: { de: "Deutsch prüfen", en: "Check German" },
     spellcheck_help: { de: "Prüft deutsche Texte auf -de-Masterseiten und deren Dokumentseiten.", en: "Checks German text on -de masters and the document pages based on them." },
     close_button: { de: "Schließen", en: "Close" },
+    status_title: { de: "Aktueller Status", en: "Current status" },
+    status_provider: { de: "Provider:", en: "Provider:" },
+    status_glossary: { de: "Glossar:", en: "Glossary:" },
+    status_memory: { de: "Memory:", en: "Memory:" },
+    status_links: { de: "Auto-Links:", en: "Auto links:" },
+    status_symbols: { de: "Symbole:", en: "Symbols:" },
+    status_not_set: { de: "nicht gesetzt", en: "not set" },
+    status_on: { de: "an", en: "on" },
+    status_off: { de: "aus", en: "off" },
+    status_settings_required: { de: "Einstellungen prüfen", en: "check settings" },
     no_document_open: { de: "Kein Dokument offen!", en: "No document is open." },
     spellcheck_error: { de: "Fehler bei der Rechtschreibprüfung:\n{message}", en: "Spell-check error:\n{message}" },
     settings_title: { de: "⚙️ Einstellungen", en: "⚙️ Settings" },
@@ -1893,82 +1909,105 @@ function updateLanguageMasterVersionLabels(doc) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var myWindow = new Window("palette", SCRIPT_NAME + " v" + SCRIPT_VERSION);
+var myWindow = new Window("palette", SCRIPT_NAME + " v" + SCRIPT_VERSION, undefined, { resizeable: true });
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
+myWindow.spacing = 10;
+myWindow.margins = 14;
+myWindow.minimumSize = [560, 420];
+myWindow.preferredSize = [620, 470];
 
-// --- KOPFBEREICH (MAC LAYOUT FIX) ---
 var headerGroup = myWindow.add("group");
 headerGroup.orientation = "row";
+headerGroup.alignment = "fill";
 headerGroup.alignChildren = ["left", "center"];
 
 var mainTitle = headerGroup.add("statictext", undefined, t("main_title"));
 mainTitle.graphics.font = ScriptUI.newFont(mainTitle.graphics.font.family, "BOLD", 16);
-mainTitle.preferredSize.width = 300; 
+mainTitle.preferredSize.width = 320;
 
-var btnSettings = headerGroup.add("button", undefined, t("settings_button")); 
+var headerSpacer = headerGroup.add("statictext", undefined, "");
+headerSpacer.alignment = "fill";
+
+var btnSettings = headerGroup.add("button", undefined, t("settings_button"));
 btnSettings.helpTip = t("settings_help");
+btnSettings.preferredSize = [150, 30];
 
-// --- PANEL 1: MANUELLER MODUS ---
-var panelManual = myWindow.add("panel", undefined, ""); 
-panelManual.orientation = "column"; 
-panelManual.alignChildren = "left";
-panelManual.margins = 15;
+var statusPanel = myWindow.add("panel", undefined, t("status_title"));
+statusPanel.orientation = "column";
+statusPanel.alignChildren = ["fill", "top"];
+statusPanel.margins = 12;
+var statusLineTop = statusPanel.add("statictext", undefined, "", { multiline: true });
+statusLineTop.preferredSize.width = 520;
+var statusLineBottom = statusPanel.add("statictext", undefined, "", { multiline: true });
+statusLineBottom.preferredSize.width = 520;
 
-var lblManual = panelManual.add("statictext", undefined, t("manual_mode"));
-lblManual.graphics.font = ScriptUI.newFont(lblManual.graphics.font.family, "BOLD", lblManual.graphics.font.size);
+var modePanel = myWindow.add("panel", undefined, t("mode_title"));
+modePanel.orientation = "column";
+modePanel.alignChildren = ["left", "top"];
+modePanel.margins = 12;
 
-var radioSelection = panelManual.add("radiobutton", undefined, t("selection_mode"));
-var radioPages = panelManual.add("radiobutton", undefined, t("pages_mode"));
+var radioSelection = modePanel.add("radiobutton", undefined, t("selection_mode"));
+var radioPages = modePanel.add("radiobutton", undefined, t("pages_mode"));
+var radioBDA = modePanel.add("radiobutton", undefined, t("auto_mode"));
 
-var editPages = panelManual.add("edittext", undefined, "");
-editPages.characters = 12; 
+var contentPanel = myWindow.add("panel", undefined, "");
+contentPanel.orientation = "column";
+contentPanel.alignChildren = ["fill", "top"];
+contentPanel.margins = 15;
+contentPanel.spacing = 10;
+contentPanel.minimumSize = [520, 170];
+
+var selectionModeGroup = contentPanel.add("group");
+selectionModeGroup.orientation = "column";
+selectionModeGroup.alignChildren = ["fill", "top"];
+selectionModeGroup.alignment = "fill";
+selectionModeGroup.add("statictext", undefined, t("selection_hint"), { multiline: true }).preferredSize.width = 500;
+
+var pagesModeGroup = contentPanel.add("group");
+pagesModeGroup.orientation = "column";
+pagesModeGroup.alignChildren = ["fill", "top"];
+pagesModeGroup.alignment = "fill";
+var pagesRow = pagesModeGroup.add("group");
+pagesRow.alignment = "fill";
+pagesRow.alignChildren = ["left", "center"];
+pagesRow.add("statictext", undefined, t("pages_label"));
+var editPages = pagesRow.add("edittext", undefined, "");
+editPages.characters = 14;
 editPages.helpTip = t("pages_help");
-editPages.indent = 20;
+var pagesHint = pagesModeGroup.add("statictext", undefined, t("pages_help"));
+pagesHint.preferredSize.width = 500;
 
-panelManual.add("statictext", undefined, ""); 
-
-var lblLang = panelManual.add("statictext", undefined, t("target_language_manual"));
+var manualTargetGroup = contentPanel.add("group");
+manualTargetGroup.orientation = "column";
+manualTargetGroup.alignChildren = ["fill", "top"];
+manualTargetGroup.alignment = "fill";
+manualTargetGroup.add("statictext", undefined, t("target_language_short"));
 var langList = buildManualLanguageList();
-var dropdownLang = panelManual.add("dropdownlist", undefined, langList);
-dropdownLang.selection = 1; 
+var dropdownLang = manualTargetGroup.add("dropdownlist", undefined, langList);
+dropdownLang.alignment = "fill";
+dropdownLang.selection = 1;
 
-panelManual.add("statictext", undefined, "");
-var btnLinkReferences = panelManual.add("button", undefined, t("hyperlink_settings_button"));
-btnLinkReferences.helpTip = t("hyperlink_settings_help");
-
-// --- PANEL 2: AUTOMATIK MODUS ---
-var panelBDA = myWindow.add("panel", undefined, ""); 
-panelBDA.orientation = "column"; 
-panelBDA.alignChildren = "left";
-panelBDA.margins = 15;
-
-var radioBDA = panelBDA.add("radiobutton", undefined, t("auto_mode"));
-radioBDA.graphics.font = ScriptUI.newFont(radioBDA.graphics.font.family, "BOLD", radioBDA.graphics.font.size);
-
-panelBDA.add("statictext", undefined, ""); 
-
-var lblBDA = panelBDA.add("statictext", undefined, t("auto_settings"));
-lblBDA.graphics.font = ScriptUI.newFont(lblBDA.graphics.font.family, "BOLD", lblBDA.graphics.font.size);
-
-var grpBDASource = panelBDA.add("group");
-grpBDASource.indent = 20;
+var autoModeGroup = contentPanel.add("group");
+autoModeGroup.orientation = "column";
+autoModeGroup.alignChildren = ["fill", "top"];
+autoModeGroup.alignment = "fill";
+autoModeGroup.add("statictext", undefined, t("auto_source_help"), { multiline: true }).preferredSize.width = 500;
+var grpBDASource = autoModeGroup.add("group");
+grpBDASource.alignment = "fill";
+grpBDASource.alignChildren = ["left", "center"];
 grpBDASource.add("statictext", undefined, t("original_pages"));
 var bdaSourceInput = grpBDASource.add("edittext", undefined, "AUTO");
-bdaSourceInput.characters = 8;
+bdaSourceInput.characters = 10;
 bdaSourceInput.helpTip = t("auto_source_help");
-
-var checkTOC = panelBDA.add("checkbox", undefined, t("toc_checkbox"));
-checkTOC.indent = 20;
+var checkTOC = autoModeGroup.add("checkbox", undefined, t("toc_checkbox"));
 checkTOC.value = true;
-
-var checkAutoBDAHyperlinks = panelBDA.add("checkbox", undefined, t("auto_hyperlink_checkbox"));
-checkAutoBDAHyperlinks.indent = 20;
+var checkAutoBDAHyperlinks = autoModeGroup.add("checkbox", undefined, t("auto_hyperlink_checkbox"));
 checkAutoBDAHyperlinks.value = autoBDAHyperlinksSetting;
 checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
-
-var cbOnlyTextUpdate = panelBDA.add("checkbox", undefined, t("only_text_update"));
-cbOnlyTextUpdate.indent = 20;
+var autoHyperlinkHint = autoModeGroup.add("statictext", undefined, t("auto_hyperlink_help"), { multiline: true });
+autoHyperlinkHint.preferredSize.width = 500;
+var cbOnlyTextUpdate = autoModeGroup.add("checkbox", undefined, t("only_text_update"));
 cbOnlyTextUpdate.value = false;
 cbOnlyTextUpdate.enabled = false;
 
@@ -1976,80 +2015,136 @@ function updateBDAHyperlinkControls(enabled) {
     checkAutoBDAHyperlinks.enabled = !!enabled;
 }
 
-// START-ZUSTAND FESTLEGEN
-radioSelection.value = true;
-bdaSourceInput.enabled = false;
-checkTOC.enabled = false;
-cbOnlyTextUpdate.enabled = false;
-updateBDAHyperlinkControls(false);
+var groupButtons = myWindow.add("group");
+groupButtons.alignment = "fill";
+groupButtons.alignChildren = ["left", "center"];
+var btnLinkReferences = groupButtons.add("button", undefined, t("hyperlink_settings_button"));
+btnLinkReferences.helpTip = t("hyperlink_settings_help");
+var btnSpellCheck = groupButtons.add("button", undefined, t("spellcheck_button"));
+btnSpellCheck.helpTip = t("spellcheck_help");
+var buttonSpacer = groupButtons.add("statictext", undefined, "");
+buttonSpacer.alignment = "fill";
+var btnTranslate = groupButtons.add("button", undefined, t("translate_start"));
+btnTranslate.preferredSize = [160, 30];
+var btnCancel = groupButtons.add("button", undefined, t("close_button"));
 
-// --- UI INTERAKTIONEN ---
-radioSelection.onClick = function() {
-    radioPages.value = false;
-    radioBDA.value = false;
-    dropdownLang.enabled = true;
-    bdaSourceInput.enabled = false;
-    checkTOC.enabled = false;
-    cbOnlyTextUpdate.enabled = false;
-    cbOnlyTextUpdate.value = false;
-    updateBDAHyperlinkControls(false);
+function setMainGroupVisible(group, isVisible) {
+    group.visible = !!isVisible;
+    if (isVisible) {
+        group.maximumSize = [10000, 10000];
+        group.minimumSize = [0, 0];
+        group.preferredSize = [-1, -1];
+    } else {
+        group.maximumSize = [0, 0];
+        group.minimumSize = [0, 0];
+        group.preferredSize = [0, 0];
+    }
 }
+
+function getStatusPathLabel(pathValue) {
+    var normalized = String(pathValue || "").replace(/^\s+|\s+$/g, "");
+    if (normalized === "") return t("status_not_set");
+    try {
+        var fileObj = new File(normalized);
+        if (fileObj && fileObj.name) return fileObj.name;
+    } catch (e) {}
+    return normalized.replace(/^.*[\/\\]/, "");
+}
+
+function getProviderStatusSummaryText() {
+    var providerId = getActiveTranslationProvider();
+    var display = getTranslationProviderDisplayName(providerId);
+    var validationMessage = getProviderValidationMessage(providerId);
+    return validationMessage === "" ? display : (display + " (" + t("status_settings_required") + ")");
+}
+
+function refreshMainStatusUI() {
+    var autoLinksEnabled = checkAutoBDAHyperlinks ? !!checkAutoBDAHyperlinks.value : !!autoBDAHyperlinksSetting;
+    statusLineTop.text = t("status_provider") + " " + getProviderStatusSummaryText() + "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvPath);
+    statusLineBottom.text = t("status_memory") + " " + getStatusPathLabel(tmPath) + "   |   " + t("status_links") + " " + (autoLinksEnabled ? t("status_on") : t("status_off")) + "   |   " + t("status_symbols") + " " + normalizeRefSymbols(refSymbolsSetting);
+    try { myWindow.layout.layout(true); } catch (layoutErr) {}
+}
+
+function isLanguageSeparatorText(itemText) {
+    return String(itemText || "").indexOf("---") === 0;
+}
+
+function normalizeLanguageDropdownSelection() {
+    if (!dropdownLang || !dropdownLang.selection) return;
+    if (!isLanguageSeparatorText(dropdownLang.selection.text)) return;
+
+    var candidateIndex = dropdownLang.selection.index + 1;
+    while (candidateIndex < dropdownLang.items.length && isLanguageSeparatorText(dropdownLang.items[candidateIndex].text)) candidateIndex++;
+
+    if (candidateIndex >= dropdownLang.items.length) {
+        candidateIndex = dropdownLang.selection.index - 1;
+        while (candidateIndex >= 0 && isLanguageSeparatorText(dropdownLang.items[candidateIndex].text)) candidateIndex--;
+    }
+
+    if (candidateIndex >= 0 && candidateIndex < dropdownLang.items.length) dropdownLang.selection = candidateIndex;
+}
+
+function setActiveMainMode(mode) {
+    var normalizedMode = (mode === "BDA" || mode === "PAGES") ? mode : "SELECTION";
+    radioSelection.value = (normalizedMode === "SELECTION");
+    radioPages.value = (normalizedMode === "PAGES");
+    radioBDA.value = (normalizedMode === "BDA");
+
+    setMainGroupVisible(selectionModeGroup, normalizedMode === "SELECTION");
+    setMainGroupVisible(pagesModeGroup, normalizedMode === "PAGES");
+    setMainGroupVisible(manualTargetGroup, normalizedMode !== "BDA");
+    setMainGroupVisible(autoModeGroup, normalizedMode === "BDA");
+
+    dropdownLang.enabled = normalizedMode !== "BDA";
+    bdaSourceInput.enabled = normalizedMode === "BDA";
+    checkTOC.enabled = normalizedMode === "BDA";
+    cbOnlyTextUpdate.enabled = normalizedMode === "BDA";
+    if (normalizedMode !== "BDA") cbOnlyTextUpdate.value = false;
+    updateBDAHyperlinkControls(normalizedMode === "BDA");
+
+    if (normalizedMode === "SELECTION") contentPanel.text = t("selection_settings");
+    else if (normalizedMode === "PAGES") contentPanel.text = t("pages_settings");
+    else contentPanel.text = t("auto_settings");
+
+    try { myWindow.layout.layout(true); } catch (layoutErr) {}
+}
+
+radioSelection.onClick = function() {
+    setActiveMainMode("SELECTION");
+};
 
 radioPages.onClick = function() {
-    radioSelection.value = false;
-    radioBDA.value = false;
-    dropdownLang.enabled = true;
-    bdaSourceInput.enabled = false;
-    checkTOC.enabled = false;
-    cbOnlyTextUpdate.enabled = false;
-    cbOnlyTextUpdate.value = false;
-    updateBDAHyperlinkControls(false);
-}
+    setActiveMainMode("PAGES");
+};
 
 radioBDA.onClick = function() {
-    radioSelection.value = false;
-    radioPages.value = false;
-    dropdownLang.enabled = false;
-    bdaSourceInput.enabled = true;
-    checkTOC.enabled = true;
-    cbOnlyTextUpdate.enabled = true;
-    updateBDAHyperlinkControls(true);
-}
+    setActiveMainMode("BDA");
+};
+
+dropdownLang.onChange = function() {
+    normalizeLanguageDropdownSelection();
+};
 
 editPages.onActivate = function() {
-    radioPages.value = true;
-    radioSelection.value = false;
-    radioBDA.value = false;
-    dropdownLang.enabled = true;
-    bdaSourceInput.enabled = false;
-    checkTOC.enabled = false;
-    cbOnlyTextUpdate.enabled = false;
-    cbOnlyTextUpdate.value = false;
-    updateBDAHyperlinkControls(false);
-}
+    setActiveMainMode("PAGES");
+};
 
 bdaSourceInput.onActivate = function() {
-    radioBDA.value = true;
-    radioSelection.value = false;
-    radioPages.value = false;
-    dropdownLang.enabled = false;
-    bdaSourceInput.enabled = true;
-    checkTOC.enabled = true;
-    cbOnlyTextUpdate.enabled = true;
-    updateBDAHyperlinkControls(true);
-}
+    setActiveMainMode("BDA");
+};
 
 checkAutoBDAHyperlinks.onClick = function() {
     updateBDAHyperlinkControls(radioBDA.value);
+    refreshMainStatusUI();
 };
 
-// --- BUTTONS UNTEN ---
-var groupButtons = myWindow.add("group"); 
-groupButtons.alignment = "center";
-var btnTranslate = groupButtons.add("button", undefined, t("translate_start"));
-var btnSpellCheck = groupButtons.add("button", undefined, t("spellcheck_button"));
-btnSpellCheck.helpTip = t("spellcheck_help");
-var btnCancel = groupButtons.add("button", undefined, t("close_button"));
+setActiveMainMode("SELECTION");
+normalizeLanguageDropdownSelection();
+refreshMainStatusUI();
+
+myWindow.onResizing = myWindow.onResize = function() {
+    this.layout.resize();
+};
 
 btnSpellCheck.onClick = function() {
     var doc = null;
@@ -2447,6 +2542,7 @@ btnSettings.onClick = function() {
         if (formDrop.selection.index === 1) selForm = "more"; else if (formDrop.selection.index === 2) selForm = "less";
         app.insertLabel(FORMALITY_LABEL, selForm); formalitySetting = selForm;
         app.insertLabel(DNT_LABEL, dntInput.text); dntStyles = dntInput.text;
+        refreshMainStatusUI();
         
         alert(t("settings_saved"));
         setWin.close();
