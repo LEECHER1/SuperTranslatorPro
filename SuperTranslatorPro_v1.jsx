@@ -3320,8 +3320,8 @@ btnSettings.onClick = function() {
     setWin.orientation = "column";
     setWin.alignChildren = ["fill", "top"];
     setWin.spacing = 10;
-    setWin.minimumSize = [760, 620];
-    setWin.preferredSize = [760, 620];
+    setWin.minimumSize = [760, 360];
+    setWin.preferredSize = [760, 500];
     
     var topGrp = setWin.add("group");
     topGrp.alignment = "fill";
@@ -3368,12 +3368,17 @@ btnSettings.onClick = function() {
     typographyScrollWrap.alignment = ["fill", "fill"];
     typographyScrollWrap.alignChildren = ["fill", "fill"];
     typographyScrollWrap.spacing = 8;
+    typographyScrollWrap.minimumSize = [0, 240];
+    typographyScrollWrap.preferredSize = [680, 300];
+    typographyScrollWrap.maximumSize = [10000, 300];
 
     var typographyViewport = typographyScrollWrap.add("group");
     typographyViewport.orientation = "stack";
     typographyViewport.alignment = ["fill", "fill"];
     typographyViewport.alignChildren = ["fill", "top"];
-    typographyViewport.minimumSize = [0, 300];
+    typographyViewport.minimumSize = [0, 240];
+    typographyViewport.preferredSize = [662, 300];
+    typographyViewport.maximumSize = [10000, 300];
 
     var typographyScrollbar = typographyScrollWrap.add("scrollbar", undefined, 0, 0, 100);
     typographyScrollbar.alignment = ["right", "fill"];
@@ -3419,6 +3424,77 @@ btnSettings.onClick = function() {
         typographyScrollbar.stepdelta = 24;
         typographyScrollbar.jumpdelta = Math.max(80, Math.floor(viewportHeight * 0.8));
         setTypographyScrollOffset(typographyScrollbar.visible ? currentScrollValue : 0);
+    }
+
+    function measureControlHeight(control) {
+        if (!control || control.visible === false) return 0;
+        try {
+            var bounds = control.bounds;
+            var height = bounds[3] - bounds[1];
+            if (height > 0) return height;
+        } catch (e) {}
+        try {
+            if (control.preferredSize && control.preferredSize.height && control.preferredSize.height > 0) return control.preferredSize.height;
+        } catch (e2) {}
+        try {
+            if (control.size && control.size.height && control.size.height > 0) return control.size.height;
+        } catch (e3) {}
+        return 0;
+    }
+
+    function measureVisibleChildrenHeight(container) {
+        if (!container || !container.children) return 0;
+        var spacing = 0;
+        try { spacing = container.spacing || 0; } catch (spacingErr) { spacing = 0; }
+        var total = 0;
+        var visibleCount = 0;
+        for (var i = 0; i < container.children.length; i++) {
+            var child = container.children[i];
+            if (!child || child.visible === false) continue;
+            var height = measureControlHeight(child);
+            if (height <= 0) continue;
+            total += height;
+            visibleCount++;
+        }
+        if (visibleCount > 1) total += spacing * (visibleCount - 1);
+        return total;
+    }
+
+    function getSettingsScreenMaxHeight(defaultHeight) {
+        var fallback = defaultHeight || 720;
+        try {
+            if ($.screens && $.screens.length > 0) {
+                var screenBounds = $.screens[0].visibleBounds || $.screens[0].bounds;
+                var screenTop = getBoundsCoordinate(screenBounds, "top", 1, 0);
+                var screenBottom = getBoundsCoordinate(screenBounds, "bottom", 3, fallback);
+                return Math.max(360, (screenBottom - screenTop) - 40);
+            }
+        } catch (screenErr) {}
+        return fallback;
+    }
+
+    function applySettingsDialogGeometry() {
+        try { setWin.layout.layout(true); } catch (layoutErr) {}
+        try { refreshTypographyScrollUI(); } catch (typographyGeometryScrollErr) {}
+
+        var activeTab = tabs.selection || dataTab;
+        var tabsHeight = measureControlHeight(tabs);
+        var activeTabHeight = measureControlHeight(activeTab);
+        var activeContentHeight = measureVisibleChildrenHeight(activeTab);
+        var outerChromeHeight = Math.max(140, measureControlHeight(topGrp) + measureControlHeight(overviewPanel) + measureControlHeight(g) + 54);
+        var tabsChromeHeight = Math.max(40, tabsHeight - activeTabHeight);
+        var desiredTabsHeight = Math.max(160, activeContentHeight + tabsChromeHeight + 18);
+        var maxWindowHeight = getSettingsScreenMaxHeight(720);
+        var desiredWindowHeight = Math.min(maxWindowHeight, outerChromeHeight + desiredTabsHeight);
+        var minWindowHeight = Math.min(maxWindowHeight, outerChromeHeight + 170);
+
+        tabs.minimumSize = [700, Math.max(160, desiredTabsHeight)];
+        tabs.preferredSize = [700, Math.max(160, desiredTabsHeight)];
+        setWin.minimumSize = [760, minWindowHeight];
+        setWin.preferredSize = [760, desiredWindowHeight];
+        try { setWin.size = [760, desiredWindowHeight]; } catch (sizeErr) {}
+        try { setWin.layout.layout(true); } catch (layoutErr2) {}
+        try { refreshTypographyScrollUI(); } catch (typographyGeometryScrollErr2) {}
     }
 
     typographyScrollbar.onChanging = function() {
@@ -3794,6 +3870,7 @@ btnSettings.onClick = function() {
         refreshProviderSettingsUI();
         refreshProviderValidationUI();
         refreshSettingsOverview();
+        try { applySettingsDialogGeometry(); } catch (providerGeometryErr) {}
     };
     csvInput.onChanging = refreshSettingsOverview;
     tmInput.onChanging = refreshSettingsOverview;
@@ -3931,7 +4008,16 @@ btnSettings.onClick = function() {
     };
     btnCancelSet.onClick = function() { setWin.close(); };
     setWin.onShow = function() {
-        positionDialogRightOfMainWindow(setWin, 760, 620);
+        try { applySettingsDialogGeometry(); } catch (showGeometryErr) {}
+        var bounds = null;
+        var width = 760;
+        var height = 500;
+        try {
+            bounds = setWin.bounds;
+            width = bounds[2] - bounds[0];
+            height = bounds[3] - bounds[1];
+        } catch (boundsErr) {}
+        positionDialogRightOfMainWindow(setWin, width, height);
         try { refreshTypographyScrollUI(); } catch (showScrollErr) {}
     };
     setWin.onResizing = setWin.onResize = function() {
@@ -3939,8 +4025,10 @@ btnSettings.onClick = function() {
         try { refreshTypographyScrollUI(); } catch (resizeScrollErr) {}
     };
     tabs.onChange = function() {
+        try { applySettingsDialogGeometry(); } catch (tabGeometryErr) {}
         try { refreshTypographyScrollUI(); } catch (tabScrollErr) {}
     };
+    try { applySettingsDialogGeometry(); } catch (initialGeometryErr) {}
     setWin.show();
 };
 
