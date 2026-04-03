@@ -237,7 +237,8 @@ var UI_STRINGS = {
     progress_cancelling: { de: "Wird abgebrochen...", en: "Cancelling..." },
     progress_eta: { de: "Restzeit: ca. {mins} Min. {secs} Sek.", en: "Remaining time: about {mins} min {secs} sec." },
     progress_done: { de: "Verarbeitung abgeschlossen.", en: "Processing completed." },
-    progress_success: { de: "Erfolgreich abgeschlossen.", en: "Completed successfully." },
+    progress_success: { de: "Der Vorgang wurde erfolgreich abgeschlossen.", en: "The process completed successfully." },
+    progress_success_badge: { de: "Erfolgreich abgeschlossen", en: "Completed successfully" },
     progress_duration: { de: "Dauer: {mins} Min. {secs} Sek.\nAPI gespart: {saved} Z. | Rahmen gefixt: {frames}", en: "Duration: {mins} min {secs} sec.\nAPI saved: {saved} chars | Frames fixed: {frames}" },
     validation_invalid_lang: { de: "Bitte wähle eine gültige Zielsprache aus, keine Trennlinie.", en: "Please select a valid target language, not a separator." },
     validation_select_something: { de: "Bitte markiere zuerst etwas im Dokument.", en: "Please select something in the document first." },
@@ -1069,6 +1070,7 @@ var tableRestoreDebugEnabled = (app.extractLabel(DEBUG_TABLE_RESTORE_LABEL) === 
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
 var progressWin, progressBar, progressText;
 var overallBar, overallText, etaText, btnStopProgress;
+var progressStatusBanner, progressStatusBannerText;
 var cancelFlag = false;
 var startTime = 0;
 var germanHighlightState = null;
@@ -4656,6 +4658,15 @@ function createProgressWindow() {
     currentPanel.alignChildren = ["fill", "top"];
     currentPanel.margins = 12;
     currentPanel.spacing = 8;
+    progressStatusBanner = currentPanel.add("panel");
+    progressStatusBanner.alignment = "fill";
+    progressStatusBanner.margins = [12, 8, 12, 8];
+    progressStatusBanner.minimumSize.height = 0;
+    progressStatusBanner.maximumSize.height = 0;
+    progressStatusBanner.visible = false;
+    progressStatusBannerText = progressStatusBanner.add("statictext", undefined, "", { multiline: false });
+    progressStatusBannerText.alignment = ["fill", "center"];
+    progressStatusBannerText.justify = "center";
     progressText = currentPanel.add("statictext", undefined, t("progress_preparing"), { multiline: true });
     progressText.preferredSize = [480, 42];
     progressText.minimumSize.height = 42;
@@ -4688,6 +4699,7 @@ function createProgressWindow() {
         if (btnStopProgress.text === t("progress_close")) progressWin.close(); 
         else {
             cancelFlag = true;
+            setProgressStatusBanner("", false);
             progressText.text = t("progress_cancel_requested");
             overallText.text = t("progress_cancelling");
             progressWin.update();
@@ -4702,8 +4714,36 @@ function createProgressWindow() {
     progressWin.update();
 }
 
+function setProgressStatusBanner(message, isVisible) {
+    if (!progressStatusBanner || !progressStatusBannerText) return;
+
+    progressStatusBanner.visible = !!isVisible;
+    progressStatusBanner.minimumSize.height = isVisible ? 40 : 0;
+    progressStatusBanner.maximumSize.height = isVisible ? 40 : 0;
+    progressStatusBannerText.text = isVisible ? String(message || "") : "";
+
+    if (isVisible) {
+        try {
+            progressStatusBanner.graphics.backgroundColor = progressStatusBanner.graphics.newBrush(
+                progressStatusBanner.graphics.BrushType.SOLID_COLOR,
+                [0.20, 0.55, 0.29, 1]
+            );
+        } catch (bgErr) {}
+        try {
+            progressStatusBannerText.graphics.foregroundColor = progressStatusBannerText.graphics.newPen(
+                progressStatusBannerText.graphics.PenType.SOLID_COLOR,
+                [1, 1, 1, 1],
+                1
+            );
+        } catch (fgErr) {}
+    }
+
+    try { progressWin.layout.layout(true); } catch (layoutErr) {}
+}
+
 function updateProgress(taskPct, taskMsg, overallPct, overallMsg) {
     if (progressWin) {
+        if (taskPct !== null && taskPct < 100) setProgressStatusBanner("", false);
         if (taskPct !== null) progressBar.value = taskPct;
         if (taskMsg !== null) progressText.text = taskMsg;
         
@@ -4734,6 +4774,7 @@ function showSuccessScreen(finalMessage) {
     if (progressWin) {
         progressBar.value = 100;
         overallBar.value = 100;
+        setProgressStatusBanner(t("progress_success_badge"), true);
         progressText.text = t("progress_success");
         overallText.text = finalMessage;
         
