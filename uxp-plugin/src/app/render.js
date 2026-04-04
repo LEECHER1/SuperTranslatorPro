@@ -1,8 +1,17 @@
 "use strict";
 
+const {
+    PROVIDER_OPTIONS,
+    UI_LANGUAGE_OPTIONS,
+    buildProviderStatus,
+    buildResourceStatus,
+    getActiveProviderModel,
+    getMaskedSecret
+} = require("../config/settings-model");
+
 function renderPanel(rootNode, state, dispatch) {
     rootNode.innerHTML = buildMarkup(state);
-    bindActions(rootNode, dispatch);
+    bindActions(rootNode, state, dispatch);
 }
 
 function buildMarkup(state) {
@@ -82,6 +91,8 @@ function buildSurface(state) {
 
 function buildControlSurface(state) {
     const host = state.host;
+    const selectionSummary = state.selectionSummary;
+    const debugRun = state.debugRun;
     return [
         '<section class="stp-grid stp-grid-two">',
         '<article class="stp-card stp-card-hero">',
@@ -89,15 +100,15 @@ function buildControlSurface(state) {
         '<span class="stp-section-kicker">Arbeitsflaeche</span>',
         '<h2>UXP-Panel fuer den Alltag</h2>',
         "</div>",
-        '<p>Das hier ist die neue Huelle fuer SuperTranslatorPro: klarer, kompakter und spaeter ohne Dialog-Chaos bedienbar. Die erste produktive Migrationswelle ist der manuelle Uebersetzungsfluss.</p>',
+        '<p>Das hier ist die neue Huelle fuer SuperTranslatorPro: klarer, kompakter und spaeter ohne Dialog-Chaos bedienbar. Der erste echte UXP-Workflow liest jetzt schon die aktuelle Auswahl als Uebersetzungs-Queue aus.</p>',
         '<div class="stp-action-grid">',
-        buildActionButton("translate-selection", "Auswahl uebersetzen", host.hasDocument),
+        buildActionButton("translate-selection", "Auswahl vorbereiten", host.hasDocument),
         buildActionButton("translate-pages", "Seitenlauf starten", host.hasDocument),
         buildActionButton("run-bda", "BDA-Automatik", host.hasDocument),
         buildActionButton("source-check", "Quellsprache pruefen", host.hasDocument),
         "</div>",
         '<div class="stp-inline-note">',
-        '<strong>Migration zuerst:</strong> Host-Snapshot, Settings, Provider, Glossar und Memory werden vorbereitet, bevor die komplexen Text-Workflows umziehen.',
+        '<strong>Live-Test jetzt:</strong> Auswahl markieren, Queue pruefen und anschliessend den sicheren Debug-Writeback starten. Der Test nutzt aktuell Uppercase, damit wir Lesen und Schreiben in InDesign isoliert verifizieren koennen.',
         "</div>",
         "</article>",
         '<article class="stp-card">',
@@ -106,23 +117,56 @@ function buildControlSurface(state) {
         '<h2>Kompakter Modus</h2>',
         "</div>",
         '<p>Die Mini-Leiste reduziert das Panel auf Status, Quick Actions und den letzten Hinweis. So bleibt das Werkzeug auch in vollen Layout-Sessions leichtgewichtig.</p>',
-        '<ul class="stp-list">',
-        "<li>Dockbar oder floating verwendbar</li>",
-        "<li>Weniger vertikale Hoehe durch einklappbare Inhalte</li>",
-        "<li>Schnelle Rueckkehr ins Full Panel per Toggle</li>",
-        "</ul>",
+        buildListBlock([
+            "Dockbar oder floating verwendbar",
+            "Weniger vertikale Hoehe durch einklappbare Inhalte",
+            "Schnelle Rueckkehr ins Full Panel per Toggle"
+        ]),
+        "</article>",
+        '<article class="stp-card">',
+        '<div class="stp-card-head">',
+        '<span class="stp-section-kicker">Selection Queue</span>',
+        '<h2>Was aktuell live erkannt wird</h2>',
+        "</div>",
+        '<div class="stp-status-stack">',
+        buildMetricCard("Textziele", String(selectionSummary.totalTargets), selectionSummary.truncated ? "Vorschau gekuerzt" : "Vorschau komplett"),
+        buildMetricCard("Zeichen", String(selectionSummary.totalCharacters), selectionSummary.message),
+        "</div>",
+        buildSelectionQueue(state.selectionQueue, selectionSummary),
+        '<div class="stp-button-row">',
+        '<button class="stp-secondary-button" data-action="refresh-host">Auswahl neu lesen</button>',
+        '<button class="stp-ghost-button" data-action="toggle-compact">Mini-Bar umschalten</button>',
+        "</div>",
+        "</article>",
+        '<article class="stp-card">',
+        '<div class="stp-card-head">',
+        '<span class="stp-section-kicker">Debug Writeback</span>',
+        '<h2>Sicherer Live-Test fuer Lesen und Schreiben</h2>',
+        "</div>",
+        '<p>Der erste Dokument-Test arbeitet noch ohne echten Provider. Er schreibt die aktuelle Auswahl in <strong>Uppercase</strong> zurueck, damit wir Host-Zugriff, Writeback und Undo getrennt debuggen koennen.</p>',
+        buildToneNote(debugRun),
+        '<div class="stp-status-stack">',
+        buildMetricCard("Aktualisiert", String(debugRun.updatedCount), "Writeback erfolgreich"),
+        buildMetricCard("Uebersprungen", String(debugRun.skippedCount), "Leer oder unveraendert"),
+        buildMetricCard("Fehler", String(debugRun.errorCount), "Fuer die Bug-Suche wichtig"),
+        '</div>',
+        buildDebugRunItems(debugRun),
+        '<div class="stp-button-row">',
+        '<button class="stp-primary-button" data-action="debug-writeback-selection"' + (host.hasDocument ? "" : ' disabled="disabled"') + (state.busyKey === "debug-writeback" ? ' disabled="disabled"' : "") + '>Debug Writeback starten</button>',
+        '<button class="stp-secondary-button" data-action="undo-last-debug-writeback"' + (debugRun.canUndo ? "" : ' disabled="disabled"') + '>Letzten Test rueckgaengig machen</button>',
+        '</div>',
         "</article>",
         '<article class="stp-card">',
         '<div class="stp-card-head">',
         '<span class="stp-section-kicker">Host Snapshot</span>',
         '<h2>InDesign-Zustand</h2>',
         "</div>",
-        '<ul class="stp-list">',
-        "<li>Host-Version: " + escapeHtml(host.appVersion) + "</li>",
-        "<li>Dokument: " + escapeHtml(host.documentName || "Keins") + "</li>",
-        "<li>Aktive Seite: " + escapeHtml(host.activePage) + "</li>",
-        "<li>Auswahl: " + escapeHtml(host.selectionLabel) + "</li>",
-        "</ul>",
+        buildListBlock([
+            "Host-Version: " + host.appVersion,
+            "Dokument: " + (host.documentName || "Keins"),
+            "Aktive Seite: " + host.activePage,
+            "Auswahl: " + host.selectionLabel
+        ]),
         '<button class="stp-secondary-button" data-action="refresh-host">Status neu laden</button>',
         "</article>",
         '<article class="stp-card">',
@@ -145,14 +189,113 @@ function buildActionButton(actionId, label, enabled) {
 }
 
 function buildSetupSurface(state) {
+    if (!state.settingsReady) {
+        return [
+            '<section class="stp-grid">',
+            '<article class="stp-card stp-card-hero">',
+            '<div class="stp-card-head">',
+            '<span class="stp-section-kicker">Settings</span>',
+            '<h2>Konfiguration wird geladen</h2>',
+            "</div>",
+            '<p>Provider, Dateiquellen und Persistenzschicht werden gerade aus dem lokalen Speicher und dem Secure Store geladen.</p>',
+            "</article>",
+            "</section>"
+        ].join("");
+    }
+
+    const settings = state.settings;
+    const providerStatus = buildProviderStatus(settings);
+    const resourceStatus = buildResourceStatus(settings);
+
     return [
         '<section class="stp-grid stp-grid-two">',
         '<article class="stp-card stp-card-hero">',
         '<div class="stp-card-head">',
-        '<span class="stp-section-kicker">Remote Basis</span>',
-        '<h2>Thin-Shell + Remote-Konfiguration</h2>',
+        '<span class="stp-section-kicker">Konfigurationsbasis</span>',
+        '<h2>Provider, Datenquellen und Runtime-Settings</h2>',
         "</div>",
-        '<p>Die lokale Installation bleibt klein. Provider-Metadaten, Feature-Flags, Update-Kanaele und spaeter einzelne Module koennen online gepflegt werden, waehrend ein stabiler lokaler Kern als Fallback bereitsteht.</p>',
+        '<p>Hier bilden wir die bestehende SuperTranslatorPro-Konfiguration fuer UXP nach: Providerwahl, API-Zugaenge, Glossar, Memory, Automatik und Copyfit. Sensible Schluessel liegen getrennt im Secure Store.</p>',
+        '<div class="stp-status-stack">',
+        buildToneNote(providerStatus),
+        buildToneNote(resourceStatus),
+        buildMetricCard("Aktiver Provider", getProviderLabel(settings.translationProvider), getActiveProviderModel(settings)),
+        buildMetricCard("UI", getUiLanguageLabel(settings.uiLanguage), settings.automation.autoHyperlinks ? "Auto-Links an" : "Auto-Links aus"),
+        "</div>",
+        "</article>",
+        '<form class="stp-card stp-settings-form" data-form="app-settings">',
+        '<div class="stp-card-head">',
+        '<span class="stp-section-kicker">Setup</span>',
+        '<h2>Allgemeine Einstellungen</h2>',
+        "</div>",
+        '<div class="stp-field-grid stp-field-grid-two">',
+        buildSelectField("translationProvider", "Aktiver Provider", PROVIDER_OPTIONS, settings.translationProvider),
+        buildSelectField("uiLanguage", "UI-Sprache", UI_LANGUAGE_OPTIONS, settings.uiLanguage),
+        buildTextField("refSymbols", "Referenz-Symbole", settings.automation.refSymbols, "[]"),
+        buildTextField("backPageTracker", "Rueckseiten-Suche", settings.automation.backPageTracker, "©"),
+        buildCheckboxField("autoHyperlinks", "Auto-Hyperlinks im BDA-Modus aktivieren", settings.automation.autoHyperlinks),
+        buildCheckboxField("copyfitEnabled", "Smart Copyfit aktivieren", settings.typography.copyfitEnabled),
+        buildNumberField("copyfitMaxTracking", "Copyfit Tracking bis", settings.typography.copyfitMaxTracking, -100, 0, 1),
+        buildNumberField("copyfitMinScale", "Copyfit Scale bis", settings.typography.copyfitMinScale, 50, 100, 1),
+        buildNumberField("copyfitTrackingStep", "Tracking-Schrittweite", settings.typography.copyfitTrackingStep, 1, 20, 1),
+        buildNumberField("copyfitScaleStep", "Scale-Schrittweite", settings.typography.copyfitScaleStep, 1, 10, 1),
+        buildCheckboxField("fontFallbackEnabled", "Font-Fallbacks aktivieren", settings.typography.fontFallbackEnabled),
+        "</div>",
+        '<label class="stp-field stp-field-full">',
+        '<span>Font-Fallback-Regeln</span>',
+        '<textarea name="fontFallbackRules" rows="6" placeholder="ARABIC=Adobe Arabic&#10;CYRILLIC=Arial">' + escapeHtml(settings.typography.fontFallbackRules) + "</textarea>",
+        "</label>",
+        '<div class="stp-form-actions">',
+        '<button class="stp-primary-button" type="submit"' + (state.busyKey === "save-settings" ? ' disabled="disabled"' : "") + '>Settings speichern</button>',
+        "</div>",
+        "</form>",
+        '<article class="stp-card">',
+        '<div class="stp-card-head">',
+        '<span class="stp-section-kicker">Provider</span>',
+        '<h2>Zugangsdaten und Modelle</h2>',
+        "</div>",
+        '<p>API-Keys werden getrennt vom Rest gespeichert. In UXP nutzt die Shell dafuer `secureStorage`, waehrend nicht-sensitive Einstellungen im lokalen Key-Value-Store liegen.</p>',
+        '<form class="stp-provider-stack" data-form="provider-settings">',
+        buildProviderCard("deepl", settings, [
+            buildPasswordField("deeplKey", "DeepL API Key", settings.secrets.deeplKey, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx")
+        ]),
+        buildProviderCard("openai", settings, [
+            buildPasswordField("openaiKey", "OpenAI API Key", settings.secrets.openaiKey, "sk-..."),
+            buildTextField("openaiModel", "OpenAI Modell", settings.providers.openaiModel, "gpt-5.4-mini")
+        ]),
+        buildProviderCard("gemini", settings, [
+            buildPasswordField("geminiKey", "Gemini API Key", settings.secrets.geminiKey, "AIza..."),
+            buildTextField("geminiModel", "Gemini Modell", settings.providers.geminiModel, "gemini-2.5-flash")
+        ]),
+        buildProviderCard("claude", settings, [
+            buildPasswordField("claudeKey", "Claude API Key", settings.secrets.claudeKey, "sk-ant-..."),
+            buildTextField("claudeModel", "Claude Modell", settings.providers.claudeModel, "claude-sonnet-4-6")
+        ]),
+        buildProviderCard("local", settings, [
+            buildTextField("localBaseUrl", "Local Base URL", settings.providers.localBaseUrl, "http://127.0.0.1:1234/v1"),
+            buildPasswordField("localApiKey", "Local API Key", settings.secrets.localApiKey, "optional"),
+            buildTextField("localModel", "Local Modell", settings.providers.localModel, "qwen / llama / mistral")
+        ]),
+        '<div class="stp-form-actions">',
+        '<button class="stp-primary-button" type="submit"' + (state.busyKey === "save-settings" ? ' disabled="disabled"' : "") + '>Provider speichern</button>',
+        "</div>",
+        "</form>",
+        "</article>",
+        '<article class="stp-card">',
+        '<div class="stp-card-head">',
+        '<span class="stp-section-kicker">Dateiquellen</span>',
+        '<h2>Glossar und Memory</h2>',
+        "</div>",
+        '<div class="stp-resource-stack">',
+        buildResourceCard("Glossar CSV", settings.resources.glossaryPath, settings.resources.glossaryStatus, "glossary", state.busyKey),
+        buildResourceCard("Translation Memory", settings.resources.memoryPath, settings.resources.memoryStatus, "memory", state.busyKey),
+        "</div>",
+        "</article>",
+        '<article class="stp-card">',
+        '<div class="stp-card-head">',
+        '<span class="stp-section-kicker">Remote Basis</span>',
+        '<h2>Thin-Shell + Update-Kanal</h2>',
+        "</div>",
+        '<p>Manifest, Host-Bruecke und Sicherheits-Fallback bleiben lokal versioniert. Die Remote-Konfiguration bleibt separat, damit spaetere Online-Module oder Feature-Flags die installierte Basis nicht aufblaehen.</p>',
         '<form class="stp-form" data-form="remote-config">',
         '<label class="stp-field">',
         '<span>Manifest URL</span>',
@@ -172,38 +315,6 @@ function buildSetupSurface(state) {
         "</label>",
         '<button class="stp-primary-button" type="submit">Remote-Konfiguration speichern</button>',
         "</form>",
-        "</article>",
-        '<article class="stp-card">',
-        '<div class="stp-card-head">',
-        '<span class="stp-section-kicker">Installation</span>',
-        '<h2>Einfache Auslieferung</h2>',
-        "</div>",
-        '<ul class="stp-list">',
-        "<li>Entwicklung lokal per UXP Developer Tool</li>",
-        "<li>Auslieferung spaeter als signiertes `.ccx`</li>",
-        "<li>Moeglichst wenig lokale Abhaengigkeiten</li>",
-        "<li>Last-known-good-Konfiguration fuer Offline-Betrieb</li>",
-        "</ul>",
-        "</article>",
-        '<article class="stp-card">',
-        '<div class="stp-card-head">',
-        '<span class="stp-section-kicker">Migrationswellen</span>',
-        '<h2>Reihenfolge</h2>',
-        "</div>",
-        '<ol class="stp-list stp-list-numbered">',
-        "<li>Panel und Design-System</li>",
-        "<li>Settings, Provider, Glossar, Memory</li>",
-        "<li>Manueller Uebersetzungsmodus</li>",
-        "<li>BDA, Hyperlinks und Copyfit</li>",
-        "<li>Stabilisierung und Packaging</li>",
-        "</ol>",
-        "</article>",
-        '<article class="stp-card">',
-        '<div class="stp-card-head">',
-        '<span class="stp-section-kicker">Leitlinie</span>',
-        '<h2>Was lokal bleibt</h2>',
-        "</div>",
-        '<p>Manifest, Panel-Basis, Host-Bruecke und der Sicherheits-Fallback bleiben lokal versioniert. Alles, was haeufiger angepasst wird und sicher remote geladen werden kann, wird spaeter entkoppelt.</p>',
         "</article>",
         "</section>"
     ].join("");
@@ -229,11 +340,11 @@ function buildUpdatesSurface(state) {
         '<span class="stp-section-kicker">Fallback</span>',
         '<h2>Offline-Verhalten</h2>',
         "</div>",
-        '<ul class="stp-list">',
-        "<li>Remote zuerst, Cache wenn vorhanden, sonst lokaler Kern</li>",
-        "<li>Klare Rollback-Punkte fuer produktive Nutzer</li>",
-        "<li>Keine harte Abhaengigkeit vom Netzwerk fuer das Starten des Panels</li>",
-        "</ul>",
+        buildListBlock([
+            "Remote zuerst, Cache wenn vorhanden, sonst lokaler Kern",
+            "Klare Rollback-Punkte fuer produktive Nutzer",
+            "Keine harte Abhaengigkeit vom Netzwerk fuer das Starten des Panels"
+        ]),
         "</article>",
         '<article class="stp-card">',
         '<div class="stp-card-head">',
@@ -247,14 +358,66 @@ function buildUpdatesSurface(state) {
         '<span class="stp-section-kicker">Naechster Port</span>',
         '<h2>Was als Nächstes kommt</h2>',
         "</div>",
-        '<ul class="stp-list">',
-        "<li>Provider-Status und API-Key-Maske</li>",
-        "<li>Persistente Settings fuer Glossar und Memory</li>",
-        "<li>Manueller Uebersetzungs-Start ueber die Host-Bruecke</li>",
-        "</ul>",
+        buildListBlock([
+            "Legacy-Settings an echte Host-Aufrufe anbinden",
+            "Auswahl uebersetzen als ersten produktiven UXP-Flow portieren",
+            "Glossar- und Memory-Dateien spaeter wirklich lesen und schreiben"
+        ]),
         "</article>",
         "</section>"
     ].join("");
+}
+
+function buildSelectionQueue(items, summary) {
+    if (!items || !items.length) {
+        return [
+            '<div class="stp-empty-state">',
+            '<p>' + escapeHtml(summary && summary.message ? summary.message : "Noch keine Auswahl gelesen.") + "</p>",
+            "</div>"
+        ].join("");
+    }
+
+    const rows = items.map(function (item) {
+        return [
+            '<article class="stp-queue-item">',
+            '<div class="stp-queue-head">',
+            '<strong>' + escapeHtml(item.type) + "</strong>",
+            '<span>Seite ' + escapeHtml(item.page) + " · " + escapeHtml(String(item.characters)) + " Zeichen</span>",
+            "</div>",
+            '<p>' + escapeHtml(item.preview) + "</p>",
+            "</article>"
+        ].join("");
+    }).join("");
+
+    return '<div class="stp-queue-list">' + rows + "</div>";
+}
+
+function buildDebugRunItems(debugRun) {
+    const items = debugRun && debugRun.items ? debugRun.items : [];
+    if (!items.length) {
+        return [
+            '<div class="stp-empty-state">',
+            '<p>Noch kein Debug-Writeback ausgefuehrt.</p>',
+            "</div>"
+        ].join("");
+    }
+
+    const rows = items.slice(0, 8).map(function (item) {
+        const statusClass = item.status === "error" ? " stp-debug-item-error" : (item.status === "updated" ? " stp-debug-item-ready" : "");
+        return [
+            '<article class="stp-debug-item' + statusClass + '">',
+            '<div class="stp-debug-head">',
+            '<strong>' + escapeHtml(item.type) + " · Seite " + escapeHtml(item.page) + "</strong>",
+            '<span>' + escapeHtml(item.status) + "</span>",
+            "</div>",
+            '<p><b>Vorher:</b> ' + escapeHtml(item.before || "") + "</p>",
+            '<p><b>Nachher:</b> ' + escapeHtml(item.after || item.reason || "") + "</p>",
+            item.reason ? '<p><b>Hinweis:</b> ' + escapeHtml(item.reason) + "</p>" : "",
+            "</article>"
+        ].join("");
+    }).join("");
+
+    return '<div class="stp-debug-list">' + rows + "</div>";
 }
 
 function buildFooter(state) {
@@ -272,7 +435,7 @@ function buildFooter(state) {
     ].join("");
 }
 
-function bindActions(rootNode, dispatch) {
+function bindActions(rootNode, state, dispatch) {
     const actionButtons = rootNode.querySelectorAll("[data-action]");
     actionButtons.forEach(function (button) {
         button.addEventListener("click", function () {
@@ -315,6 +478,218 @@ function bindActions(rootNode, dispatch) {
             });
         });
     }
+
+    const appSettingsForm = rootNode.querySelector('[data-form="app-settings"]');
+    if (appSettingsForm) {
+        appSettingsForm.addEventListener("submit", function (event) {
+            event.preventDefault();
+            dispatch({
+                type: "save-app-settings",
+                settings: readSettingsFromForm(appSettingsForm, state.settings)
+            });
+        });
+    }
+
+    const providerSettingsForm = rootNode.querySelector('[data-form="provider-settings"]');
+    if (providerSettingsForm) {
+        providerSettingsForm.addEventListener("submit", function (event) {
+            event.preventDefault();
+            const combinedSettings = mergeProviderFormIntoSettings(providerSettingsForm, state.settings);
+            dispatch({
+                type: "save-app-settings",
+                settings: combinedSettings
+            });
+        });
+    }
+
+    const pickButtons = rootNode.querySelectorAll("[data-pick-resource]");
+    pickButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+            dispatch({
+                type: "pick-resource-file",
+                kind: button.getAttribute("data-pick-resource")
+            });
+        });
+    });
+
+    const clearButtons = rootNode.querySelectorAll("[data-clear-resource]");
+    clearButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+            dispatch({
+                type: "clear-resource-file",
+                kind: button.getAttribute("data-clear-resource")
+            });
+        });
+    });
+}
+
+function readSettingsFromForm(form, currentSettings) {
+    const settings = cloneSettings(currentSettings);
+    settings.translationProvider = form.translationProvider.value;
+    settings.uiLanguage = form.uiLanguage.value;
+    settings.automation.refSymbols = form.refSymbols.value;
+    settings.automation.backPageTracker = form.backPageTracker.value;
+    settings.automation.autoHyperlinks = !!form.autoHyperlinks.checked;
+    settings.typography.copyfitEnabled = !!form.copyfitEnabled.checked;
+    settings.typography.copyfitMaxTracking = form.copyfitMaxTracking.value;
+    settings.typography.copyfitMinScale = form.copyfitMinScale.value;
+    settings.typography.copyfitTrackingStep = form.copyfitTrackingStep.value;
+    settings.typography.copyfitScaleStep = form.copyfitScaleStep.value;
+    settings.typography.fontFallbackEnabled = !!form.fontFallbackEnabled.checked;
+    settings.typography.fontFallbackRules = form.fontFallbackRules.value;
+    return settings;
+}
+
+function mergeProviderFormIntoSettings(form, currentSettings) {
+    const settings = cloneSettings(currentSettings);
+    settings.secrets.deeplKey = form.deeplKey.value;
+    settings.secrets.openaiKey = form.openaiKey.value;
+    settings.secrets.geminiKey = form.geminiKey.value;
+    settings.secrets.claudeKey = form.claudeKey.value;
+    settings.secrets.localApiKey = form.localApiKey.value;
+    settings.providers.openaiModel = form.openaiModel.value;
+    settings.providers.geminiModel = form.geminiModel.value;
+    settings.providers.claudeModel = form.claudeModel.value;
+    settings.providers.localBaseUrl = form.localBaseUrl.value;
+    settings.providers.localModel = form.localModel.value;
+    return settings;
+}
+
+function buildToneNote(status) {
+    return [
+        '<div class="stp-tone-note stp-tone-note-' + escapeHtml(status.tone) + '">',
+        '<span class="stp-tone-badge">' + escapeHtml(status.badge) + "</span>",
+        '<p>' + escapeHtml(status.message) + "</p>",
+        "</div>"
+    ].join("");
+}
+
+function buildListBlock(items) {
+    const rows = (items || []).map(function (item) {
+        return [
+            '<div class="stp-list-row">',
+            '<span class="stp-list-dot"></span>',
+            '<span class="stp-list-copy">' + escapeHtml(item) + "</span>",
+            "</div>"
+        ].join("");
+    }).join("");
+
+    return '<div class="stp-list-block">' + rows + "</div>";
+}
+
+function buildSelectField(name, label, options, selectedValue) {
+    const optionMarkup = (options || []).map(function (option) {
+        return buildOption(option.id, option.label, selectedValue);
+    }).join("");
+
+    return [
+        '<label class="stp-field">',
+        '<span>' + escapeHtml(label) + "</span>",
+        '<select name="' + escapeAttribute(name) + '">',
+        optionMarkup,
+        "</select>",
+        "</label>"
+    ].join("");
+}
+
+function buildTextField(name, label, value, placeholder) {
+    return [
+        '<label class="stp-field">',
+        '<span>' + escapeHtml(label) + "</span>",
+        '<input type="text" name="' + escapeAttribute(name) + '" value="' + escapeAttribute(value) + '" placeholder="' + escapeAttribute(placeholder || "") + '" />',
+        "</label>"
+    ].join("");
+}
+
+function buildPasswordField(name, label, value, placeholder) {
+    return [
+        '<label class="stp-field">',
+        '<span>' + escapeHtml(label) + ' <em class="stp-field-hint">' + escapeHtml(getMaskedSecret(value)) + "</em></span>",
+        '<input type="password" name="' + escapeAttribute(name) + '" value="' + escapeAttribute(value) + '" placeholder="' + escapeAttribute(placeholder || "") + '" />',
+        "</label>"
+    ].join("");
+}
+
+function buildNumberField(name, label, value, min, max, step) {
+    return [
+        '<label class="stp-field">',
+        '<span>' + escapeHtml(label) + "</span>",
+        '<input type="number" name="' + escapeAttribute(name) + '" value="' + escapeAttribute(value) + '" min="' + escapeAttribute(min) + '" max="' + escapeAttribute(max) + '" step="' + escapeAttribute(step) + '" />',
+        "</label>"
+    ].join("");
+}
+
+function buildCheckboxField(name, label, checked) {
+    return [
+        '<label class="stp-field stp-checkbox-field">',
+        '<input type="checkbox" name="' + escapeAttribute(name) + '"' + (checked ? ' checked="checked"' : "") + " />",
+        '<span>' + escapeHtml(label) + "</span>",
+        "</label>"
+    ].join("");
+}
+
+function buildProviderCard(providerId, settings, fieldsMarkup) {
+    const isActive = settings.translationProvider === providerId;
+    const provider = getProviderOption(providerId);
+    return [
+        '<section class="stp-provider-card' + (isActive ? " is-active" : "") + '">',
+        '<div class="stp-provider-head">',
+        '<div>',
+        '<h3>' + escapeHtml(provider.label) + "</h3>",
+        '<p>' + escapeHtml(provider.description) + "</p>",
+        "</div>",
+        '<span class="stp-provider-tag">' + (isActive ? "Aktiv" : "Optional") + "</span>",
+        "</div>",
+        '<div class="stp-field-grid">',
+        fieldsMarkup.join(""),
+        "</div>",
+        "</section>"
+    ].join("");
+}
+
+function buildResourceCard(label, path, status, resourceKey, busyKey) {
+    const tone = status === "ready" ? "ready" : (status === "missing" || status === "error" ? "warm" : "muted");
+    const stateLabel = status === "ready"
+        ? "Verbunden"
+        : (status === "missing" ? "Pfad erneut bestaetigen" : (status === "error" ? "Fehler" : "Noch nicht gesetzt"));
+
+    return [
+        '<section class="stp-resource-card">',
+        '<div class="stp-resource-head">',
+        '<div>',
+        '<h3>' + escapeHtml(label) + "</h3>",
+        '<span class="stp-chip stp-chip-' + escapeHtml(tone) + '">' + escapeHtml(stateLabel) + "</span>",
+        "</div>",
+        "</div>",
+        '<p class="stp-resource-path">' + escapeHtml(path || "Noch keine Datei verbunden.") + "</p>",
+        '<div class="stp-button-row">',
+        '<button class="stp-secondary-button" type="button" data-pick-resource="' + escapeAttribute(resourceKey) + '"' + (busyKey === "pick-" + resourceKey ? ' disabled="disabled"' : "") + '>Datei waehlen</button>',
+        '<button class="stp-ghost-button" type="button" data-clear-resource="' + escapeAttribute(resourceKey) + '">Loesen</button>',
+        "</div>",
+        "</section>"
+    ].join("");
+}
+
+function getProviderOption(providerId) {
+    for (let index = 0; index < PROVIDER_OPTIONS.length; index += 1) {
+        if (PROVIDER_OPTIONS[index].id === providerId) return PROVIDER_OPTIONS[index];
+    }
+    return PROVIDER_OPTIONS[0];
+}
+
+function getProviderLabel(providerId) {
+    return getProviderOption(providerId).label;
+}
+
+function getUiLanguageLabel(languageId) {
+    for (let index = 0; index < UI_LANGUAGE_OPTIONS.length; index += 1) {
+        if (UI_LANGUAGE_OPTIONS[index].id === languageId) return UI_LANGUAGE_OPTIONS[index].label;
+    }
+    return UI_LANGUAGE_OPTIONS[0].label;
+}
+
+function cloneSettings(value) {
+    return JSON.parse(JSON.stringify(value || {}));
 }
 
 function buildOption(value, label, selectedValue) {
