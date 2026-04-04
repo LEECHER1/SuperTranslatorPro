@@ -2,6 +2,7 @@
 
 const {
     PROVIDER_OPTIONS,
+    TARGET_LANGUAGE_OPTIONS,
     UI_LANGUAGE_OPTIONS,
     buildProviderStatus,
     buildResourceStatus,
@@ -93,40 +94,50 @@ function buildControlSurface(state) {
     const host = state.host;
     const selectionSummary = state.selectionSummary;
     const debugRun = state.debugRun;
+    const translationRun = state.translationRun;
+    const settings = state.settings;
+    const providerStatus = buildProviderStatus(settings);
     return [
-        '<section class="stp-grid stp-grid-two">',
+        '<section class="stp-grid">',
         '<article class="stp-card stp-card-hero">',
         '<div class="stp-card-head">',
         '<span class="stp-section-kicker">Arbeitsflaeche</span>',
-        '<h2>UXP-Panel fuer den Alltag</h2>',
+        '<h2>Benutzbarer Live-Test</h2>',
         "</div>",
-        '<p>Das hier ist die neue Huelle fuer SuperTranslatorPro: klarer, kompakter und spaeter ohne Dialog-Chaos bedienbar. Der erste echte UXP-Workflow liest jetzt schon die aktuelle Auswahl als Uebersetzungs-Queue aus.</p>',
-        '<div class="stp-action-grid">',
-        buildActionButton("translate-selection", "Auswahl vorbereiten", host.hasDocument),
-        buildActionButton("translate-pages", "Seitenlauf starten", host.hasDocument),
-        buildActionButton("run-bda", "BDA-Automatik", host.hasDocument),
-        buildActionButton("source-check", "Quellsprache pruefen", host.hasDocument),
-        "</div>",
-        '<div class="stp-inline-note">',
-        '<strong>Live-Test jetzt:</strong> Auswahl markieren, Queue pruefen und anschliessend den sicheren Debug-Writeback starten. Der Test nutzt aktuell Uppercase, damit wir Lesen und Schreiben in InDesign isoliert verifizieren koennen.',
-        "</div>",
+        '<p>Ich habe die Startseite jetzt auf den eigentlichen Arbeitsfluss reduziert: Auswahl lesen, DeepL-Key eingeben, Ziel waehlen und direkt ins Dokument zurueckschreiben.</p>',
+        buildToneNote(providerStatus),
+        '<div class="stp-button-row">',
+        '<button class="stp-secondary-button" data-surface="setup">Setup oeffnen</button>',
+        '<button class="stp-secondary-button" data-surface="updates">Updates</button>',
+        '<button class="stp-ghost-button" data-action="toggle-compact">' + escapeHtml(state.compact ? "Full Panel" : "Mini Bar") + "</button>",
+        '</div>',
         "</article>",
-        '<article class="stp-card">',
+        '<form class="stp-card stp-form" data-form="deepl-quick-test">',
         '<div class="stp-card-head">',
-        '<span class="stp-section-kicker">Mini Bar</span>',
-        '<h2>Kompakter Modus</h2>',
+        '<span class="stp-section-kicker">DeepL Schnelltest</span>',
+        '<h2>Erste echte Uebersetzung</h2>',
         "</div>",
-        '<p>Die Mini-Leiste reduziert das Panel auf Status, Quick Actions und den letzten Hinweis. So bleibt das Werkzeug auch in vollen Layout-Sessions leichtgewichtig.</p>',
-        buildListBlock([
-            "Dockbar oder floating verwendbar",
-            "Weniger vertikale Hoehe durch einklappbare Inhalte",
-            "Schnelle Rueckkehr ins Full Panel per Toggle"
-        ]),
-        "</article>",
+        '<p>Dieser Test arbeitet absichtlich direkt auf der Startseite. DeepL-Key und Zielsprache werden gespeichert, dann wird die aktuelle InDesign-Auswahl gelesen und direkt ersetzt.</p>',
+        '<div class="stp-field-grid">',
+        buildPasswordField("deeplKey", "DeepL API Key", settings.secrets.deeplKey, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx"),
+        buildSelectField("targetLanguage", "Zielsprache", TARGET_LANGUAGE_OPTIONS, settings.translation.targetLanguage),
+        '</div>',
+        buildToneNote(translationRun),
+        '<div class="stp-status-stack">',
+        buildMetricCard("Aktualisiert", String(translationRun.updatedCount), translationRun.detectedSourceLanguage ? "Quelle " + translationRun.detectedSourceLanguage : "Direkter Writeback"),
+        buildMetricCard("Uebersprungen", String(translationRun.skippedCount), translationRun.targetLanguage ? "Ziel " + translationRun.targetLanguage : "Ziel offen"),
+        buildMetricCard("Fehler", String(translationRun.errorCount), translationRun.canUndo ? "Undo verfuegbar" : "Noch kein Undo"),
+        '</div>',
+        buildTranslationRunItems(translationRun),
+        '<div class="stp-form-actions">',
+        '<button class="stp-primary-button" type="submit"' + (host.hasDocument && state.settingsReady && state.busyKey !== "deepl-translation" ? "" : ' disabled="disabled"') + '>DeepL Auswahl uebersetzen</button>',
+        '<button class="stp-secondary-button" type="button" data-action="undo-last-debug-writeback"' + (translationRun.canUndo ? "" : ' disabled="disabled"') + '>Letzte Aenderung rueckgaengig</button>',
+        '</div>',
+        "</form>",
         '<article class="stp-card">',
         '<div class="stp-card-head">',
         '<span class="stp-section-kicker">Selection Queue</span>',
-        '<h2>Was aktuell live erkannt wird</h2>',
+        '<h2>Auswahl pruefen</h2>',
         "</div>",
         '<div class="stp-status-stack">',
         buildMetricCard("Textziele", String(selectionSummary.totalTargets), selectionSummary.truncated ? "Vorschau gekuerzt" : "Vorschau komplett"),
@@ -134,8 +145,8 @@ function buildControlSurface(state) {
         "</div>",
         buildSelectionQueue(state.selectionQueue, selectionSummary),
         '<div class="stp-button-row">',
+        '<button class="stp-primary-button" data-quick-action="translate-selection"' + (host.hasDocument ? "" : ' disabled="disabled"') + '>Auswahl vorbereiten</button>',
         '<button class="stp-secondary-button" data-action="refresh-host">Auswahl neu lesen</button>',
-        '<button class="stp-ghost-button" data-action="toggle-compact">Mini-Bar umschalten</button>',
         "</div>",
         "</article>",
         '<article class="stp-card">',
@@ -167,17 +178,10 @@ function buildControlSurface(state) {
             "Aktive Seite: " + host.activePage,
             "Auswahl: " + host.selectionLabel
         ]),
+        '<div class="stp-button-row">',
         '<button class="stp-secondary-button" data-action="refresh-host">Status neu laden</button>',
-        "</article>",
-        '<article class="stp-card">',
-        '<div class="stp-card-head">',
-        '<span class="stp-section-kicker">Architektur</span>',
-        '<h2>Schichten</h2>',
-        "</div>",
-        '<div class="stp-layer-stack">',
-        '<span>ui</span><span>host</span><span>core</span><span>services</span>',
-        "</div>",
-        '<p>Die eigentliche Übersetzungslogik bleibt spaeter im `core`, waehrend `host` nur InDesign-Zugriffe kapselt und `services` Remote- und Persistenzthemen uebernimmt.</p>',
+        '<button class="stp-ghost-button" data-quick-action="source-check"' + (host.hasDocument ? "" : ' disabled="disabled"') + '>Quellsprache pruefen</button>',
+        '</div>',
         "</article>",
         "</section>"
     ].join("");
@@ -230,6 +234,7 @@ function buildSetupSurface(state) {
         '<div class="stp-field-grid stp-field-grid-two">',
         buildSelectField("translationProvider", "Aktiver Provider", PROVIDER_OPTIONS, settings.translationProvider),
         buildSelectField("uiLanguage", "UI-Sprache", UI_LANGUAGE_OPTIONS, settings.uiLanguage),
+        buildSelectField("targetLanguage", "Standard-Zielsprache", TARGET_LANGUAGE_OPTIONS, settings.translation.targetLanguage),
         buildTextField("refSymbols", "Referenz-Symbole", settings.automation.refSymbols, "[]"),
         buildTextField("backPageTracker", "Rueckseiten-Suche", settings.automation.backPageTracker, "©"),
         buildCheckboxField("autoHyperlinks", "Auto-Hyperlinks im BDA-Modus aktivieren", settings.automation.autoHyperlinks),
@@ -420,6 +425,34 @@ function buildDebugRunItems(debugRun) {
     return '<div class="stp-debug-list">' + rows + "</div>";
 }
 
+function buildTranslationRunItems(translationRun) {
+    const items = translationRun && translationRun.items ? translationRun.items : [];
+    if (!items.length) {
+        return [
+            '<div class="stp-empty-state">',
+            '<p>Noch keine DeepL-Antwort im Dokument geschrieben.</p>',
+            "</div>"
+        ].join("");
+    }
+
+    const rows = items.slice(0, 8).map(function (item) {
+        const statusClass = item.status === "error" ? " stp-debug-item-error" : (item.status === "updated" ? " stp-debug-item-ready" : "");
+        return [
+            '<article class="stp-debug-item' + statusClass + '">',
+            '<div class="stp-debug-head">',
+            '<strong>' + escapeHtml(item.type) + " · Seite " + escapeHtml(item.page) + "</strong>",
+            '<span>' + escapeHtml(item.status) + "</span>",
+            "</div>",
+            '<p><b>Vorher:</b> ' + escapeHtml(item.before || "") + "</p>",
+            '<p><b>Nachher:</b> ' + escapeHtml(item.after || item.reason || "") + "</p>",
+            item.reason ? '<p><b>Hinweis:</b> ' + escapeHtml(item.reason) + "</p>" : "",
+            "</article>"
+        ].join("");
+    }).join("");
+
+    return '<div class="stp-debug-list">' + rows + "</div>";
+}
+
 function buildFooter(state) {
     return [
         '<footer class="stp-footer">',
@@ -502,6 +535,20 @@ function bindActions(rootNode, state, dispatch) {
         });
     }
 
+    const deeplQuickForm = rootNode.querySelector('[data-form="deepl-quick-test"]');
+    if (deeplQuickForm) {
+        deeplQuickForm.addEventListener("submit", function (event) {
+            event.preventDefault();
+            const nextSettings = cloneSettings(state.settings);
+            nextSettings.translation.targetLanguage = deeplQuickForm.targetLanguage.value;
+            nextSettings.secrets.deeplKey = deeplQuickForm.deeplKey.value || nextSettings.secrets.deeplKey;
+            dispatch({
+                type: "run-deepl-selection-test",
+                settings: nextSettings
+            });
+        });
+    }
+
     const pickButtons = rootNode.querySelectorAll("[data-pick-resource]");
     pickButtons.forEach(function (button) {
         button.addEventListener("click", function () {
@@ -527,6 +574,7 @@ function readSettingsFromForm(form, currentSettings) {
     const settings = cloneSettings(currentSettings);
     settings.translationProvider = form.translationProvider.value;
     settings.uiLanguage = form.uiLanguage.value;
+    settings.translation.targetLanguage = form.targetLanguage.value;
     settings.automation.refSymbols = form.refSymbols.value;
     settings.automation.backPageTracker = form.backPageTracker.value;
     settings.automation.autoHyperlinks = !!form.autoHyperlinks.checked;

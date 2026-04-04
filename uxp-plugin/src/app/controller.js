@@ -7,6 +7,7 @@ const { createHostBridge } = require("../host/indesign-host");
 const { createUpdateService } = require("../services/update-service");
 const { createConfigService } = require("../services/config-service");
 const { createSettingsStore } = require("../services/settings-store");
+const { translateTextsWithDeepL } = require("../services/deepl-service");
 
 const controllers = new WeakMap();
 
@@ -204,10 +205,92 @@ function createController(rootNode) {
             return;
         }
 
+        if (action.type === "run-deepl-selection-test") {
+            const requestedSettings = normalizeAppSettings(action.settings || state.settings);
+            patchState({
+                busyKey: "deepl-translation",
+                notice: "DeepL-Test wird vorbereitet..."
+            });
+
+            try {
+                const savedSettings = await configService.saveSettings(requestedSettings);
+                const selectionPayload = hostBridge.getSelectionTranslationPayload(24);
+
+                if (!selectionPayload.items.length) {
+                    patchState({
+                        busyKey: "",
+                        settings: savedSettings,
+                        settingsReady: true,
+                        translationRun: {
+                            tone: "warm",
+                            badge: "Keine Auswahl",
+                            message: selectionPayload.message,
+                            updatedCount: 0,
+                            skippedCount: 0,
+                            errorCount: 0,
+                            items: [],
+                            canUndo: false,
+                            provider: "DeepL",
+                            targetLanguage: savedSettings.translation.targetLanguage,
+                            detectedSourceLanguage: ""
+                        },
+                        notice: selectionPayload.message
+                    });
+                    return;
+                }
+
+                const translationResponse = await translateTextsWithDeepL({
+                    apiKey: savedSettings.secrets.deeplKey,
+                    targetLanguage: savedSettings.translation.targetLanguage,
+                    texts: selectionPayload.items.map(function (item) { return item.text; })
+                });
+
+                const translationRun = await hostBridge.applyTranslationsByTargetId(
+                    selectionPayload.items,
+                    translationResponse.translations,
+                    {
+                        targetLanguage: savedSettings.translation.targetLanguage,
+                        detectedSourceLanguage: translationResponse.detectedSourceLanguage
+                    }
+                );
+
+                await refreshDocumentContext(translationRun.message);
+                patchState({
+                    busyKey: "",
+                    settings: savedSettings,
+                    settingsReady: true,
+                    translationRun: translationRun,
+                    notice: translationRun.message
+                });
+            } catch (error) {
+                const message = "DeepL-Test fehlgeschlagen: " + sanitizeMessage(error);
+                patchState({
+                    busyKey: "",
+                    settings: requestedSettings,
+                    settingsReady: true,
+                    translationRun: {
+                        tone: "alert",
+                        badge: "DeepL Fehler",
+                        message: message,
+                        updatedCount: 0,
+                        skippedCount: 0,
+                        errorCount: 1,
+                        items: [],
+                        canUndo: false,
+                        provider: "DeepL",
+                        targetLanguage: requestedSettings.translation.targetLanguage,
+                        detectedSourceLanguage: ""
+                    },
+                    notice: message
+                });
+            }
+            return;
+        }
+
         if (action.type === "undo-last-debug-writeback") {
             patchState({
                 busyKey: "debug-undo",
-                notice: "Undo fuer den letzten Debug-Test wird ausgefuehrt..."
+                notice: "Letzte Dokument-Aenderung wird rueckgaengig gemacht..."
             });
 
             const undoResult = await hostBridge.undoLastDocumentAction();
@@ -220,8 +303,15 @@ function createController(rootNode) {
                     message: undoResult.message,
                     canUndo: false
                 }),
+                translationRun: Object.assign({}, state.translationRun, {
+                    tone: undoResult.ok ? "ready" : "warm",
+                    badge: undoResult.ok ? "Undo ok" : "Undo offen",
+                    message: undoResult.message,
+                    canUndo: false
+                }),
                 notice: undoResult.message
             });
+            return;
         }
     }
 
@@ -280,3 +370,8 @@ function createController(rootNode) {
 module.exports = {
     attachPanel: attachPanel
 };
+
+function sanitizeMessage(error) {
+    if (error && error.message) return String(error.message);
+    return "Unbekannter Fehler";
+}

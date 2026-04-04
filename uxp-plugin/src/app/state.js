@@ -30,6 +30,19 @@ function createInitialState(storedState, hostSnapshot) {
             items: [],
             canUndo: false
         },
+        translationRun: {
+            tone: "muted",
+            badge: "Noch kein DeepL-Test",
+            message: "Die erste echte DeepL-Uebersetzung kann direkt im Panel gestartet werden.",
+            updatedCount: 0,
+            skippedCount: 0,
+            errorCount: 0,
+            items: [],
+            canUndo: false,
+            provider: "DeepL",
+            targetLanguage: "DE",
+            detectedSourceLanguage: ""
+        },
         busyKey: "",
         notice: "UXP-Grundgeruest bereit. Als Naechstes portieren wir Settings und den manuellen Uebersetzungsfluss.",
         host: hostSnapshot

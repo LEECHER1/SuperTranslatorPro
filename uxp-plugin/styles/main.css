@@ -4,6 +4,7 @@
   --stp-panel: #4a4a4a;
   --stp-panel-strong: #505050;
   --stp-panel-soft: #454545;
+  --stp-bg-soft: #3f3f3f;
   --stp-border: #5b5b5b;
   --stp-text: #f2f2f2;
   --stp-text-soft: #c9c9c9;
@@ -44,12 +45,16 @@ input,
 select,
 textarea {
   font: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: none;
 }
 
 .stp-shell {
   width: 100%;
-  max-width: 760px;
-  padding: 12px;
+  max-width: none;
+  min-width: 0;
+  padding: 12px 10px 14px;
   background: var(--stp-bg);
 }
 
@@ -141,14 +146,22 @@ textarea {
 .stp-primary-button,
 .stp-action-button,
 .stp-surface-button {
-  display: inline-block;
-  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  min-width: 0;
   padding: 7px 12px;
   border: 1px solid var(--stp-border);
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--stp-panel);
   color: var(--stp-text);
   cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stp-primary-button {
@@ -159,8 +172,7 @@ textarea {
 .stp-action-button {
   width: 100%;
   min-height: 36px;
-  border-radius: var(--stp-radius-sm);
-  text-align: left;
+  justify-content: flex-start;
   background: var(--stp-panel-strong);
 }
 
@@ -215,14 +227,20 @@ textarea {
 }
 
 .stp-surface-nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 10px;
-  flex-wrap: wrap;
+  width: 100%;
+}
+
+.stp-surface-button {
+  width: 100%;
 }
 
 .stp-main {
   display: block;
+  width: 100%;
 }
 
 .stp-grid,
@@ -243,6 +261,7 @@ textarea {
   border: 1px solid var(--stp-border);
   border-radius: var(--stp-radius);
   background: var(--stp-panel);
+  overflow: hidden;
 }
 
 .stp-card-hero {
@@ -398,6 +417,11 @@ textarea {
   margin-top: 10px;
 }
 
+.stp-form-actions > *,
+.stp-button-row > * {
+  flex: 1 1 160px;
+}
+
 .stp-queue-list,
 .stp-debug-list {
   display: block;
@@ -507,5 +531,9 @@ textarea {
   .stp-status-stack > *,
   .stp-update-grid > * {
     margin-bottom: 8px;
+  }
+
+  .stp-form-actions > * {
+    width: 100%;
   }
 }

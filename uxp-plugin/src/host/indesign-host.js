@@ -104,6 +104,51 @@ function createHostBridge() {
         );
     }
 
+    function getSelectionTranslationPayload(limit) {
+        const maxItems = typeof limit === "number" && limit > 0 ? limit : 24;
+        const items = [];
+        let totalCharacters = 0;
+        let truncated = false;
+
+        if (!indesignModule || !indesignModule.app) {
+            return buildSelectionPayload(items, 0, totalCharacters, truncated, "InDesign ist nicht verbunden.");
+        }
+
+        const targets = collectResolvedSelectionTargets(indesignModule.app);
+
+        for (let index = 0; index < targets.length; index += 1) {
+            const target = targets[index];
+            const sourceText = readTargetContents(target);
+            const compactSource = normalizePreview(sourceText);
+            if (!compactSource) continue;
+
+            totalCharacters += sourceText.length;
+
+            if (items.length < maxItems) {
+                items.push({
+                    id: getTargetUniqueId(target) || buildFallbackTargetId(target),
+                    type: getConstructorName(target),
+                    page: resolveTargetPageLabel(target),
+                    text: sourceText,
+                    preview: compactSource.length > 180 ? compactSource.slice(0, 177) + "..." : compactSource,
+                    characters: sourceText.length
+                });
+            } else {
+                truncated = true;
+            }
+        }
+
+        return buildSelectionPayload(
+            items,
+            items.length,
+            totalCharacters,
+            truncated,
+            items.length
+                ? "DeepL-Test vorbereitet: " + items.length + " Textziel(e), " + totalCharacters + " Zeichen."
+                : "Keine uebersetzbare Text-Auswahl gefunden."
+        );
+    }
+
     async function applyDebugWritebackToSelection(options) {
         const debugMode = normalizeDebugMode(options && options.mode);
 
@@ -204,6 +249,109 @@ function createHostBridge() {
         });
     }
 
+    async function applyTranslationsByTargetId(payloadItems, translatedTexts, options) {
+        if (!indesignModule || !indesignModule.app) {
+            return buildTranslationRunReport({
+                tone: "alert",
+                badge: "Nicht verbunden",
+                message: "InDesign ist nicht verbunden. Die Uebersetzung konnte nicht geschrieben werden.",
+                canUndo: false,
+                targetLanguage: options && options.targetLanguage,
+                detectedSourceLanguage: options && options.detectedSourceLanguage
+            });
+        }
+
+        const app = indesignModule.app;
+        const sourceItems = Array.isArray(payloadItems) ? payloadItems : [];
+        const translations = Array.isArray(translatedTexts) ? translatedTexts : [];
+        const targetMap = buildTargetMap(collectResolvedSelectionTargets(app));
+        let updatedCount = 0;
+        let skippedCount = 0;
+        let errorCount = 0;
+        const items = [];
+
+        for (let index = 0; index < sourceItems.length; index += 1) {
+            const sourceItem = sourceItems[index] || {};
+            const target = targetMap[sourceItem.id];
+            const replacement = String(translations[index] === undefined || translations[index] === null ? "" : translations[index]);
+
+            if (!target || !isValidItem(target)) {
+                errorCount += 1;
+                items.push({
+                    type: sourceItem.type || "Unknown",
+                    page: sourceItem.page || "-",
+                    status: "error",
+                    before: normalizePreview(sourceItem.text || "").slice(0, 120),
+                    after: "",
+                    reason: "Zielobjekt wurde in InDesign nicht mehr gefunden."
+                });
+                continue;
+            }
+
+            if (!normalizePreview(replacement)) {
+                skippedCount += 1;
+                items.push({
+                    type: sourceItem.type || getConstructorName(target),
+                    page: sourceItem.page || resolveTargetPageLabel(target),
+                    status: "skipped",
+                    before: normalizePreview(sourceItem.text || "").slice(0, 120),
+                    after: "",
+                    reason: "Leere Antwort vom Provider"
+                });
+                continue;
+            }
+
+            if (String(sourceItem.text || "") === replacement) {
+                skippedCount += 1;
+                items.push({
+                    type: sourceItem.type || getConstructorName(target),
+                    page: sourceItem.page || resolveTargetPageLabel(target),
+                    status: "skipped",
+                    before: normalizePreview(sourceItem.text || "").slice(0, 120),
+                    after: normalizePreview(replacement).slice(0, 120),
+                    reason: "Keine Aenderung"
+                });
+                continue;
+            }
+
+            try {
+                target.contents = replacement;
+                updatedCount += 1;
+                items.push({
+                    type: sourceItem.type || getConstructorName(target),
+                    page: sourceItem.page || resolveTargetPageLabel(target),
+                    status: "updated",
+                    before: normalizePreview(sourceItem.text || "").slice(0, 120),
+                    after: normalizePreview(replacement).slice(0, 120)
+                });
+            } catch (error) {
+                errorCount += 1;
+                items.push({
+                    type: sourceItem.type || getConstructorName(target),
+                    page: sourceItem.page || resolveTargetPageLabel(target),
+                    status: "error",
+                    before: normalizePreview(sourceItem.text || "").slice(0, 120),
+                    after: "",
+                    reason: sanitizeError(error)
+                });
+            }
+        }
+
+        return buildTranslationRunReport({
+            tone: errorCount ? "warm" : "ready",
+            badge: errorCount ? "Mit Fehlern" : "DeepL ok",
+            message: "DeepL-Writeback abgeschlossen: " +
+                updatedCount + " aktualisiert, " + skippedCount + " uebersprungen, " + errorCount + " Fehler.",
+            updatedCount: updatedCount,
+            skippedCount: skippedCount,
+            errorCount: errorCount,
+            items: items,
+            canUndo: !!getActiveDocument(app),
+            targetLanguage: options && options.targetLanguage,
+            detectedSourceLanguage: options && options.detectedSourceLanguage
+        });
+    }
+
     async function undoLastDocumentAction() {
         if (!indesignModule || !indesignModule.app) {
             return {
@@ -268,8 +416,10 @@ function createHostBridge() {
 
     return {
         applyDebugWritebackToSelection: applyDebugWritebackToSelection,
+        applyTranslationsByTargetId: applyTranslationsByTargetId,
         collectSelectionQueue: collectSelectionQueue,
         getSnapshot: getSnapshot,
+        getSelectionTranslationPayload: getSelectionTranslationPayload,
         runQuickAction: runQuickAction,
         undoLastDocumentAction: undoLastDocumentAction
     };
@@ -444,6 +594,22 @@ function buildDebugRunReport(fields) {
     };
 }
 
+function buildTranslationRunReport(fields) {
+    return {
+        tone: fields.tone || "muted",
+        badge: fields.badge || "DeepL",
+        message: fields.message || "",
+        updatedCount: fields.updatedCount || 0,
+        skippedCount: fields.skippedCount || 0,
+        errorCount: fields.errorCount || 0,
+        items: fields.items || [],
+        canUndo: !!fields.canUndo,
+        provider: "DeepL",
+        targetLanguage: String(fields.targetLanguage || "DE"),
+        detectedSourceLanguage: String(fields.detectedSourceLanguage || "")
+    };
+}
+
 function readTargetContents(target) {
     try {
         if (typeof target.contents !== "undefined" && target.contents !== null) {
@@ -479,6 +645,20 @@ function getTargetUniqueId(target) {
 
 function buildFallbackTargetId(target) {
     return getConstructorName(target) + ":" + normalizePreview(readTargetContents(target)).slice(0, 32);
+}
+
+function buildTargetMap(targets) {
+    const map = {};
+    const safeTargets = Array.isArray(targets) ? targets : [];
+
+    for (let index = 0; index < safeTargets.length; index += 1) {
+        const target = safeTargets[index];
+        const targetId = getTargetUniqueId(target) || buildFallbackTargetId(target);
+        if (!targetId) continue;
+        map[targetId] = target;
+    }
+
+    return map;
 }
 
 function normalizePreview(text) {

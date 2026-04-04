@@ -14,6 +14,18 @@ const UI_LANGUAGE_OPTIONS = [
     { id: "en", label: "English" }
 ];
 
+const TARGET_LANGUAGE_OPTIONS = [
+    { id: "DE", label: "Deutsch" },
+    { id: "EN-GB", label: "English (UK)" },
+    { id: "EN-US", label: "English (US)" },
+    { id: "FR", label: "Francais" },
+    { id: "ES", label: "Espanol" },
+    { id: "IT", label: "Italiano" },
+    { id: "NL", label: "Nederlands" },
+    { id: "PL", label: "Polski" },
+    { id: "PT-BR", label: "Portugues (BR)" }
+];
+
 const SECRET_KEYS = [
     "deeplKey",
     "openaiKey",
@@ -26,6 +38,9 @@ function createDefaultAppSettings() {
     return {
         uiLanguage: "auto",
         translationProvider: "deepl",
+        translation: {
+            targetLanguage: "DE"
+        },
         providers: {
             openaiModel: "gpt-5.4-mini",
             geminiModel: "gemini-2.5-flash",
@@ -72,6 +87,9 @@ function normalizeAppSettings(rawValue) {
     return {
         uiLanguage: normalizeUiLanguage(raw.uiLanguage || defaults.uiLanguage),
         translationProvider: normalizeTranslationProvider(raw.translationProvider || defaults.translationProvider),
+        translation: {
+            targetLanguage: normalizeTargetLanguage(readNested(raw, ["translation", "targetLanguage"], defaults.translation.targetLanguage))
+        },
         providers: {
             openaiModel: normalizeOpenAIModel(readNested(raw, ["providers", "openaiModel"], defaults.providers.openaiModel)),
             geminiModel: normalizeGeminiModel(readNested(raw, ["providers", "geminiModel"], defaults.providers.geminiModel)),
@@ -116,6 +134,7 @@ function stripSecrets(settings) {
     return {
         uiLanguage: normalized.uiLanguage,
         translationProvider: normalized.translationProvider,
+        translation: normalized.translation,
         providers: normalized.providers,
         resources: normalized.resources,
         automation: normalized.automation,
@@ -229,6 +248,14 @@ function normalizeTranslationProvider(providerId) {
     if (normalized === "claude" || normalized === "anthropic" || normalized.indexOf("claude") !== -1) return "claude";
     if (normalized === "openai" || normalized === "chatgpt") return "openai";
     return "deepl";
+}
+
+function normalizeTargetLanguage(value) {
+    const normalized = String(value || "").replace(/^\s+|\s+$/g, "").toUpperCase();
+    for (let index = 0; index < TARGET_LANGUAGE_OPTIONS.length; index += 1) {
+        if (TARGET_LANGUAGE_OPTIONS[index].id === normalized) return normalized;
+    }
+    return "DE";
 }
 
 function normalizeOpenAIModel(modelName) {
@@ -354,6 +381,7 @@ function normalizeResourceStatus(value) {
 module.exports = {
     PROVIDER_OPTIONS: PROVIDER_OPTIONS,
     SECRET_KEYS: SECRET_KEYS,
+    TARGET_LANGUAGE_OPTIONS: TARGET_LANGUAGE_OPTIONS,
     UI_LANGUAGE_OPTIONS: UI_LANGUAGE_OPTIONS,
     buildProviderStatus: buildProviderStatus,
     buildResourceStatus: buildResourceStatus,
