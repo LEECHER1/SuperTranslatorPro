@@ -9125,8 +9125,9 @@ function translateBatchWithProvider(textsArray, targetLangCode, overStartPct, ov
 
 function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPct) {
     var endpoint = (apiKey.indexOf(":fx") !== -1) ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
-    var translated = []; var batchSize = 25; 
-    for (var b = 0; b < textsArray.length; b += batchSize) {
+    var translated = []; 
+    var b = 0;
+    while (b < textsArray.length) {
         if (cancelFlag) throw new Error("CANCELLED");
         
         var batchPct = (b / textsArray.length);
@@ -9134,17 +9135,28 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
         
         var currentOverPct = overStartPct ? (overStartPct + (batchPct * (overEndPct - overStartPct) * 0.8)) : null;
         
-        var endBatch = Math.min(b + batchSize, textsArray.length);
-        updateProgress(currentTaskPct, t("deepl_request_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
-        
         var payloadStr = "target_lang=" + targetLangCode + "&tag_handling=xml&ignore_tags=tab,nt&splitting_tags=pbr,lbr";
         if (formalitySetting === "more" || formalitySetting === "less") {
             payloadStr += "&formality=" + formalitySetting;
         }
-        for (var j = b; j < endBatch; j++) {
+        
+        var endBatch = b;
+        var currentPayloadLen = payloadStr.length;
+        var MAX_PAYLOAD_LEN = 100000;
+        var MAX_BATCH_SIZE = 25;
+        
+        for (var j = b; j < textsArray.length && (j - b) < MAX_BATCH_SIZE; j++) {
             var safeText = textsArray[j];
-            payloadStr += "&text=" + encodeURIComponent(safeText);
+            var addedStr = "&text=" + encodeURIComponent(safeText);
+            if (j > b && (currentPayloadLen + addedStr.length > MAX_PAYLOAD_LEN)) {
+                break;
+            }
+            currentPayloadLen += addedStr.length;
+            endBatch = j + 1;
+            payloadStr += addedStr;
         }
+        
+        updateProgress(currentTaskPct, t("deepl_request_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
         
         var payloadFile = new File(Folder.temp + "/dl_pay_" + new Date().getTime() + ".txt");
         payloadFile.encoding = "UTF-8";
@@ -9187,6 +9199,7 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
             throw new Error(e.message && e.message.indexOf("DeepL") === 0 ? e.message : t("deepl_connection_error", { message: (e.message || "Request failed.") }));
         }
         finally { try { payloadFile.remove(); } catch(e){} }
+        b = endBatch;
     }
     return translated;
 }
@@ -9285,24 +9298,41 @@ function translateBatchClaude(textsArray, targetLangCode, overStartPct, overEndP
 
 function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, overEndPct) {
     var endpoint = (apiKey.indexOf(":fx") !== -1) ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
-    var translated = []; var batchSize = 25;
-    for (var b = 0; b < textsArray.length; b += batchSize) {
+    var translated = []; 
+    var b = 0;
+    while (b < textsArray.length) {
         if (cancelFlag) throw new Error("CANCELLED");
+        
         var batchPct = (b / textsArray.length);
         var currentTaskPct = 20 + Math.round(batchPct * 60);
+        
         var currentOverPct = overStartPct ? (overStartPct + (batchPct * (overEndPct - overStartPct) * 0.8)) : null;
-        var endBatch = Math.min(b + batchSize, textsArray.length);
-        updateProgress(currentTaskPct, t("deepl_request_text_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
+        
         var payloadStr = "target_lang=" + targetLangCode;
         if (formalitySetting === "more" || formalitySetting === "less") {
             payloadStr += "&formality=" + formalitySetting;
         }
-        for (var j = b; j < endBatch; j++) {
+        
+        var endBatch = b;
+        var currentPayloadLen = payloadStr.length;
+        var MAX_PAYLOAD_LEN = 100000;
+        var MAX_BATCH_SIZE = 25;
+        
+        for (var j = b; j < textsArray.length && (j - b) < MAX_BATCH_SIZE; j++) {
             var safeText = textsArray[j];
             if (safeText === null || safeText === undefined) safeText = "";
             safeText = String(safeText).replace(/'/g, "'\\''");
-            payloadStr += "&text=" + encodeURIComponent(safeText);
+            var addedStr = "&text=" + encodeURIComponent(safeText);
+            if (j > b && (currentPayloadLen + addedStr.length > MAX_PAYLOAD_LEN)) {
+                break;
+            }
+            currentPayloadLen += addedStr.length;
+            endBatch = j + 1;
+            payloadStr += addedStr;
         }
+        
+        updateProgress(currentTaskPct, t("deepl_request_text_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
+        
         var payloadFile = new File(Folder.temp + "/dl_pay_" + new Date().getTime() + ".txt");
         payloadFile.encoding = "UTF-8";
         payloadFile.open("w");
@@ -9334,6 +9364,7 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
             throw new Error(e.message && e.message.indexOf("DeepL") === 0 ? e.message : t("deepl_connection_error", { message: (e.message || "Request failed.") }));
         }
         finally { try { payloadFile.remove(); } catch(e){} }
+        b = endBatch;
     }
     return translated;
 }

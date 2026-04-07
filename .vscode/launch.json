@@ -10,6 +10,12 @@
             "name": "Chrome mit \"localhost\" starten",
             "url": "http://localhost:8080",
             "webRoot": "${workspaceFolder}"
+        },
+        {
+            "type": "uxp",
+            "request": "attach",
+            "name": "Attach to SuperTranslatorPro UXP",
+            "manifestPath": "${workspaceFolder}/SuperTranslatorPro-UXP/manifest.json"
         }
     ]
 }
