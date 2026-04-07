@@ -33,7 +33,6 @@ var FONT_FALLBACK_RULES_LABEL = "SuperTranslatorPRO_FontFallbackRules";
 var PDF_EXPORT_PRINT_PRESET_LABEL = "SuperTranslatorPRO_PDF_Print_Preset";
 var PDF_EXPORT_WEB_PRESET_LABEL = "SuperTranslatorPRO_PDF_Web_Preset";
 var PDF_EXPORT_WEB_SPREADS_LABEL = "SuperTranslatorPRO_PDF_Web_Spreads";
-var PDF_EXPORT_PRINT_HYPERLINKS_LABEL = "SuperTranslatorPRO_PDF_Print_Hyperlinks";
 var PDF_EXPORT_WEB_HYPERLINKS_LABEL = "SuperTranslatorPRO_PDF_Web_Hyperlinks";
 
 function detectUILanguage() {
@@ -1125,7 +1124,6 @@ var fontFallbackRulesSetting = decodeFontFallbackRulesSettingFromLabel(app.extra
 var pdfExportPrintPresetSetting = app.extractLabel(PDF_EXPORT_PRINT_PRESET_LABEL) || "";
 var pdfExportWebPresetSetting = app.extractLabel(PDF_EXPORT_WEB_PRESET_LABEL) || "";
 var pdfExportWebSpreadsSetting = (app.extractLabel(PDF_EXPORT_WEB_SPREADS_LABEL) !== "0"); // Default true
-var pdfExportPrintHyperlinksSetting = (app.extractLabel(PDF_EXPORT_PRINT_HYPERLINKS_LABEL) !== "0"); // Default true
 var pdfExportWebHyperlinksSetting = (app.extractLabel(PDF_EXPORT_WEB_HYPERLINKS_LABEL) !== "0"); // Default true
 
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
@@ -4463,9 +4461,6 @@ btnSettings.onClick = function() {
         }
     }
     
-    var pdfExportPrintHyperlinksCheckbox = exportSection.add("checkbox", undefined, t("export_pdf_hyperlinks"));
-    pdfExportPrintHyperlinksCheckbox.value = pdfExportPrintHyperlinksSetting;
-    
     exportSection.add("statictext", undefined, ""); // spacer
     
     exportSection.add("statictext", undefined, t("export_pdf_web_preset"));
@@ -4600,7 +4595,6 @@ btnSettings.onClick = function() {
         pdfExportPrintPresetSetting = pdfExportPrintPresetInput.selection ? pdfExportPrintPresetInput.selection.text : "";
         pdfExportWebPresetSetting = pdfExportWebPresetInput.selection ? pdfExportWebPresetInput.selection.text : "";
         pdfExportWebSpreadsSetting = !!pdfExportWebSpreadsCheckbox.value;
-        pdfExportPrintHyperlinksSetting = !!pdfExportPrintHyperlinksCheckbox.value;
         pdfExportWebHyperlinksSetting = !!pdfExportWebHyperlinksCheckbox.value;
         resetFontFallbackCaches();
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
@@ -4628,7 +4622,6 @@ btnSettings.onClick = function() {
         app.insertLabel(PDF_EXPORT_PRINT_PRESET_LABEL, pdfExportPrintPresetSetting);
         app.insertLabel(PDF_EXPORT_WEB_PRESET_LABEL, pdfExportWebPresetSetting);
         app.insertLabel(PDF_EXPORT_WEB_SPREADS_LABEL, pdfExportWebSpreadsSetting ? "1" : "0");
-        app.insertLabel(PDF_EXPORT_PRINT_HYPERLINKS_LABEL, pdfExportPrintHyperlinksSetting ? "1" : "0");
         app.insertLabel(PDF_EXPORT_WEB_HYPERLINKS_LABEL, pdfExportWebHyperlinksSetting ? "1" : "0");
         app.insertLabel(UI_LANGUAGE_LABEL, normalizeUILanguageSetting(selectedUILanguage));
         tableRestoreDebugEnabled = !!debugTableRestoreCheckbox.value;
@@ -6368,11 +6361,9 @@ function quickExportPDF(isWeb) {
         // Vorgabe in die Präferenzen laden
         app.pdfExportPreferences.properties = preset.properties;
         
-        // Immer Hyperlinks überschreiben
-        app.pdfExportPreferences.includeHyperlinks = isWeb ? pdfExportWebHyperlinksSetting : pdfExportPrintHyperlinksSetting;
-        
-        // Druckbogen-Einstellung für Web überschreiben
+        // Einstellungen für Web überschreiben
         if (isWeb) {
+            app.pdfExportPreferences.includeHyperlinks = pdfExportWebHyperlinksSetting;
             app.pdfExportPreferences.exportReaderSpreads = pdfExportWebSpreadsSetting;
         }
     } catch (e) {
