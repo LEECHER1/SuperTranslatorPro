@@ -6346,20 +6346,28 @@ function quickExportPDF(isWeb) {
     if (!file) return;
 
     var originalPageSpace = null;
+    var changedPreset = false;
     if (isWeb) {
         try {
-            originalPageSpace = app.pdfExportPreferences.pageSpace;
-            app.pdfExportPreferences.pageSpace = pdfExportWebSpreadsSetting ? PDFPageSpace.SPREADS : PDFPageSpace.PAGES;
-        } catch (e) {}
+            originalPageSpace = preset.pageSpace;
+            var targetSpace = pdfExportWebSpreadsSetting ? PDFPageSpace.SPREADS : PDFPageSpace.PAGES;
+            if (originalPageSpace !== targetSpace) {
+                preset.pageSpace = targetSpace;
+                changedPreset = true;
+            }
+        } catch (e) {
+            // Preset might be read-only (e.g. built-in preset)
+            alert("Hinweis: Druckbogen-Einstellung konnte nicht überschrieben werden (Vorgabe ist evtl. schreibgeschützt). Bitte verwende eine eigene (selbst erstellte) PDF-Vorgabe.");
+        }
     }
 
     try {
-        doc.exportFile(ExportFormat.PDF_TYPE, file, false, preset);
+        doc.asynchronousExportFile(ExportFormat.PDF_TYPE, file, false, preset);
     } catch (e) {
         alert("Fehler beim Export:\n" + e.message);
     } finally {
-        if (originalPageSpace !== null) {
-            try { app.pdfExportPreferences.pageSpace = originalPageSpace; } catch (e) {}
+        if (changedPreset) {
+            try { preset.pageSpace = originalPageSpace; } catch (e) {}
         }
     }
 }
