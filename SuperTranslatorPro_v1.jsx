@@ -4439,15 +4439,35 @@ btnSettings.onClick = function() {
 
     createDialogHint(exportTab, t("settings_tab_export_hint"));
     var exportSection = createSettingsSection(exportTab, t("settings_tab_export"));
+    
+    var pdfPresetNames = [];
+    try {
+        var presets = app.pdfExportPresets;
+        for (var i = 0; i < presets.length; i++) {
+            pdfPresetNames.push(presets[i].name);
+        }
+    } catch (e) {}
+    if (pdfPresetNames.length === 0) pdfPresetNames.push("");
+
     exportSection.add("statictext", undefined, t("export_pdf_print_preset"));
-    var pdfExportPrintPresetInput = exportSection.add("edittext", undefined, pdfExportPrintPresetSetting);
-    pdfExportPrintPresetInput.characters = 30;
-    pdfExportPrintPresetInput.alignment = "fill";
+    var pdfExportPrintPresetInput = exportSection.add("dropdownlist", undefined, pdfPresetNames);
+    pdfExportPrintPresetInput.preferredSize.width = 300;
+    pdfExportPrintPresetInput.alignment = "left";
+    for (var i = 0; i < pdfPresetNames.length; i++) {
+        if (pdfPresetNames[i] === pdfExportPrintPresetSetting) {
+            pdfExportPrintPresetInput.selection = i; break;
+        }
+    }
     
     exportSection.add("statictext", undefined, t("export_pdf_web_preset"));
-    var pdfExportWebPresetInput = exportSection.add("edittext", undefined, pdfExportWebPresetSetting);
-    pdfExportWebPresetInput.characters = 30;
-    pdfExportWebPresetInput.alignment = "fill";
+    var pdfExportWebPresetInput = exportSection.add("dropdownlist", undefined, pdfPresetNames);
+    pdfExportWebPresetInput.preferredSize.width = 300;
+    pdfExportWebPresetInput.alignment = "left";
+    for (var j = 0; j < pdfPresetNames.length; j++) {
+        if (pdfPresetNames[j] === pdfExportWebPresetSetting) {
+            pdfExportWebPresetInput.selection = j; break;
+        }
+    }
     
     var pdfExportWebSpreadsCheckbox = exportSection.add("checkbox", undefined, t("export_pdf_web_spreads"));
     pdfExportWebSpreadsCheckbox.value = pdfExportWebSpreadsSetting;
@@ -4565,8 +4585,8 @@ btnSettings.onClick = function() {
         smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(copyfitScaleStepField.input.text);
         fontFallbackEnabled = !!fontFallbackEnabledCheckbox.value;
         fontFallbackRulesSetting = normalizeFontFallbackRulesSetting(fontFallbackRulesInput.text);
-        pdfExportPrintPresetSetting = String(pdfExportPrintPresetInput.text || "").replace(/^\s+|\s+$/g, "");
-        pdfExportWebPresetSetting = String(pdfExportWebPresetInput.text || "").replace(/^\s+|\s+$/g, "");
+        pdfExportPrintPresetSetting = pdfExportPrintPresetInput.selection ? pdfExportPrintPresetInput.selection.text : "";
+        pdfExportWebPresetSetting = pdfExportWebPresetInput.selection ? pdfExportWebPresetInput.selection.text : "";
         pdfExportWebSpreadsSetting = !!pdfExportWebSpreadsCheckbox.value;
         resetFontFallbackCaches();
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
