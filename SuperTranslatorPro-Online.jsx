@@ -63,6 +63,10 @@ try {
             }
         }
         
+        // Direktiven entfernen, da sie in eval() zu Syntaxfehlern führen
+        scriptContent = scriptContent.replace(/^#targetengine\b.*$/gm, "");
+        scriptContent = scriptContent.replace(/^#target\b.*$/gm, "");
+
         // 3. SKRIPT AUSFÜHREN
         eval(scriptContent);
     } else {
