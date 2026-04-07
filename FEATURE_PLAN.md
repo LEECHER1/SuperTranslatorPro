@@ -116,12 +116,33 @@
 ---
 
 ## 5. Migration auf UXP
-- [ ] Kernlogik / UI klar trennen
-- [ ] UXP-Plugin-Struktur planen (`manifest.json`, HTML/CSS/JS)
-- [ ] UXP-UI-Portierung vorbereiten
+- [ ] Zielarchitektur festziehen: `core`, `host`, `ui` und `services` sauber voneinander trennen
+- [ ] UXP-Plugin-Struktur aufsetzen (`manifest.json`, Panel-Entry-Point, HTML/CSS/JS)
+- [ ] Ein einziges dockbares Haupt-Panel mit zwei Zuständen planen: `Full Panel` und `Compact / Mini Bar`
+- [ ] Schönes UXP-UI mit klarer Informationshierarchie, wenigen Modal-Dialogen und besserem Progress-/Status-Flow entwerfen
+- [ ] Remote-Update-Architektur definieren: kleines lokales Basis-Plugin, online gepflegte Konfigurationen/Module, lokaler Cache und Offline-Fallback
+- [ ] Technisch validieren, welche Teile unter UXP sicher remote aktualisiert werden dürfen und welche lokal versioniert bleiben muessen
+- [ ] Settings-, Provider-, Glossar- und Memory-Schicht zuerst migrieren, damit die Basis stabil ist
+- [ ] Manuellen Übersetzungsmodus als ersten produktiven UXP-Flow umsetzen
+- [ ] BDA-Automatik, Hyperlinks, Copyfit und Font-Fallbacks danach schrittweise nachziehen
+- [ ] Legacy-JSX waehrend der Migration als produktiven Fallback bestehen lassen
+- [ ] Packaging- und Installationsflow fuer einfache Auslieferung als `.ccx` definieren
+- [ ] Update- und Rollback-Strategie für produktive Nutzer definieren
 
 **Notizen:**
-- Aktuell noch Zukunftsthema.
+- Die UXP-Migration wird nicht als 1:1-Port der bestehenden Dialoge geplant, sondern als gezielter Umbau auf eine zukunftsfähige Plugin-Architektur.
+- Zielbild ist ein schlankes lokales Host-Plugin in InDesign mit moderner Panel-Oberfläche, klar getrennt von Business-Logik, Host-Brücke und Remote-Konfiguration.
+- Das Plugin soll dockbar und floating nutzbar sein und zusätzlich einen kompakten Mini-Bar-Modus bekommen, damit es im Alltag weniger Platz braucht.
+- Installationsziel ist: für Anwender so einfach wie möglich. Entwicklung lokal über UXP Developer Tool, produktive Verteilung über ein signiertes `.ccx`-Paket.
+- Die Update-Fähigkeit bleibt ein Kernziel: So viel wie sinnvoll online pflegen, lokal nur die stabile Basis. Gleichzeitig muss die Architektur einen sicheren Offline-Fallback und einen last-known-good-Stand behalten.
+- Weil UXP und Distribution klare Leitplanken haben, wird das Remote-Update-Modell zu Beginn explizit validiert. Wenn voller Remote-Code-Nachzug nicht robust oder sauber distributierbar ist, setzen wir auf ein Thin-Shell-Modell mit Remote-Konfiguration, Remote-Ressourcen und kleinen lokalen Basis-Updates.
+- Empfohlene Umsetzungsreihenfolge:
+  1. Architektur-Schnitt und UXP-Plugin-Skelett
+  2. Design-System, Panel-Layout und Compact-Mode
+  3. Settings / Provider / Glossar / Memory
+  4. Manueller Übersetzungsmodus
+  5. Automatik, Hyperlinks und Copyfit
+  6. Stabilisierung, Packaging, Update-Flow und InDesign-Praxistests
 
 ---
 
@@ -262,7 +283,9 @@
 - [ ] Whole-Page-Context als optionalen, standardmäßig deaktivierten Menüpunkt planen
 - [ ] BridgeTalk-Prototyp für Illustrator-/InDesign-Automatisierung evaluieren
 - [ ] Review-Bedienfeld für Side-by-Side Lektorat in InDesign entwerfen
-- [ ] UXP-Refactoring-Plan erstellen
+- [ ] UXP-Architektur-Schnitt für `core`, `host`, `ui` und `services` dokumentieren
+- [ ] Remote-Update-Strategie für UXP validieren und Sicherheits-/Fallback-Konzept festziehen
+- [ ] Panel-Konzept für `Full Panel` und `Compact / Mini Bar` als Wireframe definieren
 - [ ] Glossar-Validator für fehlerhafte CSV-Struktur ergänzen
 - [ ] Optionalen Pfad Richtung zentrale TM-Datenhaltung oder Service evaluieren
 - [ ] Erweiterte Cross-Reference-Logik für Spezialfälle ausbauen
@@ -270,6 +293,7 @@
 ---
 
 ## Änderungslog
+- 4. April 2026: UXP-Plan konkretisiert, inklusive Panel-Architektur, Compact-/Mini-Bar-Konzept, einfacher `.ccx`-Installation und Remote-Update-Strategie mit lokalem Fallback
 - 4. April 2026: Plan um QA-/Formatprüfung, Whole-Page Context, Cross-App Automatisierung für Illustrator und Review-Modus erweitert
 - 4. April 2026: Glossar-CSV für Mehrbenutzerbetrieb robuster gemacht, inklusive stabilerer Lesezugriffe, Backup-Fallback und gesichertem Template-Schreiben
 - 4. April 2026: Translation Memory für Mehrbenutzerbetrieb abgesichert, inklusive Sperrlogik, Delta-Merge, Backup-Fallback und atomarem Schreiben
