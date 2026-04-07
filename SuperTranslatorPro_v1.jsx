@@ -30,6 +30,9 @@ var COPYFIT_TRACKING_STEP_LABEL = "SuperTranslatorPRO_CopyfitTrackingStep";
 var COPYFIT_SCALE_STEP_LABEL = "SuperTranslatorPRO_CopyfitScaleStep";
 var FONT_FALLBACK_ENABLED_LABEL = "SuperTranslatorPRO_FontFallbackEnabled";
 var FONT_FALLBACK_RULES_LABEL = "SuperTranslatorPRO_FontFallbackRules";
+var PDF_EXPORT_PRINT_PRESET_LABEL = "SuperTranslatorPRO_PDF_Print_Preset";
+var PDF_EXPORT_WEB_PRESET_LABEL = "SuperTranslatorPRO_PDF_Web_Preset";
+var PDF_EXPORT_WEB_SPREADS_LABEL = "SuperTranslatorPRO_PDF_Web_Spreads";
 
 function detectUILanguage() {
     var localeText = "";
@@ -1117,6 +1120,9 @@ var smartCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(app.extractLa
 var smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(app.extractLabel(COPYFIT_SCALE_STEP_LABEL) || "1");
 var fontFallbackEnabled = normalizeFontFallbackEnabledSetting(app.extractLabel(FONT_FALLBACK_ENABLED_LABEL) || "1");
 var fontFallbackRulesSetting = decodeFontFallbackRulesSettingFromLabel(app.extractLabel(FONT_FALLBACK_RULES_LABEL) || "");
+var pdfExportPrintPresetSetting = app.extractLabel(PDF_EXPORT_PRINT_PRESET_LABEL) || "";
+var pdfExportWebPresetSetting = app.extractLabel(PDF_EXPORT_WEB_PRESET_LABEL) || "";
+var pdfExportWebSpreadsSetting = (app.extractLabel(PDF_EXPORT_WEB_SPREADS_LABEL) !== "0"); // Default true
 
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
 var progressWin, progressBar, progressText;
@@ -3173,6 +3179,10 @@ groupButtons.alignChildren = ["left", "center"];
 groupButtons.spacing = 8;
 var btnTranslate = groupButtons.add("button", undefined, t("translate_start"));
 btnTranslate.preferredSize = [180, 32];
+var btnPrintPDF = groupButtons.add("button", undefined, t("export_pdf_print_btn"));
+btnPrintPDF.preferredSize = [120, 32];
+var btnWebPDF = groupButtons.add("button", undefined, t("export_pdf_web_btn"));
+btnWebPDF.preferredSize = [120, 32];
 var buttonSpacer = groupButtons.add("statictext", undefined, "");
 buttonSpacer.alignment = "fill";
 var rightButtonGroup = groupButtons.add("group");
@@ -3936,6 +3946,10 @@ btnSettings.onClick = function() {
     autoTab.orientation = "column";
     autoTab.alignChildren = ["fill", "top"];
 
+    var exportTab = tabs.add("tab", undefined, t("settings_tab_export"));
+    exportTab.orientation = "column";
+    exportTab.alignChildren = ["fill", "top"];
+
     var providerTab = tabs.add("tab", undefined, t("settings_tab_provider"));
     providerTab.orientation = "column";
     providerTab.alignChildren = ["fill", "top"];
@@ -4423,6 +4437,21 @@ btnSettings.onClick = function() {
     debugTableRestoreCheckbox.value = tableRestoreDebugEnabled;
     debugTableRestoreCheckbox.helpTip = t("debug_tables_images_help");
 
+    createDialogHint(exportTab, t("settings_tab_export_hint"));
+    var exportSection = createSettingsSection(exportTab, t("settings_tab_export"));
+    exportSection.add("statictext", undefined, t("export_pdf_print_preset"));
+    var pdfExportPrintPresetInput = exportSection.add("edittext", undefined, pdfExportPrintPresetSetting);
+    pdfExportPrintPresetInput.characters = 30;
+    pdfExportPrintPresetInput.alignment = "fill";
+    
+    exportSection.add("statictext", undefined, t("export_pdf_web_preset"));
+    var pdfExportWebPresetInput = exportSection.add("edittext", undefined, pdfExportWebPresetSetting);
+    pdfExportWebPresetInput.characters = 30;
+    pdfExportWebPresetInput.alignment = "fill";
+    
+    var pdfExportWebSpreadsCheckbox = exportSection.add("checkbox", undefined, t("export_pdf_web_spreads"));
+    pdfExportWebSpreadsCheckbox.value = pdfExportWebSpreadsSetting;
+
     function refreshSettingsOverview() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
         var selectedProviderId = providerIds[selectedProviderIndex] || "deepl";
@@ -4536,6 +4565,9 @@ btnSettings.onClick = function() {
         smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(copyfitScaleStepField.input.text);
         fontFallbackEnabled = !!fontFallbackEnabledCheckbox.value;
         fontFallbackRulesSetting = normalizeFontFallbackRulesSetting(fontFallbackRulesInput.text);
+        pdfExportPrintPresetSetting = String(pdfExportPrintPresetInput.text || "").replace(/^\s+|\s+$/g, "");
+        pdfExportWebPresetSetting = String(pdfExportWebPresetInput.text || "").replace(/^\s+|\s+$/g, "");
+        pdfExportWebSpreadsSetting = !!pdfExportWebSpreadsCheckbox.value;
         resetFontFallbackCaches();
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(OPENAI_KEY_LABEL, openAIKey);
@@ -4559,6 +4591,9 @@ btnSettings.onClick = function() {
         app.insertLabel(COPYFIT_SCALE_STEP_LABEL, String(smartCopyfitScaleStep));
         app.insertLabel(FONT_FALLBACK_ENABLED_LABEL, fontFallbackEnabled ? "1" : "0");
         app.insertLabel(FONT_FALLBACK_RULES_LABEL, encodeFontFallbackRulesSettingForLabel(fontFallbackRulesSetting));
+        app.insertLabel(PDF_EXPORT_PRINT_PRESET_LABEL, pdfExportPrintPresetSetting);
+        app.insertLabel(PDF_EXPORT_WEB_PRESET_LABEL, pdfExportWebPresetSetting);
+        app.insertLabel(PDF_EXPORT_WEB_SPREADS_LABEL, pdfExportWebSpreadsSetting ? "1" : "0");
         app.insertLabel(UI_LANGUAGE_LABEL, normalizeUILanguageSetting(selectedUILanguage));
         tableRestoreDebugEnabled = !!debugTableRestoreCheckbox.value;
         app.insertLabel(DEBUG_TABLE_RESTORE_LABEL, tableRestoreDebugEnabled ? "1" : "0");
@@ -6263,6 +6298,55 @@ function closeProgressWindow() {
 
 
 // --- 3. KLICK-LOGIK & START ---
+function quickExportPDF(isWeb) {
+    var doc = getActiveDocumentSafe();
+    if (!doc || !doc.isValid) { alert(t("no_document_open")); return; }
+
+    var presetName = isWeb ? pdfExportWebPresetSetting : pdfExportPrintPresetSetting;
+    if (!presetName) {
+        alert(t("validation_needs_attention") + "\n- " + (isWeb ? t("export_pdf_web_preset") : t("export_pdf_print_preset")));
+        return;
+    }
+
+    var preset = app.pdfExportPresets.itemByName(presetName);
+    if (!preset || !preset.isValid) {
+        alert(t("validation_needs_attention") + "\n- Vorgabe '" + presetName + "' nicht gefunden.");
+        return;
+    }
+
+    var defaultName = doc.name.replace(/\.indd$/i, "") + (isWeb ? "_Web.pdf" : "_Print.pdf");
+    var defaultFile;
+    try {
+        defaultFile = new File(doc.filePath + "/" + defaultName);
+    } catch (e) {
+        defaultFile = new File(Folder.desktop + "/" + defaultName);
+    }
+    
+    var file = defaultFile.saveDlg("PDF speichern", "*.pdf");
+    if (!file) return;
+
+    var originalPageSpace = null;
+    if (isWeb) {
+        try {
+            originalPageSpace = app.pdfExportPreferences.pageSpace;
+            app.pdfExportPreferences.pageSpace = pdfExportWebSpreadsSetting ? PDFPageSpace.SPREADS : PDFPageSpace.PAGES;
+        } catch (e) {}
+    }
+
+    try {
+        doc.exportFile(ExportFormat.PDF_TYPE, file, false, preset);
+    } catch (e) {
+        alert("Fehler beim Export:\n" + e.message);
+    } finally {
+        if (originalPageSpace !== null) {
+            try { app.pdfExportPreferences.pageSpace = originalPageSpace; } catch (e) {}
+        }
+    }
+}
+
+btnPrintPDF.onClick = function() { quickExportPDF(false); };
+btnWebPDF.onClick = function() { quickExportPDF(true); };
+
 btnTranslate.onClick = function() {
     refreshMainValidationUI();
     var validationIssues = getMainValidationIssues();
