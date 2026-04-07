@@ -6345,29 +6345,32 @@ function quickExportPDF(isWeb) {
     var file = defaultFile.saveDlg("PDF speichern", "*.pdf");
     if (!file) return;
 
-    var originalPageSpace = null;
-    var changedPreset = false;
+    var originalPrefs = null;
     if (isWeb) {
         try {
-            originalPageSpace = preset.pageSpace;
-            var targetSpace = pdfExportWebSpreadsSetting ? PDFPageSpace.SPREADS : PDFPageSpace.PAGES;
-            if (originalPageSpace !== targetSpace) {
-                preset.pageSpace = targetSpace;
-                changedPreset = true;
-            }
+            // Sichern der aktuellen Präferenzen
+            originalPrefs = app.pdfExportPreferences.properties;
+            // Vorgabe in die Präferenzen laden
+            app.pdfExportPreferences.properties = preset.properties;
+            // Druckbogen-Einstellung überschreiben
+            app.pdfExportPreferences.exportReaderSpreads = pdfExportWebSpreadsSetting;
         } catch (e) {
-            // Preset might be read-only (e.g. built-in preset)
-            alert("Hinweis: Druckbogen-Einstellung konnte nicht überschrieben werden (Vorgabe ist evtl. schreibgeschützt). Bitte verwende eine eigene (selbst erstellte) PDF-Vorgabe.");
+            alert("Hinweis: Einstellungen konnten nicht vollständig vorbereitet werden:\n" + e.message);
         }
     }
 
     try {
-        doc.asynchronousExportFile(ExportFormat.PDF_TYPE, file, false, preset);
+        // Beim Web-Export lassen wir das 'preset'-Argument weg, damit unsere modifizierten Präferenzen greifen.
+        if (isWeb) {
+            doc.asynchronousExportFile(ExportFormat.PDF_TYPE, file, false);
+        } else {
+            doc.asynchronousExportFile(ExportFormat.PDF_TYPE, file, false, preset);
+        }
     } catch (e) {
         alert("Fehler beim Export:\n" + e.message);
     } finally {
-        if (changedPreset) {
-            try { preset.pageSpace = originalPageSpace; } catch (e) {}
+        if (originalPrefs !== null) {
+            try { app.pdfExportPreferences.properties = originalPrefs; } catch (e) {}
         }
     }
 }
