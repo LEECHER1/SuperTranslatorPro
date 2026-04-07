@@ -293,6 +293,8 @@
 ---
 
 ## Änderungslog
+- 7. April 2026: Hyperlink-Checkbox für Print-Export entfernt (Print-Export nutzt nun Vorgaben-Standard); Online-Loader um dynamischen `#include`-Download von GitHub erweitert
+- 7. April 2026: PDF-Schnellexport (Print und Web) inkl. Vorgaben-Auswahl im Hauptfenster integriert
 - 4. April 2026: UXP-Plan konkretisiert, inklusive Panel-Architektur, Compact-/Mini-Bar-Konzept, einfacher `.ccx`-Installation und Remote-Update-Strategie mit lokalem Fallback
 - 4. April 2026: Plan um QA-/Formatprüfung, Whole-Page Context, Cross-App Automatisierung für Illustrator und Review-Modus erweitert
 - 4. April 2026: Glossar-CSV für Mehrbenutzerbetrieb robuster gemacht, inklusive stabilerer Lesezugriffe, Backup-Fallback und gesichertem Template-Schreiben
