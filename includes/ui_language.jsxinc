@@ -86,6 +86,7 @@ var UI_STRINGS = {
     export_pdf_print_preset: { de: "PDF-Vorgabe Print:", en: "PDF Preset Print:" },
     export_pdf_web_preset: { de: "PDF-Vorgabe Web:", en: "PDF Preset Web:" },
     export_pdf_web_spreads: { de: "Web: Als Druckbogen exportieren", en: "Web: Export as spreads" },
+    export_pdf_hyperlinks: { de: "Hyperlinks einschließen", en: "Include hyperlinks" },
     export_pdf_print_btn: { de: "Print PDF", en: "Print PDF" },
     export_pdf_web_btn: { de: "Web PDF", en: "Web PDF" },
     log_file: { de: "📄 Logdatei", en: "📄 Log File" },

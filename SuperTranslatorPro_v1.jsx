@@ -33,6 +33,8 @@ var FONT_FALLBACK_RULES_LABEL = "SuperTranslatorPRO_FontFallbackRules";
 var PDF_EXPORT_PRINT_PRESET_LABEL = "SuperTranslatorPRO_PDF_Print_Preset";
 var PDF_EXPORT_WEB_PRESET_LABEL = "SuperTranslatorPRO_PDF_Web_Preset";
 var PDF_EXPORT_WEB_SPREADS_LABEL = "SuperTranslatorPRO_PDF_Web_Spreads";
+var PDF_EXPORT_PRINT_HYPERLINKS_LABEL = "SuperTranslatorPRO_PDF_Print_Hyperlinks";
+var PDF_EXPORT_WEB_HYPERLINKS_LABEL = "SuperTranslatorPRO_PDF_Web_Hyperlinks";
 
 function detectUILanguage() {
     var localeText = "";
@@ -1123,6 +1125,8 @@ var fontFallbackRulesSetting = decodeFontFallbackRulesSettingFromLabel(app.extra
 var pdfExportPrintPresetSetting = app.extractLabel(PDF_EXPORT_PRINT_PRESET_LABEL) || "";
 var pdfExportWebPresetSetting = app.extractLabel(PDF_EXPORT_WEB_PRESET_LABEL) || "";
 var pdfExportWebSpreadsSetting = (app.extractLabel(PDF_EXPORT_WEB_SPREADS_LABEL) !== "0"); // Default true
+var pdfExportPrintHyperlinksSetting = (app.extractLabel(PDF_EXPORT_PRINT_HYPERLINKS_LABEL) !== "0"); // Default true
+var pdfExportWebHyperlinksSetting = (app.extractLabel(PDF_EXPORT_WEB_HYPERLINKS_LABEL) !== "0"); // Default true
 
 var globalStats = { apiChars: 0, savedChars: 0, fittedFrames: 0 };
 var progressWin, progressBar, progressText;
@@ -4459,6 +4463,11 @@ btnSettings.onClick = function() {
         }
     }
     
+    var pdfExportPrintHyperlinksCheckbox = exportSection.add("checkbox", undefined, t("export_pdf_hyperlinks"));
+    pdfExportPrintHyperlinksCheckbox.value = pdfExportPrintHyperlinksSetting;
+    
+    exportSection.add("statictext", undefined, ""); // spacer
+    
     exportSection.add("statictext", undefined, t("export_pdf_web_preset"));
     var pdfExportWebPresetInput = exportSection.add("dropdownlist", undefined, pdfPresetNames);
     pdfExportWebPresetInput.preferredSize.width = 300;
@@ -4471,6 +4480,9 @@ btnSettings.onClick = function() {
     
     var pdfExportWebSpreadsCheckbox = exportSection.add("checkbox", undefined, t("export_pdf_web_spreads"));
     pdfExportWebSpreadsCheckbox.value = pdfExportWebSpreadsSetting;
+    
+    var pdfExportWebHyperlinksCheckbox = exportSection.add("checkbox", undefined, t("export_pdf_hyperlinks"));
+    pdfExportWebHyperlinksCheckbox.value = pdfExportWebHyperlinksSetting;
 
     function refreshSettingsOverview() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
@@ -4588,6 +4600,8 @@ btnSettings.onClick = function() {
         pdfExportPrintPresetSetting = pdfExportPrintPresetInput.selection ? pdfExportPrintPresetInput.selection.text : "";
         pdfExportWebPresetSetting = pdfExportWebPresetInput.selection ? pdfExportWebPresetInput.selection.text : "";
         pdfExportWebSpreadsSetting = !!pdfExportWebSpreadsCheckbox.value;
+        pdfExportPrintHyperlinksSetting = !!pdfExportPrintHyperlinksCheckbox.value;
+        pdfExportWebHyperlinksSetting = !!pdfExportWebHyperlinksCheckbox.value;
         resetFontFallbackCaches();
         app.insertLabel(DEEPL_KEY_LABEL, apiKey); 
         app.insertLabel(OPENAI_KEY_LABEL, openAIKey);
@@ -4614,6 +4628,8 @@ btnSettings.onClick = function() {
         app.insertLabel(PDF_EXPORT_PRINT_PRESET_LABEL, pdfExportPrintPresetSetting);
         app.insertLabel(PDF_EXPORT_WEB_PRESET_LABEL, pdfExportWebPresetSetting);
         app.insertLabel(PDF_EXPORT_WEB_SPREADS_LABEL, pdfExportWebSpreadsSetting ? "1" : "0");
+        app.insertLabel(PDF_EXPORT_PRINT_HYPERLINKS_LABEL, pdfExportPrintHyperlinksSetting ? "1" : "0");
+        app.insertLabel(PDF_EXPORT_WEB_HYPERLINKS_LABEL, pdfExportWebHyperlinksSetting ? "1" : "0");
         app.insertLabel(UI_LANGUAGE_LABEL, normalizeUILanguageSetting(selectedUILanguage));
         tableRestoreDebugEnabled = !!debugTableRestoreCheckbox.value;
         app.insertLabel(DEBUG_TABLE_RESTORE_LABEL, tableRestoreDebugEnabled ? "1" : "0");
@@ -6346,26 +6362,26 @@ function quickExportPDF(isWeb) {
     if (!file) return;
 
     var originalPrefs = null;
-    if (isWeb) {
-        try {
-            // Sichern der aktuellen Präferenzen
-            originalPrefs = app.pdfExportPreferences.properties;
-            // Vorgabe in die Präferenzen laden
-            app.pdfExportPreferences.properties = preset.properties;
-            // Druckbogen-Einstellung überschreiben
+    try {
+        // Sichern der aktuellen Präferenzen
+        originalPrefs = app.pdfExportPreferences.properties;
+        // Vorgabe in die Präferenzen laden
+        app.pdfExportPreferences.properties = preset.properties;
+        
+        // Immer Hyperlinks überschreiben
+        app.pdfExportPreferences.includeHyperlinks = isWeb ? pdfExportWebHyperlinksSetting : pdfExportPrintHyperlinksSetting;
+        
+        // Druckbogen-Einstellung für Web überschreiben
+        if (isWeb) {
             app.pdfExportPreferences.exportReaderSpreads = pdfExportWebSpreadsSetting;
-        } catch (e) {
-            alert("Hinweis: Einstellungen konnten nicht vollständig vorbereitet werden:\n" + e.message);
         }
+    } catch (e) {
+        alert("Hinweis: Einstellungen konnten nicht vollständig vorbereitet werden:\n" + e.message);
     }
 
     try {
-        // Beim Web-Export lassen wir das 'preset'-Argument weg, damit unsere modifizierten Präferenzen greifen.
-        if (isWeb) {
-            doc.asynchronousExportFile(ExportFormat.PDF_TYPE, file, false);
-        } else {
-            doc.asynchronousExportFile(ExportFormat.PDF_TYPE, file, false, preset);
-        }
+        // Wir lassen das 'preset'-Argument weg, damit unsere modifizierten Präferenzen greifen.
+        doc.asynchronousExportFile(ExportFormat.PDF_TYPE, file, false);
     } catch (e) {
         alert("Fehler beim Export:\n" + e.message);
     } finally {
