@@ -3848,13 +3848,17 @@ function updateLanguageMasterVersionLabels(doc) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var myWindow = new Window("palette", SCRIPT_NAME + " v" + SCRIPT_VERSION, undefined, { resizeable: true });
+var MAIN_WINDOW_WIDTH = 920;
+var MAIN_WINDOW_HEIGHT = 540;
+
+var myWindow = new Window("palette", SCRIPT_NAME + " v" + SCRIPT_VERSION, undefined, { resizeable: false });
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 myWindow.spacing = 10;
 myWindow.margins = 14;
-myWindow.minimumSize = [740, 420];
-myWindow.preferredSize = [860, 500];
+myWindow.minimumSize = [MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT];
+myWindow.preferredSize = [MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT];
+myWindow.maximumSize = [MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT];
 
 var headerGroup = myWindow.add("group");
 headerGroup.orientation = "row";
@@ -3874,6 +3878,8 @@ var btnSettings = headerGroup.add("button", undefined, t("settings_button"));
 btnSettings.helpTip = t("settings_help");
 btnSettings.alignment = ["right", "center"];
 btnSettings.preferredSize = [150, 30];
+btnSettings.minimumSize = [150, 30];
+btnSettings.maximumSize = [150, 30];
 
 var summaryRow = myWindow.add("group");
 summaryRow.orientation = "row";
@@ -4004,10 +4010,16 @@ groupButtons.alignChildren = ["left", "center"];
 groupButtons.spacing = 8;
 var btnTranslate = groupButtons.add("button", undefined, t("translate_start"));
 btnTranslate.preferredSize = [180, 32];
+btnTranslate.minimumSize = [180, 32];
+btnTranslate.maximumSize = [180, 32];
 var btnPrintPDF = groupButtons.add("button", undefined, t("export_pdf_print_btn"));
 btnPrintPDF.preferredSize = [120, 32];
+btnPrintPDF.minimumSize = [120, 32];
+btnPrintPDF.maximumSize = [120, 32];
 var btnWebPDF = groupButtons.add("button", undefined, t("export_pdf_web_btn"));
 btnWebPDF.preferredSize = [120, 32];
+btnWebPDF.minimumSize = [120, 32];
+btnWebPDF.maximumSize = [120, 32];
 var buttonSpacer = groupButtons.add("statictext", undefined, "");
 buttonSpacer.alignment = "fill";
 var rightButtonGroup = groupButtons.add("group");
@@ -4017,11 +4029,17 @@ rightButtonGroup.spacing = 8;
 var btnLinkReferences = rightButtonGroup.add("button", undefined, t("hyperlink_settings_button"));
 btnLinkReferences.helpTip = t("hyperlink_settings_help");
 btnLinkReferences.preferredSize = [130, 28];
+btnLinkReferences.minimumSize = [130, 28];
+btnLinkReferences.maximumSize = [130, 28];
 var btnSpellCheck = rightButtonGroup.add("button", undefined, t("spellcheck_button"));
 btnSpellCheck.helpTip = t("spellcheck_help");
 btnSpellCheck.preferredSize = [130, 28];
+btnSpellCheck.minimumSize = [130, 28];
+btnSpellCheck.maximumSize = [130, 28];
 var btnCancel = rightButtonGroup.add("button", undefined, t("close_button"));
 btnCancel.preferredSize = [120, 28];
+btnCancel.minimumSize = [120, 28];
+btnCancel.maximumSize = [120, 28];
 
 function setMainGroupVisible(group, isVisible) {
     group.visible = !!isVisible;
@@ -4114,7 +4132,7 @@ function refreshMainWindowUIText() {
     setActiveMainMode(radioBDA.value ? "BDA" : (radioPages.value ? "PAGES" : "SELECTION"));
     refreshMainStatusUI();
     refreshMainValidationUI();
-    try { myWindow.layout.layout(true); } catch (layoutErr) {}
+    relayoutMainWindowContents();
 }
 
 function getActiveDocumentSafe() {
@@ -4236,7 +4254,7 @@ function refreshMainStatusUI() {
         t("status_provider") + " " + getProviderStatusSummaryText() + "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvPath) + "\n" +
         t("status_memory") + " " + getStatusPathLabel(tmPath) + "\n" +
         t("status_links") + " " + (autoLinksEnabled ? t("status_on") : t("status_off")) + "   |   " + t("status_symbols") + " " + normalizeRefSymbols(refSymbolsSetting);
-    try { myWindow.layout.layout(true); } catch (layoutErr) {}
+    relayoutMainWindowContents();
 }
 
 function getBoundsCoordinate(boundsObj, propertyName, fallbackIndex, fallbackValue) {
@@ -4307,6 +4325,23 @@ function positionDialogCenteredOnMainWindow(dialog, dialogWidth, dialogHeight) {
 
         dialog.location = [left, top];
     } catch (e4) {}
+}
+
+function keepMainWindowStableSize() {
+    if (!myWindow) return;
+    try {
+        var bounds = myWindow.bounds;
+        var left = getBoundsCoordinate(bounds, "left", 0, 0);
+        var top = getBoundsCoordinate(bounds, "top", 1, 0);
+        myWindow.bounds = [left, top, left + MAIN_WINDOW_WIDTH, top + MAIN_WINDOW_HEIGHT];
+    } catch (e) {}
+}
+
+function relayoutMainWindowContents() {
+    if (!myWindow) return;
+    try { myWindow.layout.layout(true); } catch (layoutErr) {}
+    try { myWindow.layout.resize(); } catch (resizeErr) {}
+    keepMainWindowStableSize();
 }
 
 function refreshMainInlineHints() {
@@ -4392,7 +4427,7 @@ function refreshMainValidationUI() {
     }
 
     refreshMainInlineHints();
-    try { myWindow.layout.layout(true); } catch (layoutErr) {}
+    relayoutMainWindowContents();
 }
 
 function isLanguageSeparatorText(itemText) {
@@ -4436,7 +4471,7 @@ function setActiveMainMode(mode) {
     else if (normalizedMode === "PAGES") contentPanel.text = t("pages_settings");
     else contentPanel.text = t("auto_settings");
 
-    try { myWindow.layout.layout(true); } catch (layoutErr) {}
+    relayoutMainWindowContents();
     refreshMainValidationUI();
 }
 
@@ -4487,9 +4522,11 @@ refreshMainStatusUI();
 refreshMainValidationUI();
 
 myWindow.onResizing = myWindow.onResize = function() {
-    this.layout.resize();
+    keepMainWindowStableSize();
+    try { this.layout.resize(); } catch (resizeErr) {}
 };
-myWindow.onShow = myWindow.onActivate = function() {
+myWindow.onShow = function() {
+    keepMainWindowStableSize();
     ensureMainWindowLiveRefresh();
     refreshMainWindowLiveState(true);
 };
@@ -9354,6 +9391,45 @@ function extractDeepLFailureMessage(resultJSON, parsedObj) {
     return msg;
 }
 
+function isDeepLPayloadTooLargeMessage(message) {
+    var normalized = String(message || "").toLowerCase();
+    if (normalized === "") return false;
+    return normalized.indexOf("payload too large") !== -1 ||
+           normalized.indexOf("request entity too large") !== -1 ||
+           normalized.indexOf("content too large") !== -1 ||
+           normalized.indexOf("request body too large") !== -1 ||
+           normalized.indexOf("413") !== -1;
+}
+
+function buildDeepLBatchPayload(textsArray, startIndex, targetLangCode, includeXMLHandling, maxPayloadLen, maxBatchSize) {
+    var payloadStr = "target_lang=" + targetLangCode;
+    if (includeXMLHandling) payloadStr += "&tag_handling=xml&ignore_tags=tab,nt&splitting_tags=pbr,lbr";
+    if (formalitySetting === "more" || formalitySetting === "less") {
+        payloadStr += "&formality=" + formalitySetting;
+    }
+
+    var endBatch = startIndex;
+    var currentPayloadLen = payloadStr.length;
+    var payloadLimit = (maxPayloadLen && maxPayloadLen > 0) ? maxPayloadLen : 45000;
+    var batchLimit = (maxBatchSize && maxBatchSize > 0) ? maxBatchSize : 10;
+
+    for (var j = startIndex; j < textsArray.length && (j - startIndex) < batchLimit; j++) {
+        var safeText = textsArray[j];
+        if (safeText === null || safeText === undefined) safeText = "";
+        var addedStr = "&text=" + encodeURIComponent(String(safeText));
+        if (j > startIndex && (currentPayloadLen + addedStr.length > payloadLimit)) break;
+        currentPayloadLen += addedStr.length;
+        endBatch = j + 1;
+        payloadStr += addedStr;
+    }
+
+    return {
+        payloadStr: payloadStr,
+        endBatch: endBatch,
+        payloadLen: currentPayloadLen
+    };
+}
+
 function compareStringArrays(arrA, arrB) {
     if (arrA.length !== arrB.length) return false;
     for (var i = 0; i < arrA.length; i++) {
@@ -10092,72 +10168,68 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
         var currentTaskPct = 20 + Math.round(batchPct * 60);
         
         var currentOverPct = overStartPct ? (overStartPct + (batchPct * (overEndPct - overStartPct) * 0.8)) : null;
-        
-        var payloadStr = "target_lang=" + targetLangCode + "&tag_handling=xml&ignore_tags=tab,nt&splitting_tags=pbr,lbr";
-        if (formalitySetting === "more" || formalitySetting === "less") {
-            payloadStr += "&formality=" + formalitySetting;
-        }
-        
-        var endBatch = b;
-        var currentPayloadLen = payloadStr.length;
-        var MAX_PAYLOAD_LEN = 100000;
-        var MAX_BATCH_SIZE = 25;
-        
-        for (var j = b; j < textsArray.length && (j - b) < MAX_BATCH_SIZE; j++) {
-            var safeText = textsArray[j];
-            var addedStr = "&text=" + encodeURIComponent(safeText);
-            if (j > b && (currentPayloadLen + addedStr.length > MAX_PAYLOAD_LEN)) {
-                break;
-            }
-            currentPayloadLen += addedStr.length;
-            endBatch = j + 1;
-            payloadStr += addedStr;
-        }
-        
-        updateProgress(currentTaskPct, t("deepl_request_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
-        
-        var payloadFile = new File(Folder.temp + "/dl_pay_" + new Date().getTime() + ".txt");
-        payloadFile.encoding = "UTF-8";
-        payloadFile.open("w");
-        payloadFile.write(payloadStr);
-        payloadFile.close();
 
-        try {
-            var resultJSON = "";
-            if (File.fs === "Macintosh") {
-                var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
-                resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
-            } else {
-                var outFile = new File(Folder.temp + "/dl_out_" + new Date().getTime() + ".json");
-                var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
-                          'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Authorization: DeepL-Auth-Key ' + apiKey + '"" -d @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
-                app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
-                if (outFile.exists) {
-                    outFile.encoding = "UTF-8"; outFile.open("r"); resultJSON = outFile.read(); outFile.close(); try { outFile.remove(); } catch(e){}
-                }
-            }
+        var maxPayloadLen = 45000;
+        var maxBatchSize = 10;
+
+        while (true) {
+            var batchBuild = buildDeepLBatchPayload(textsArray, b, targetLangCode, true, maxPayloadLen, maxBatchSize);
+            var payloadStr = batchBuild.payloadStr;
+            var endBatch = batchBuild.endBatch;
+
+            updateProgress(currentTaskPct, t("deepl_request_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
             
-            var parsedObj = null;
+            var payloadFile = new File(Folder.temp + "/dl_pay_" + new Date().getTime() + ".txt");
+            payloadFile.encoding = "UTF-8";
+            payloadFile.open("w");
+            payloadFile.write(payloadStr);
+            payloadFile.close();
+
             try {
-                parsedObj = eval("(" + resultJSON + ")");
-            } catch (parseError) {
-                throw new Error(t("deepl_parse_error"));
+                var resultJSON = "";
+                if (File.fs === "Macintosh") {
+                    var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
+                    resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+                } else {
+                    var outFile = new File(Folder.temp + "/dl_out_" + new Date().getTime() + ".json");
+                    var vbs = 'Dim WshShell\nSet WshShell = CreateObject("WScript.Shell")\n' +
+                              'WshShell.Run "cmd.exe /c curl -sS -X POST """ & "' + endpoint + '" & """ -H ""Authorization: DeepL-Auth-Key ' + apiKey + '"" -d @""" & "' + payloadFile.fsName + '" & """ > """ & "' + outFile.fsName + '" & """", 0, True\n';
+                    app.doScript(vbs, ScriptLanguage.VISUAL_BASIC_SCRIPT);
+                    if (outFile.exists) {
+                        outFile.encoding = "UTF-8"; outFile.open("r"); resultJSON = outFile.read(); outFile.close(); try { outFile.remove(); } catch(e){}
+                    }
+                }
+                
+                var parsedObj = null;
+                try {
+                    parsedObj = eval("(" + resultJSON + ")");
+                } catch (parseError) {
+                    throw new Error(t("deepl_parse_error"));
+                }
+                if (!parsedObj || !parsedObj.translations) {
+                    throw new Error(t("deepl_error_prefix", { message: extractDeepLFailureMessage(resultJSON, parsedObj) }));
+                }
+                if (parsedObj.translations.length !== (endBatch - b)) {
+                    throw new Error(t("deepl_incomplete"));
+                }
+                for (var k = 0; k < parsedObj.translations.length; k++) {
+                    translated.push(normalizeTranslatedXML(parsedObj.translations[k].text));
+                }
+                b = endBatch;
+                break;
+            } catch (e) {
+                if (e.message === "CANCELLED") throw e;
+
+                if (isDeepLPayloadTooLargeMessage(e.message) && (endBatch - b) > 1) {
+                    maxBatchSize = Math.max(1, Math.floor((endBatch - b) / 2));
+                    maxPayloadLen = Math.max(12000, Math.floor(maxPayloadLen * 0.7));
+                    continue;
+                }
+
+                throw new Error(e.message && e.message.indexOf("DeepL") === 0 ? e.message : t("deepl_connection_error", { message: (e.message || "Request failed.") }));
             }
-            if (!parsedObj || !parsedObj.translations) {
-                throw new Error(t("deepl_error_prefix", { message: extractDeepLFailureMessage(resultJSON, parsedObj) }));
-            }
-            if (parsedObj.translations.length !== (endBatch - b)) {
-                throw new Error(t("deepl_incomplete"));
-            }
-            for (var k = 0; k < parsedObj.translations.length; k++) {
-                translated.push(normalizeTranslatedXML(parsedObj.translations[k].text));
-            }
-        } catch (e) {
-            if (e.message === "CANCELLED") throw e;
-            throw new Error(e.message && e.message.indexOf("DeepL") === 0 ? e.message : t("deepl_connection_error", { message: (e.message || "Request failed.") }));
+            finally { try { payloadFile.remove(); } catch(e){} }
         }
-        finally { try { payloadFile.remove(); } catch(e){} }
-        b = endBatch;
     }
     return translated;
 }
@@ -10265,64 +10337,58 @@ function translateBatchDeepLPlain(textsArray, targetLangCode, overStartPct, over
         var currentTaskPct = 20 + Math.round(batchPct * 60);
         
         var currentOverPct = overStartPct ? (overStartPct + (batchPct * (overEndPct - overStartPct) * 0.8)) : null;
-        
-        var payloadStr = "target_lang=" + targetLangCode;
-        if (formalitySetting === "more" || formalitySetting === "less") {
-            payloadStr += "&formality=" + formalitySetting;
-        }
-        
-        var endBatch = b;
-        var currentPayloadLen = payloadStr.length;
-        var MAX_PAYLOAD_LEN = 100000;
-        var MAX_BATCH_SIZE = 25;
-        
-        for (var j = b; j < textsArray.length && (j - b) < MAX_BATCH_SIZE; j++) {
-            var safeText = textsArray[j];
-            if (safeText === null || safeText === undefined) safeText = "";
-            safeText = String(safeText).replace(/'/g, "'\\''");
-            var addedStr = "&text=" + encodeURIComponent(safeText);
-            if (j > b && (currentPayloadLen + addedStr.length > MAX_PAYLOAD_LEN)) {
-                break;
-            }
-            currentPayloadLen += addedStr.length;
-            endBatch = j + 1;
-            payloadStr += addedStr;
-        }
-        
-        updateProgress(currentTaskPct, t("deepl_request_text_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
-        
-        var payloadFile = new File(Folder.temp + "/dl_pay_" + new Date().getTime() + ".txt");
-        payloadFile.encoding = "UTF-8";
-        payloadFile.open("w");
-        payloadFile.write(payloadStr);
-        payloadFile.close();
-        try {
-            var resultJSON = "";
-            if (File.fs === "Macintosh") {
-                var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
-                resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
-            } else {
-                throw new Error(t("deepl_windows_plain_not_implemented"));
-            }
-            var parsedObj = null;
+
+        var maxPayloadLen = 45000;
+        var maxBatchSize = 10;
+
+        while (true) {
+            var batchBuild = buildDeepLBatchPayload(textsArray, b, targetLangCode, false, maxPayloadLen, maxBatchSize);
+            var payloadStr = batchBuild.payloadStr;
+            var endBatch = batchBuild.endBatch;
+
+            updateProgress(currentTaskPct, t("deepl_request_text_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
+            
+            var payloadFile = new File(Folder.temp + "/dl_pay_" + new Date().getTime() + ".txt");
+            payloadFile.encoding = "UTF-8";
+            payloadFile.open("w");
+            payloadFile.write(payloadStr);
+            payloadFile.close();
             try {
-                parsedObj = eval("(" + resultJSON + ")");
-            } catch (parseError) {
-                throw new Error(t("deepl_parse_error"));
+                var resultJSON = "";
+                if (File.fs === "Macintosh") {
+                    var curlCmd = "curl -sS -X POST '" + endpoint + "' -H 'Authorization: DeepL-Auth-Key " + apiKey + "' -d @'" + payloadFile.fsName + "'";
+                    resultJSON = app.doScript('do shell script "' + curlCmd.replace(/"/g, '\\"') + '"', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+                } else {
+                    throw new Error(t("deepl_windows_plain_not_implemented"));
+                }
+                var parsedObj = null;
+                try {
+                    parsedObj = eval("(" + resultJSON + ")");
+                } catch (parseError) {
+                    throw new Error(t("deepl_parse_error"));
+                }
+                if (!parsedObj || !parsedObj.translations) {
+                    throw new Error(t("deepl_error_prefix", { message: extractDeepLFailureMessage(resultJSON, parsedObj) }));
+                }
+                if (parsedObj.translations.length !== (endBatch - b)) {
+                    throw new Error(t("deepl_incomplete"));
+                }
+                for (var k = 0; k < parsedObj.translations.length; k++) translated.push(parsedObj.translations[k].text);
+                b = endBatch;
+                break;
+            } catch (e) {
+                if (e.message === "CANCELLED") throw e;
+
+                if (isDeepLPayloadTooLargeMessage(e.message) && (endBatch - b) > 1) {
+                    maxBatchSize = Math.max(1, Math.floor((endBatch - b) / 2));
+                    maxPayloadLen = Math.max(12000, Math.floor(maxPayloadLen * 0.7));
+                    continue;
+                }
+
+                throw new Error(e.message && e.message.indexOf("DeepL") === 0 ? e.message : t("deepl_connection_error", { message: (e.message || "Request failed.") }));
             }
-            if (!parsedObj || !parsedObj.translations) {
-                throw new Error(t("deepl_error_prefix", { message: extractDeepLFailureMessage(resultJSON, parsedObj) }));
-            }
-            if (parsedObj.translations.length !== (endBatch - b)) {
-                throw new Error(t("deepl_incomplete"));
-            }
-            for (var k = 0; k < parsedObj.translations.length; k++) translated.push(parsedObj.translations[k].text);
-        } catch (e) {
-            if (e.message === "CANCELLED") throw e;
-            throw new Error(e.message && e.message.indexOf("DeepL") === 0 ? e.message : t("deepl_connection_error", { message: (e.message || "Request failed.") }));
+            finally { try { payloadFile.remove(); } catch(e){} }
         }
-        finally { try { payloadFile.remove(); } catch(e){} }
-        b = endBatch;
     }
     return translated;
 }
