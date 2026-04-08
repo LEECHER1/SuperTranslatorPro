@@ -2967,7 +2967,7 @@ function openGlossaryEditorDialog(currentPath) {
             return { group: fieldGroup, label: label, input: input };
         }
 
-        var languageChunkSize = 9;
+        var languageChunkSize = 6;
         for (var chunkStart = 0, tabIndex = 1; chunkStart < languageHeaders.length; chunkStart += languageChunkSize, tabIndex++) {
             var chunkHeaders = languageHeaders.slice(chunkStart, chunkStart + languageChunkSize);
             var tab = languageTabs.add("tab", undefined, t("glossary_editor_tab_languages", { index: tabIndex }));
@@ -2994,8 +2994,8 @@ function openGlossaryEditorDialog(currentPath) {
                     var field = createGlossaryEditorField(
                         chunkRowGroup,
                         headerName + " (" + getLocalizedLanguageName(headerName) + ")",
-                        true,
-                        56
+                        false,
+                        22
                     );
                     detailInputsByKey[headerKey] = field.input;
                 }
@@ -3099,9 +3099,9 @@ function openGlossaryEditorDialog(currentPath) {
                 dialogHeight = bounds[3] - bounds[1];
             } catch (boundsErr) {}
 
-            var contentHeight = Math.max(200, dialogHeight - 250);
-            var listHeight = Math.max(120, contentHeight - 70);
-            var tabsHeight = Math.max(80, contentHeight - 180);
+            var contentHeight = Math.max(180, dialogHeight - 255);
+            var listHeight = Math.max(110, contentHeight - 65);
+            var tabsHeight = Math.max(65, contentHeight - 165);
             var detailWidth = Math.max(380, dialogWidth - 320);
             var metaWidth = Math.max(360, detailWidth - 90);
             var fieldWidth = Math.max(110, Math.floor((detailWidth - 70) / 3));
@@ -3133,8 +3133,8 @@ function openGlossaryEditorDialog(currentPath) {
             try { infoInput.preferredSize = [metaWidth, 30]; } catch (infoSizeErr) {}
             try { infoHelpText.preferredSize.width = metaWidth; } catch (infoHelpErr) {}
             try {
-                languagesPanel.minimumSize.height = tabsHeight + 36;
-                languagesPanel.maximumSize.height = tabsHeight + 36;
+                languagesPanel.minimumSize.height = tabsHeight + 34;
+                languagesPanel.maximumSize.height = tabsHeight + 34;
             } catch (languagesPanelHeightErr) {}
             try { languageTabs.preferredSize = [Math.max(360, detailWidth - 30), tabsHeight]; } catch (tabsSizeErr) {}
 
