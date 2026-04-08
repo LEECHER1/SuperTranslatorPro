@@ -2805,7 +2805,7 @@ function openGlossaryEditorDialog(currentPath) {
             sourceLanguageLabels.push("DE (" + getLocalizedLanguageName("DE") + ")");
         }
 
-        var dlg = new Window("dialog", t("glossary_editor_title"), undefined, { resizeable: true });
+        var dlg = new Window("dialog", t("glossary_editor_title"), undefined, { resizeable: false });
         dlg.orientation = "column";
         dlg.alignChildren = ["fill", "top"];
         dlg.spacing = 10;
@@ -3301,17 +3301,10 @@ function openGlossaryEditorDialog(currentPath) {
             if (hasUnsavedGlossaryChanges() && !confirm(t("glossary_editor_discard_confirm"))) return false;
             return true;
         };
-        dlg.onShow = function() {
-            centerAndFitWindowOnBestScreen(dlg, 1120, 760, myWindow, { margin: 20 });
-        };
-        dlg.onResizing = dlg.onResize = function() {
-            this.layout.resize();
-            keepWindowWithinBestScreen(dlg, myWindow, 20);
-        };
 
         rebuildEntryList(editorState.entries.length > 0 ? editorState.entries[0].id : 0);
 
-        centerAndFitWindowOnBestScreen(dlg, 1120, 760, myWindow, { margin: 20 });
+        centerAndFitWindowOnBestScreen(dlg, 1120, 760, myWindow, { margin: 20, lockSize: true });
         var dialogResult = dlg.show();
         if (dialogAction === "reload" || dialogResult === 2) continue;
         return result;
