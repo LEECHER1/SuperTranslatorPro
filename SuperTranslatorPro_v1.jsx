@@ -2380,6 +2380,8 @@ function loadBestCSVRowsFromPath(path) {
 
     var rows = null;
     var bestScore = 999999;
+    var bestSeparator = ";";
+    var bestEncoding = "UTF-8";
     var encodings = ["UTF-8", "CP1252", "Macintosh", "UTF-16", "UTF-16LE", "UTF-16BE", ""];
     for (var encIdx = 0; encIdx < encodings.length; encIdx++) {
         var candidateContent = tryReadCSVContentStable(normalizedPath, encodings[encIdx], 3);
@@ -2390,11 +2392,13 @@ function loadBestCSVRowsFromPath(path) {
         if (candidateRows.length >= 2 && candidateRows[0] && candidateRows[0].length >= 2 && candidateScore < bestScore) {
             bestScore = candidateScore;
             rows = candidateRows;
+            bestSeparator = candidateSep;
+            bestEncoding = encodings[encIdx] || "";
         }
     }
 
     if (!rows || rows.length < 2) return { ok: false, path: normalizedPath };
-    return { ok: true, rows: rows, path: normalizedPath };
+    return { ok: true, rows: rows, path: normalizedPath, separator: bestSeparator, encoding: bestEncoding };
 }
 
 function loadGlossaryRowsState(path) {
@@ -2481,6 +2485,738 @@ function writeGlossaryContentAtomically(path, content, options) {
             try { backupFile.copy(targetFile.fsName); } catch (restoreErr) {}
         }
         return false;
+    }
+}
+
+function trimGlossaryEditorValue(value) {
+    return sanitizeCSVContent(value).replace(/^\s+|\s+$/g, "");
+}
+
+function normalizeGlossaryHeaderKey(header) {
+    return trimGlossaryEditorValue(header).toUpperCase();
+}
+
+function cloneGlossaryEditorRow(row, targetLength) {
+    var length = targetLength || (row ? row.length : 0);
+    var clone = [];
+    for (var i = 0; i < length; i++) {
+        clone.push((row && i < row.length) ? sanitizeCSVContent(row[i]) : "");
+    }
+    return clone;
+}
+
+function createBlankGlossaryEditorRow(length) {
+    var row = [];
+    for (var i = 0; i < length; i++) row.push("");
+    return row;
+}
+
+function findGlossaryHeaderIndex(headers, targetKey) {
+    var normalizedTarget = normalizeGlossaryHeaderKey(targetKey);
+    for (var i = 0; i < headers.length; i++) {
+        if (normalizeGlossaryHeaderKey(headers[i]) === normalizedTarget) return i;
+    }
+    return -1;
+}
+
+function getFirstNonEmptyGlossaryRowValue(row) {
+    if (!row) return "";
+    for (var i = 0; i < row.length; i++) {
+        var value = trimGlossaryEditorValue(row[i]);
+        if (value !== "") return value;
+    }
+    return "";
+}
+
+function buildGlossaryEditorHeaders(rows) {
+    var headers = [];
+    var seen = {};
+    var sourceHeaders = (rows && rows.length > 0) ? rows[0] : [];
+    var preferredHeaders = ["_SOURCE", "_INFO", "_FLAGS", "_ALIASES"];
+
+    function addHeaderValue(value) {
+        var text = trimGlossaryEditorValue(value);
+        var key = normalizeGlossaryHeaderKey(text);
+        if (text === "" || key === "" || seen[key]) return;
+        headers.push(text);
+        seen[key] = true;
+    }
+
+    for (var i = 0; i < sourceHeaders.length; i++) addHeaderValue(sourceHeaders[i]);
+    for (var j = 0; j < preferredHeaders.length; j++) addHeaderValue(preferredHeaders[j]);
+    if (!seen.DE) addHeaderValue("DE");
+
+    if (headers.length === 0) {
+        headers = ["_SOURCE", "_INFO", "_FLAGS", "_ALIASES"].concat(getSupportedGlossaryLanguageHeaders());
+    }
+    return headers;
+}
+
+function getGlossaryEditorStaticRows(rows, headerLength) {
+    var staticRows = [];
+    for (var i = 1; i < rows.length; i++) {
+        var normalizedRow = cloneGlossaryEditorRow(rows[i], headerLength);
+        var firstNonEmpty = getFirstNonEmptyGlossaryRowValue(normalizedRow);
+        if (firstNonEmpty !== "" && isGlossaryCommentRow(firstNonEmpty)) staticRows.push(normalizedRow);
+    }
+    return staticRows;
+}
+
+function getGlossaryEditorSourceLangFromRow(headers, row) {
+    var sourceIdx = findGlossaryHeaderIndex(headers, "_SOURCE");
+    var sourceLang = "DE";
+    if (sourceIdx >= 0) {
+        var sourceCandidate = normalizeGlossaryLanguageCode(row[sourceIdx]);
+        if (isSupportedGlossaryLanguageHeader(sourceCandidate)) sourceLang = sourceCandidate;
+    }
+    return sourceLang;
+}
+
+function getGlossaryEditorSourceTextFromRow(headers, row, sourceLang) {
+    var preferredSource = normalizeGlossaryLanguageCode(sourceLang || "DE");
+    var sourceIdx = findGlossaryHeaderIndex(headers, preferredSource);
+    if (sourceIdx >= 0) {
+        var sourceText = trimGlossaryEditorValue(row[sourceIdx]);
+        if (sourceText !== "") return sourceText;
+    }
+
+    if (preferredSource !== "DE") {
+        var deIdx = findGlossaryHeaderIndex(headers, "DE");
+        if (deIdx >= 0) {
+            var fallbackDe = trimGlossaryEditorValue(row[deIdx]);
+            if (fallbackDe !== "") return fallbackDe;
+        }
+    }
+
+    for (var i = 0; i < headers.length; i++) {
+        if (!isSupportedGlossaryLanguageHeader(headers[i])) continue;
+        var value = trimGlossaryEditorValue(row[i]);
+        if (value !== "") return value;
+    }
+    return "";
+}
+
+function getGlossaryEditorInfoTextFromRow(headers, row) {
+    var infoHeaders = ["_INFO", "_NOTE", "_NOTES", "_COMMENT", "_COMMENTS"];
+    for (var i = 0; i < infoHeaders.length; i++) {
+        var idx = findGlossaryHeaderIndex(headers, infoHeaders[i]);
+        if (idx < 0) continue;
+        var value = trimGlossaryEditorValue(row[idx]);
+        if (value !== "") return value;
+    }
+    return "";
+}
+
+function buildGlossaryEditorSearchText(row) {
+    var parts = [];
+    for (var i = 0; i < row.length; i++) {
+        var value = trimGlossaryEditorValue(row[i]);
+        if (value !== "") parts.push(value.toLowerCase());
+    }
+    return parts.join(" ");
+}
+
+function buildGlossaryEditorEntryLabel(entry) {
+    var sourceLabel = entry.sourceText !== "" ? entry.sourceText : "(" + entry.sourceLang + ")";
+    var compactSource = sourceLabel.replace(/\s+/g, " ");
+    var compactInfo = String(entry.infoText || "").replace(/\s+/g, " ");
+    var label = compactSource;
+    if (entry.sourceLang && entry.sourceLang !== "DE") label += " [" + entry.sourceLang + "]";
+    if (compactInfo !== "") label += " | " + compactInfo;
+    return label;
+}
+
+function refreshGlossaryEditorEntry(entry, headers) {
+    entry.row = cloneGlossaryEditorRow(entry.row, headers.length);
+    entry.sourceLang = getGlossaryEditorSourceLangFromRow(headers, entry.row);
+    entry.sourceText = getGlossaryEditorSourceTextFromRow(headers, entry.row, entry.sourceLang);
+    entry.infoText = getGlossaryEditorInfoTextFromRow(headers, entry.row);
+    entry.searchText = buildGlossaryEditorSearchText(entry.row);
+    entry.label = buildGlossaryEditorEntryLabel(entry);
+}
+
+function buildGlossaryEditorEntries(headers, rows) {
+    var entries = [];
+    var nextId = 1;
+    for (var i = 1; i < rows.length; i++) {
+        var normalizedRow = cloneGlossaryEditorRow(rows[i], headers.length);
+        var firstNonEmpty = getFirstNonEmptyGlossaryRowValue(normalizedRow);
+        if (firstNonEmpty === "" || isGlossaryCommentRow(firstNonEmpty)) continue;
+        var entry = { id: nextId++, row: normalizedRow };
+        refreshGlossaryEditorEntry(entry, headers);
+        entries.push(entry);
+    }
+    return { entries: entries, nextId: nextId };
+}
+
+function buildGlossaryEditorState(path) {
+    var state = loadGlossaryRowsState(path);
+    if (!state.ok) return state;
+
+    var headers = buildGlossaryEditorHeaders(state.rows || []);
+    var builtEntries = buildGlossaryEditorEntries(headers, state.rows || []);
+    return {
+        ok: true,
+        path: state.path,
+        source: state.source,
+        primaryPath: state.primaryPath,
+        separator: state.separator || ";",
+        encoding: state.encoding || "UTF-8",
+        headers: headers,
+        staticRows: getGlossaryEditorStaticRows(state.rows || [], headers.length),
+        entries: builtEntries.entries,
+        nextId: builtEntries.nextId
+    };
+}
+
+function buildGlossaryCSVContentFromRows(rows, separator) {
+    var lines = [];
+    var csvSeparator = separator || ";";
+    for (var i = 0; i < rows.length; i++) {
+        var lineParts = [];
+        for (var j = 0; j < rows[i].length; j++) {
+            lineParts.push(escapeCSVField(rows[i][j], csvSeparator));
+        }
+        lines.push(lineParts.join(csvSeparator));
+    }
+    return "\uFEFF" + lines.join("\r\n") + "\r\n";
+}
+
+function buildGlossaryEditorCSVContent(editorState) {
+    var rows = [cloneGlossaryEditorRow(editorState.headers, editorState.headers.length)];
+    for (var i = 0; i < editorState.staticRows.length; i++) {
+        rows.push(cloneGlossaryEditorRow(editorState.staticRows[i], editorState.headers.length));
+    }
+    for (var j = 0; j < editorState.entries.length; j++) {
+        if (!editorState.entries[j] || !editorState.entries[j].row) continue;
+        var normalizedRow = cloneGlossaryEditorRow(editorState.entries[j].row, editorState.headers.length);
+        if (getFirstNonEmptyGlossaryRowValue(normalizedRow) === "") continue;
+        rows.push(normalizedRow);
+    }
+    return buildGlossaryCSVContentFromRows(rows, editorState.separator || ";");
+}
+
+function saveGlossaryEditorState(editorState) {
+    var normalizedPath = normalizeExplicitFilePath(editorState.path);
+    if (normalizedPath === "") return false;
+
+    var lockHandle = acquireGlossaryLock(normalizedPath, CSV_LOCK_TIMEOUT_MS);
+    if (!lockHandle) {
+        alert(t("glossary_busy_warning"));
+        return false;
+    }
+
+    var success = false;
+    try {
+        success = writeGlossaryContentAtomically(normalizedPath, buildGlossaryEditorCSVContent(editorState));
+    } finally {
+        releaseGlossaryLock(lockHandle);
+    }
+
+    if (!success) alert(t("glossary_write_warning"));
+    return success;
+}
+
+function openGlossaryEditorDialog(currentPath) {
+    var resolvedPath = resolveCSVPath(currentPath);
+    if (!resolvedPath || resolvedPath === "") {
+        var chosenPath = promptForGlossaryPath(currentPath || "", true);
+        if (!chosenPath || chosenPath === "") {
+            alert(t("glossary_editor_no_path"));
+            return { saved: false, path: currentPath || "" };
+        }
+        resolvedPath = resolveCSVPath(chosenPath) || chosenPath;
+    }
+
+    var result = { saved: false, path: resolvedPath };
+
+    while (true) {
+        var editorState = buildGlossaryEditorState(resolvedPath);
+        if (!editorState.ok) {
+            alert(t("glossary_editor_load_failed"));
+            return result;
+        }
+
+        var languageHeaders = [];
+        var extraHeaders = [];
+        for (var headerIdx = 0; headerIdx < editorState.headers.length; headerIdx++) {
+            var headerKey = normalizeGlossaryHeaderKey(editorState.headers[headerIdx]);
+            if (isSupportedGlossaryLanguageHeader(headerKey)) languageHeaders.push(editorState.headers[headerIdx]);
+            else if (headerKey !== "_SOURCE" && headerKey !== "_INFO" && headerKey !== "_FLAGS" && headerKey !== "_ALIASES") extraHeaders.push(editorState.headers[headerIdx]);
+        }
+
+        var sourceLanguageOptions = [];
+        var sourceLanguageLabels = [];
+        var sourceLanguageSeen = {};
+        for (var langIdx = 0; langIdx < languageHeaders.length; langIdx++) {
+            var langCode = normalizeGlossaryLanguageCode(languageHeaders[langIdx]);
+            if (langCode === "" || sourceLanguageSeen[langCode]) continue;
+            sourceLanguageSeen[langCode] = true;
+            sourceLanguageOptions.push(langCode);
+            sourceLanguageLabels.push(langCode + " (" + getLocalizedLanguageName(langCode) + ")");
+        }
+        if (sourceLanguageOptions.length === 0) {
+            sourceLanguageOptions.push("DE");
+            sourceLanguageLabels.push("DE (" + getLocalizedLanguageName("DE") + ")");
+        }
+
+        var dlg = new Window("dialog", t("glossary_editor_title"), undefined, { resizeable: true });
+        dlg.orientation = "column";
+        dlg.alignChildren = ["fill", "top"];
+        dlg.spacing = 10;
+        dlg.minimumSize = [980, 700];
+        dlg.preferredSize = [1120, 760];
+
+        var introText = dlg.add("statictext", undefined, t("glossary_editor_intro"), { multiline: true });
+        introText.preferredSize.width = 1040;
+
+        var pathGroup = dlg.add("group");
+        pathGroup.alignment = "fill";
+        pathGroup.alignChildren = ["left", "center"];
+        pathGroup.add("statictext", undefined, t("glossary_editor_path"));
+        var pathInput = pathGroup.add("edittext", undefined, editorState.path, { readonly: true });
+        pathInput.alignment = ["fill", "center"];
+        pathInput.characters = 90;
+
+        var contentGroup = dlg.add("group");
+        contentGroup.orientation = "row";
+        contentGroup.alignChildren = ["fill", "fill"];
+        contentGroup.alignment = "fill";
+        contentGroup.spacing = 10;
+
+        var listPanel = contentGroup.add("panel", undefined, t("glossary_editor_entries"));
+        listPanel.orientation = "column";
+        listPanel.alignChildren = ["fill", "top"];
+        listPanel.alignment = ["left", "fill"];
+        listPanel.margins = 12;
+        listPanel.spacing = 8;
+        listPanel.preferredSize.width = 330;
+
+        var searchGroup = listPanel.add("group");
+        searchGroup.alignment = "fill";
+        searchGroup.alignChildren = ["left", "center"];
+        searchGroup.add("statictext", undefined, t("glossary_editor_search"));
+        var searchInput = searchGroup.add("edittext", undefined, "");
+        searchInput.alignment = ["fill", "center"];
+        searchInput.characters = 22;
+
+        var entryList = listPanel.add("listbox", undefined, [], { multiselect: false });
+        entryList.alignment = "fill";
+        entryList.preferredSize = [300, 500];
+
+        var listInfoText = listPanel.add("statictext", undefined, "", { multiline: true });
+        listInfoText.preferredSize.width = 300;
+
+        var listButtonGroup = listPanel.add("group");
+        listButtonGroup.alignment = "fill";
+        listButtonGroup.spacing = 8;
+        var btnNewEntry = listButtonGroup.add("button", undefined, t("glossary_editor_new"));
+        btnNewEntry.preferredSize = [90, 28];
+        var btnDeleteEntry = listButtonGroup.add("button", undefined, t("glossary_editor_delete"));
+        btnDeleteEntry.preferredSize = [90, 28];
+        var btnReloadEntries = listButtonGroup.add("button", undefined, t("glossary_editor_reload"));
+        btnReloadEntries.preferredSize = [110, 28];
+
+        var detailPanel = contentGroup.add("panel", undefined, t("glossary_editor_details"));
+        detailPanel.orientation = "column";
+        detailPanel.alignChildren = ["fill", "top"];
+        detailPanel.alignment = "fill";
+        detailPanel.margins = 12;
+        detailPanel.spacing = 10;
+
+        var metaPanel = detailPanel.add("panel", undefined, t("glossary_editor_details"));
+        metaPanel.orientation = "column";
+        metaPanel.alignChildren = ["fill", "top"];
+        metaPanel.margins = 12;
+        metaPanel.spacing = 8;
+
+        var sourceRow = metaPanel.add("group");
+        sourceRow.alignment = "fill";
+        sourceRow.alignChildren = ["left", "center"];
+        sourceRow.add("statictext", undefined, t("glossary_editor_source_language"));
+        var sourceLanguageDropdown = sourceRow.add("dropdownlist", undefined, sourceLanguageLabels);
+        sourceLanguageDropdown.preferredSize.width = 260;
+
+        metaPanel.add("statictext", undefined, t("glossary_editor_flags"));
+        var flagsInput = metaPanel.add("edittext", undefined, "");
+        flagsInput.alignment = "fill";
+        flagsInput.characters = 40;
+
+        metaPanel.add("statictext", undefined, t("glossary_editor_aliases"));
+        var aliasesInput = metaPanel.add("edittext", undefined, "");
+        aliasesInput.alignment = "fill";
+        aliasesInput.characters = 40;
+
+        metaPanel.add("statictext", undefined, t("glossary_editor_info"));
+        var infoInput = metaPanel.add("edittext", undefined, "", { multiline: true, scrolling: true });
+        infoInput.alignment = "fill";
+        infoInput.preferredSize = [680, 72];
+
+        var languagesPanel = detailPanel.add("panel", undefined, t("glossary_editor_languages"));
+        languagesPanel.orientation = "column";
+        languagesPanel.alignChildren = ["fill", "fill"];
+        languagesPanel.margins = 12;
+        languagesPanel.spacing = 8;
+        languagesPanel.alignment = "fill";
+
+        var languageTabs = languagesPanel.add("tabbedpanel");
+        languageTabs.alignment = "fill";
+        languageTabs.preferredSize = [700, 360];
+
+        var detailInputsByKey = {};
+        detailInputsByKey._FLAGS = flagsInput;
+        detailInputsByKey._ALIASES = aliasesInput;
+        detailInputsByKey._INFO = infoInput;
+
+        function createGlossaryEditorField(parent, labelText, multiline, preferredHeight) {
+            var fieldGroup = parent.add("group");
+            fieldGroup.orientation = "column";
+            fieldGroup.alignChildren = ["fill", "top"];
+            fieldGroup.alignment = "fill";
+            var label = fieldGroup.add("statictext", undefined, labelText);
+            var options = multiline ? { multiline: true, scrolling: true } : undefined;
+            var input = fieldGroup.add("edittext", undefined, "", options);
+            input.alignment = "fill";
+            if (multiline) input.preferredSize = [300, preferredHeight || 54];
+            else input.characters = 22;
+            return { group: fieldGroup, label: label, input: input };
+        }
+
+        var languageChunkSize = 8;
+        for (var chunkStart = 0, tabIndex = 1; chunkStart < languageHeaders.length; chunkStart += languageChunkSize, tabIndex++) {
+            var chunkHeaders = languageHeaders.slice(chunkStart, chunkStart + languageChunkSize);
+            var tab = languageTabs.add("tab", undefined, t("glossary_editor_tab_languages", { index: tabIndex }));
+            tab.orientation = "column";
+            tab.alignChildren = ["fill", "top"];
+            tab.spacing = 8;
+
+            for (var chunkRow = 0; chunkRow < chunkHeaders.length; chunkRow += 2) {
+                var chunkRowGroup = tab.add("group");
+                chunkRowGroup.orientation = "row";
+                chunkRowGroup.alignChildren = ["fill", "top"];
+                chunkRowGroup.alignment = "fill";
+                chunkRowGroup.spacing = 10;
+
+                for (var chunkCol = 0; chunkCol < 2; chunkCol++) {
+                    var headerPos = chunkRow + chunkCol;
+                    if (headerPos >= chunkHeaders.length) {
+                        var spacerGroup = chunkRowGroup.add("group");
+                        spacerGroup.alignment = "fill";
+                        continue;
+                    }
+                    var headerName = chunkHeaders[headerPos];
+                    var headerKey = normalizeGlossaryHeaderKey(headerName);
+                    var field = createGlossaryEditorField(
+                        chunkRowGroup,
+                        headerName + " (" + getLocalizedLanguageName(headerName) + ")",
+                        true,
+                        56
+                    );
+                    detailInputsByKey[headerKey] = field.input;
+                }
+            }
+        }
+        if (languageTabs.children.length > 0) languageTabs.selection = 0;
+
+        var extraPanel = detailPanel.add("panel", undefined, t("glossary_editor_more_fields"));
+        extraPanel.orientation = "column";
+        extraPanel.alignChildren = ["fill", "top"];
+        extraPanel.margins = 12;
+        extraPanel.spacing = 8;
+        extraPanel.alignment = "fill";
+
+        for (var extraIdx = 0; extraIdx < extraHeaders.length; extraIdx++) {
+            var extraHeader = extraHeaders[extraIdx];
+            var extraKey = normalizeGlossaryHeaderKey(extraHeader);
+            var extraField = createGlossaryEditorField(
+                extraPanel,
+                extraHeader,
+                /^_(INFO|NOTE|NOTES|COMMENT|COMMENTS)$/i.test(extraKey),
+                54
+            );
+            detailInputsByKey[extraKey] = extraField.input;
+        }
+
+        if (extraHeaders.length === 0) {
+            extraPanel.visible = false;
+            extraPanel.maximumSize = [0, 0];
+            extraPanel.minimumSize = [0, 0];
+            extraPanel.preferredSize = [0, 0];
+        }
+
+        var footerGroup = dlg.add("group");
+        footerGroup.alignment = "fill";
+        footerGroup.alignChildren = ["fill", "center"];
+        footerGroup.spacing = 10;
+
+        var statusText = footerGroup.add("statictext", undefined, "", { multiline: true });
+        statusText.alignment = "fill";
+        statusText.preferredSize.width = 620;
+
+        var btnClose = footerGroup.add("button", undefined, t("glossary_editor_close"), { name: "cancel" });
+        btnClose.preferredSize = [120, 28];
+        var btnSave = footerGroup.add("button", undefined, t("glossary_editor_save"), { name: "ok" });
+        btnSave.preferredSize = [140, 30];
+
+        var filteredEntryIds = [];
+        var isSyncingDetailUI = false;
+        var pendingDetailChanges = false;
+        var editorDirty = false;
+        var allowDialogClose = false;
+        var dialogAction = "close";
+        var activeEntryId = 0;
+
+        function findEntryById(entryId) {
+            for (var i = 0; i < editorState.entries.length; i++) {
+                if (editorState.entries[i].id === entryId) return editorState.entries[i];
+            }
+            return null;
+        }
+
+        function getSelectedEntry() {
+            if (!entryList.selection || !filteredEntryIds[entryList.selection.index]) return null;
+            return findEntryById(filteredEntryIds[entryList.selection.index]);
+        }
+
+        function getActiveEntry() {
+            return activeEntryId ? findEntryById(activeEntryId) : null;
+        }
+
+        function hasUnsavedGlossaryChanges() {
+            return editorDirty || pendingDetailChanges;
+        }
+
+        function getSelectedSourceLanguageCode() {
+            var selectedIndex = (sourceLanguageDropdown.selection && sourceLanguageDropdown.selection.index >= 0) ? sourceLanguageDropdown.selection.index : 0;
+            return sourceLanguageOptions[selectedIndex] || "DE";
+        }
+
+        function refreshStatusText() {
+            var visibleCount = filteredEntryIds.length;
+            var totalCount = editorState.entries.length;
+            statusText.text = t(
+                hasUnsavedGlossaryChanges() ? "glossary_editor_status_dirty" : "glossary_editor_status",
+                { visible: visibleCount, total: totalCount }
+            );
+            if (totalCount === 0) listInfoText.text = t("glossary_editor_empty_list");
+            else if (visibleCount === 0) listInfoText.text = t("glossary_editor_no_matches");
+            else listInfoText.text = "";
+        }
+
+        function setDetailControlsEnabled(isEnabled) {
+            metaPanel.enabled = !!isEnabled;
+            languagesPanel.enabled = !!isEnabled;
+            extraPanel.enabled = !!isEnabled;
+            btnDeleteEntry.enabled = !!isEnabled;
+        }
+
+        function selectSourceLanguageDropdown(languageCode) {
+            var normalized = normalizeGlossaryLanguageCode(languageCode);
+            var selectionIndex = 0;
+            for (var i = 0; i < sourceLanguageOptions.length; i++) {
+                if (sourceLanguageOptions[i] === normalized) {
+                    selectionIndex = i;
+                    break;
+                }
+            }
+            sourceLanguageDropdown.selection = selectionIndex;
+        }
+
+        function populateDetailFields(entry) {
+            isSyncingDetailUI = true;
+            if (!entry) {
+                activeEntryId = 0;
+                selectSourceLanguageDropdown("DE");
+                for (var i = 0; i < editorState.headers.length; i++) {
+                    var clearKey = normalizeGlossaryHeaderKey(editorState.headers[i]);
+                    if (clearKey === "_SOURCE") continue;
+                    if (detailInputsByKey[clearKey]) detailInputsByKey[clearKey].text = "";
+                }
+                pendingDetailChanges = false;
+                isSyncingDetailUI = false;
+                setDetailControlsEnabled(false);
+                refreshStatusText();
+                return;
+            }
+
+            activeEntryId = entry.id;
+            setDetailControlsEnabled(true);
+            for (var headerIndex = 0; headerIndex < editorState.headers.length; headerIndex++) {
+                var headerKey = normalizeGlossaryHeaderKey(editorState.headers[headerIndex]);
+                var value = entry.row[headerIndex] || "";
+                if (headerKey === "_SOURCE") {
+                    selectSourceLanguageDropdown(value);
+                } else if (detailInputsByKey[headerKey]) {
+                    detailInputsByKey[headerKey].text = value;
+                }
+            }
+            pendingDetailChanges = false;
+            isSyncingDetailUI = false;
+            refreshStatusText();
+        }
+
+        function applyDetailChangesToSelection(markDirty) {
+            if (!pendingDetailChanges) return;
+            var selectedEntry = getActiveEntry();
+            if (!selectedEntry) {
+                pendingDetailChanges = false;
+                refreshStatusText();
+                return;
+            }
+
+            var beforeSnapshot = selectedEntry.row.join("\u0001");
+            for (var headerIndex = 0; headerIndex < editorState.headers.length; headerIndex++) {
+                var headerKey = normalizeGlossaryHeaderKey(editorState.headers[headerIndex]);
+                if (headerKey === "_SOURCE") {
+                    selectedEntry.row[headerIndex] = getSelectedSourceLanguageCode();
+                } else if (detailInputsByKey[headerKey]) {
+                    selectedEntry.row[headerIndex] = trimGlossaryEditorValue(detailInputsByKey[headerKey].text);
+                }
+            }
+            refreshGlossaryEditorEntry(selectedEntry, editorState.headers);
+            pendingDetailChanges = false;
+            if (markDirty && beforeSnapshot !== selectedEntry.row.join("\u0001")) editorDirty = true;
+            refreshStatusText();
+        }
+
+        function rebuildEntryList(preferredEntryId) {
+            var filterText = trimGlossaryEditorValue(searchInput.text).toLowerCase();
+            filteredEntryIds = [];
+            entryList.removeAll();
+
+            for (var i = 0; i < editorState.entries.length; i++) {
+                var entry = editorState.entries[i];
+                if (filterText !== "" && entry.searchText.indexOf(filterText) === -1) continue;
+                filteredEntryIds.push(entry.id);
+                entryList.add("item", entry.label);
+            }
+
+            var selectionIndex = -1;
+            if (preferredEntryId) {
+                for (var idx = 0; idx < filteredEntryIds.length; idx++) {
+                    if (filteredEntryIds[idx] === preferredEntryId) {
+                        selectionIndex = idx;
+                        break;
+                    }
+                }
+            }
+            if (selectionIndex < 0 && filteredEntryIds.length > 0) selectionIndex = 0;
+
+            isSyncingDetailUI = true;
+            if (selectionIndex >= 0) entryList.selection = selectionIndex;
+            else entryList.selection = null;
+            isSyncingDetailUI = false;
+
+            populateDetailFields(getSelectedEntry());
+            refreshStatusText();
+        }
+
+        function markDetailChangesPending() {
+            if (isSyncingDetailUI) return;
+            pendingDetailChanges = true;
+            refreshStatusText();
+        }
+
+        sourceLanguageDropdown.onChange = markDetailChangesPending;
+        flagsInput.onChanging = markDetailChangesPending;
+        aliasesInput.onChanging = markDetailChangesPending;
+        infoInput.onChanging = markDetailChangesPending;
+        for (var detailKey in detailInputsByKey) {
+            if (!detailInputsByKey.hasOwnProperty(detailKey)) continue;
+            if (detailInputsByKey[detailKey] === flagsInput || detailInputsByKey[detailKey] === aliasesInput || detailInputsByKey[detailKey] === infoInput) continue;
+            detailInputsByKey[detailKey].onChanging = markDetailChangesPending;
+        }
+
+        searchInput.onChanging = function() {
+            var selectedEntry = getActiveEntry();
+            applyDetailChangesToSelection(true);
+            rebuildEntryList(selectedEntry ? selectedEntry.id : 0);
+        };
+
+        entryList.onChange = function() {
+            if (isSyncingDetailUI) return;
+            var nextEntry = getSelectedEntry();
+            applyDetailChangesToSelection(true);
+            populateDetailFields(nextEntry);
+        };
+
+        btnNewEntry.onClick = function() {
+            applyDetailChangesToSelection(true);
+            var newRow = createBlankGlossaryEditorRow(editorState.headers.length);
+            var sourceIdx = findGlossaryHeaderIndex(editorState.headers, "_SOURCE");
+            if (sourceIdx >= 0) newRow[sourceIdx] = "DE";
+            var newEntry = { id: editorState.nextId++, row: newRow };
+            refreshGlossaryEditorEntry(newEntry, editorState.headers);
+            editorState.entries.push(newEntry);
+            editorDirty = true;
+            if (trimGlossaryEditorValue(searchInput.text) !== "") searchInput.text = "";
+            rebuildEntryList(newEntry.id);
+        };
+
+        btnDeleteEntry.onClick = function() {
+            var selectedEntry = getActiveEntry();
+            if (!selectedEntry) return;
+            if (!confirm(t("glossary_editor_delete_confirm"))) return;
+
+            applyDetailChangesToSelection(true);
+
+            var selectedIndex = entryList.selection ? entryList.selection.index : -1;
+            var preferredEntryId = 0;
+            if (selectedIndex >= 0) {
+                if (selectedIndex + 1 < filteredEntryIds.length) preferredEntryId = filteredEntryIds[selectedIndex + 1];
+                else if (selectedIndex - 1 >= 0) preferredEntryId = filteredEntryIds[selectedIndex - 1];
+            }
+
+            for (var i = 0; i < editorState.entries.length; i++) {
+                if (editorState.entries[i].id !== selectedEntry.id) continue;
+                editorState.entries.splice(i, 1);
+                break;
+            }
+            editorDirty = true;
+            rebuildEntryList(preferredEntryId);
+        };
+
+        btnReloadEntries.onClick = function() {
+            if (hasUnsavedGlossaryChanges() && !confirm(t("glossary_editor_reload_confirm"))) return;
+            dialogAction = "reload";
+            allowDialogClose = true;
+            dlg.close(2);
+        };
+
+        btnSave.onClick = function() {
+            applyDetailChangesToSelection(true);
+            if (!saveGlossaryEditorState(editorState)) return;
+            alert(t("glossary_editor_saved"));
+            editorDirty = false;
+            pendingDetailChanges = false;
+            result.saved = true;
+            dialogAction = "save";
+            allowDialogClose = true;
+            dlg.close(1);
+        };
+
+        function handleEditorClose() {
+            if (pendingDetailChanges) applyDetailChangesToSelection(true);
+            if (hasUnsavedGlossaryChanges() && !confirm(t("glossary_editor_discard_confirm"))) return false;
+            dialogAction = "close";
+            allowDialogClose = true;
+            dlg.close(0);
+            return true;
+        }
+
+        btnClose.onClick = handleEditorClose;
+        dlg.onClose = function() {
+            if (allowDialogClose) return true;
+            if (pendingDetailChanges) applyDetailChangesToSelection(true);
+            if (hasUnsavedGlossaryChanges() && !confirm(t("glossary_editor_discard_confirm"))) return false;
+            return true;
+        };
+
+        rebuildEntryList(editorState.entries.length > 0 ? editorState.entries[0].id : 0);
+
+        var dialogResult = dlg.show();
+        if (dialogAction === "reload" || dialogResult === 2) continue;
+        return result;
     }
 }
 
@@ -4320,6 +5056,19 @@ btnSettings.onClick = function() {
             try { refreshSettingsOverview(); } catch (overviewErr1) {}
         }
     });
+
+    var glossaryEditorRow = dataResourcesSection.add("group");
+    glossaryEditorRow.alignment = ["left", "center"];
+    var btnGlossaryEditor = glossaryEditorRow.add("button", undefined, t("glossary_editor_button"));
+    btnGlossaryEditor.preferredSize = [220, 28];
+    btnGlossaryEditor.helpTip = t("glossary_editor_help");
+    btnGlossaryEditor.onClick = function() {
+        var editorResult = openGlossaryEditorDialog(csvInput.text);
+        if (editorResult && editorResult.path && editorResult.path !== "") {
+            csvInput.text = editorResult.path;
+            try { refreshSettingsOverview(); } catch (overviewErrGlossaryEditor) {}
+        }
+    };
 
     var tmInput = createPathInputRow(dataResourcesSection, t("memory_path"), tmPath, function() {
         var f = File.openDialog(t("memory_select"), "*.json");
