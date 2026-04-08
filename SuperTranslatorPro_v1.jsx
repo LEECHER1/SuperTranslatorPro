@@ -5131,6 +5131,23 @@ btnSettings.onClick = function() {
         return panel;
     }
 
+    function createReadonlyDeveloperField(parent, labelText, value) {
+        parent.add("statictext", undefined, labelText);
+        var input = parent.add("edittext", undefined, value, { readonly: true });
+        input.alignment = "fill";
+        input.preferredSize.width = 640;
+        return input;
+    }
+
+    function fileExistsSafe(pathValue) {
+        try {
+            var file = new File(pathValue);
+            return !!file.exists;
+        } catch (e) {
+            return false;
+        }
+    }
+
     createDialogHint(providerTab, t("settings_tab_provider_hint"));
     var providerSetupSection = createSettingsSection(providerTab, t("settings_section_provider_setup"));
     providerSetupSection.add("statictext", undefined, t("translation_provider"));
@@ -5440,18 +5457,27 @@ btnSettings.onClick = function() {
     pdfExportWebHyperlinksCheckbox.value = pdfExportWebHyperlinksSetting;
 
     createDialogHint(developerTab, t("settings_tab_developer_hint"));
-    var developerLogsSection = createSettingsSection(developerTab, t("settings_section_developer_logs"));
-    var developerLogButtonRow = developerLogsSection.add("group");
+    var developerStatusSection = createSettingsSection(developerTab, t("settings_section_developer_status"));
+    var developerStatusBox = developerStatusSection.add("edittext", undefined, "", { multiline: true, readonly: true, scrolling: true });
+    developerStatusBox.alignment = "fill";
+    developerStatusBox.preferredSize = [640, 78];
+
+    var developerActionsSection = createSettingsSection(developerTab, t("settings_section_developer_actions"));
+    var developerActionHint = developerActionsSection.add("statictext", undefined, t("settings_developer_actions_hint"), { multiline: true });
+    developerActionHint.preferredSize.width = 640;
+    var developerLogButtonRow = developerActionsSection.add("group");
     developerLogButtonRow.orientation = "row";
     developerLogButtonRow.alignment = ["left", "center"];
     developerLogButtonRow.alignChildren = ["left", "center"];
     developerLogButtonRow.spacing = 8;
     var btnLog = developerLogButtonRow.add("button", undefined, t("log_file"));
-    btnLog.preferredSize = [140, 28];
+    btnLog.preferredSize = [150, 28];
     var btnDebugLog = developerLogButtonRow.add("button", undefined, t("debug_log_file"));
-    btnDebugLog.preferredSize = [140, 28];
-    developerLogsSection.add("statictext", undefined, t("settings_log_path") + " " + logPath, { multiline: true });
-    developerLogsSection.add("statictext", undefined, t("settings_debug_log_path") + " " + debugLogPath, { multiline: true });
+    btnDebugLog.preferredSize = [150, 28];
+
+    var developerPathsSection = createSettingsSection(developerTab, t("settings_section_developer_paths"));
+    var developerLogPathView = createReadonlyDeveloperField(developerPathsSection, t("settings_log_path"), logPath);
+    var developerDebugLogPathView = createReadonlyDeveloperField(developerPathsSection, t("settings_debug_log_path"), debugLogPath);
 
     var developerDebugSection = createSettingsSection(developerTab, t("settings_section_developer_debug"));
     var debugTableRestoreCheckbox = developerDebugSection.add("checkbox", undefined, t("debug_tables_images"));
@@ -5459,6 +5485,20 @@ btnSettings.onClick = function() {
     debugTableRestoreCheckbox.helpTip = t("debug_tables_images_help");
     var debugTablesHelpText = developerDebugSection.add("statictext", undefined, t("debug_tables_images_help"), { multiline: true });
     debugTablesHelpText.preferredSize.width = 640;
+
+    function refreshDeveloperPanelUI() {
+        var logStatus = fileExistsSafe(logPath) ? t("settings_developer_file_available") : t("settings_developer_file_missing");
+        var debugLogStatus = fileExistsSafe(debugLogPath) ? t("settings_developer_file_available") : t("settings_developer_file_missing");
+        var debugStatus = debugTableRestoreCheckbox.value ? t("status_on") : t("status_off");
+        developerStatusBox.text =
+            t("settings_developer_main_log_status") + " " + logStatus + "\n" +
+            t("settings_developer_debug_log_status") + " " + debugLogStatus + "\n" +
+            t("settings_developer_debug_tables_status") + " " + debugStatus;
+        developerLogPathView.text = logPath;
+        developerDebugLogPathView.text = debugLogPath;
+    }
+    debugTableRestoreCheckbox.onClick = refreshDeveloperPanelUI;
+    refreshDeveloperPanelUI();
 
     function refreshSettingsOverview() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
@@ -5631,10 +5671,12 @@ btnSettings.onClick = function() {
     btnLog.onClick = function() {
         var f = new File(logPath);
         if (f.exists) { f.execute(); } else { alert(t("no_log_file")); }
+        try { refreshDeveloperPanelUI(); } catch (developerRefreshErr1) {}
     };
     btnDebugLog.onClick = function() {
         var f = new File(debugLogPath);
         if (f.exists) { f.execute(); } else { alert(t("no_debug_log_file")); }
+        try { refreshDeveloperPanelUI(); } catch (developerRefreshErr2) {}
     };
     btnInfo.onClick = function() {
         alert(buildAboutText(), t("about_title"));
@@ -5642,6 +5684,7 @@ btnSettings.onClick = function() {
     btnCancelSet.onClick = function() { setWin.close(); };
     setWin.onShow = function() {
         try { applySettingsDialogGeometry(true); } catch (showGeometryErr) {}
+        try { refreshDeveloperPanelUI(); } catch (showDeveloperErr) {}
         var bounds = null;
         var width = 760;
         var height = 500;
