@@ -4340,6 +4340,29 @@ function keepMainWindowStableSize() {
     } catch (e) {}
 }
 
+function centerMainWindowOnScreen() {
+    if (!myWindow) return;
+    try {
+        if ($.screens && $.screens.length > 0) {
+            var screenBounds = $.screens[0].visibleBounds || $.screens[0].bounds;
+            var screenLeft = getBoundsCoordinate(screenBounds, "left", 0, 0);
+            var screenTop = getBoundsCoordinate(screenBounds, "top", 1, 0);
+            var screenRight = getBoundsCoordinate(screenBounds, "right", 2, screenLeft + MAIN_WINDOW_WIDTH);
+            var screenBottom = getBoundsCoordinate(screenBounds, "bottom", 3, screenTop + MAIN_WINDOW_HEIGHT);
+            var left = screenLeft + Math.round(((screenRight - screenLeft) - MAIN_WINDOW_WIDTH) / 2);
+            var top = screenTop + Math.round(((screenBottom - screenTop) - MAIN_WINDOW_HEIGHT) / 2);
+            myWindow.bounds = [left, top, left + MAIN_WINDOW_WIDTH, top + MAIN_WINDOW_HEIGHT];
+            return;
+        }
+    } catch (screenErr) {}
+
+    try {
+        keepMainWindowStableSize();
+        myWindow.center();
+        keepMainWindowStableSize();
+    } catch (e) {}
+}
+
 function relayoutMainWindowContents() {
     if (!myWindow) return;
     try { myWindow.layout.layout(true); } catch (layoutErr) {}
@@ -4529,7 +4552,7 @@ myWindow.onResizing = myWindow.onResize = function() {
     try { this.layout.resize(); } catch (resizeErr) {}
 };
 myWindow.onShow = function() {
-    keepMainWindowStableSize();
+    centerMainWindowOnScreen();
     ensureMainWindowLiveRefresh();
     refreshMainWindowLiveState(true);
 };
