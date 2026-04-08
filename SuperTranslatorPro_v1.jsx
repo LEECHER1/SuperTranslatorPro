@@ -140,6 +140,7 @@ var parsedFontFallbackRulesCacheRaw = null;
 var parsedFontFallbackRulesCache = {};
 var resolvedFontFallbackFamilyCache = {};
 var fontFallbackWarningCache = {};
+var MAIN_WINDOW_LIVE_REFRESH_ENABLED = (File.fs !== "Macintosh");
 
 function getInstalledFontFamilyLookup() {
     if (installedFontFamilyLookupCache !== null) return installedFontFamilyLookupCache;
@@ -4209,6 +4210,7 @@ function refreshMainWindowLiveState(forceRefresh) {
 }
 
 function handleMainWindowIdle() {
+    if (!MAIN_WINDOW_LIVE_REFRESH_ENABLED) return;
     try {
         refreshMainWindowLiveState(false);
     } catch (e) {}
@@ -4226,6 +4228,7 @@ function stopMainWindowLiveRefresh() {
 }
 
 function ensureMainWindowLiveRefresh() {
+    if (!MAIN_WINDOW_LIVE_REFRESH_ENABLED) return;
     try {
         if (mainWindowIdleTask && mainWindowIdleTask.isValid) return;
     } catch (e) {
