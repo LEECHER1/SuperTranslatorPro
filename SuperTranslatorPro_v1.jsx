@@ -9475,12 +9475,14 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
         var translationQueue = [];
         var finalTranslations = new Array(textTargets.length);
+        var paragraphNumberingByTarget = new Array(textTargets.length);
         var tmHitCount = 0;
         var exactGlossaryHitCount = 0;
         var emptyCount = 0;
 
         for (var i = 0; i < textTargets.length; i++) {
             if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; emptyCount++; continue; }
+            paragraphNumberingByTarget[i] = collectParagraphNumberingMetadata(textTargets[i]);
 
             var sourceContents = "";
             try { sourceContents = String(textTargets[i].contents); } catch (e0) { sourceContents = ""; }
@@ -9545,7 +9547,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         updateProgress(90, t("applying_formatting"), formatPct, null);
         for (var i = 0; i < textTargets.length; i++) {
             if (cancelFlag) throw new Error("CANCELLED");
-            if (finalTranslations[i]) applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangCode);
+            if (finalTranslations[i]) applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangCode, paragraphNumberingByTarget[i]);
         }
 
         updateProgress(95, t("restoring_tables_images"), overEndPct, null);
@@ -11659,7 +11661,176 @@ function buildTextObjectXML(textObj) {
     return xmlString + "</root>";
 }
 
-function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode) {
+function getParagraphArrayFromTextObject(textObj) {
+    var paragraphs = [];
+    if (!textObj) return paragraphs;
+    try {
+        if (textObj.paragraphs && textObj.paragraphs.everyItem) paragraphs = textObj.paragraphs.everyItem().getElements();
+        else if (textObj.paragraphs) paragraphs = textObj.paragraphs;
+    } catch (e) {
+        try { paragraphs = textObj.paragraphs || []; } catch (e2) { paragraphs = []; }
+    }
+    return paragraphs || [];
+}
+
+function readParagraphNumberingState(paragraph) {
+    var entry = {
+        listType: "",
+        listName: "",
+        numberingContinue: null,
+        numberingStartAt: null,
+        numberingLevel: null,
+        numberingApplyRestartPolicy: null
+    };
+    if (!paragraph || !paragraph.isValid) return entry;
+
+    try { entry.listType = String(paragraph.bulletsAndNumberingListType || ""); } catch (e1) {}
+    try {
+        if (paragraph.appliedNumberingList && paragraph.appliedNumberingList.isValid) entry.listName = String(paragraph.appliedNumberingList.name || "");
+        else entry.listName = String(paragraph.appliedNumberingList || "");
+    } catch (e2) {}
+    try { entry.numberingContinue = !!paragraph.numberingContinue; } catch (e3) {}
+    try {
+        var startAt = Number(paragraph.numberingStartAt);
+        if (!isNaN(startAt)) entry.numberingStartAt = startAt;
+    } catch (e4) {}
+    try {
+        var level = Number(paragraph.numberingLevel);
+        if (!isNaN(level)) entry.numberingLevel = level;
+    } catch (e5) {}
+    try { entry.numberingApplyRestartPolicy = !!paragraph.numberingApplyRestartPolicy; } catch (e6) {}
+    return entry;
+}
+
+function paragraphHasNumberingState(entry) {
+    if (!entry) return false;
+    return entry.listType !== "" ||
+        entry.listName !== "" ||
+        entry.numberingContinue !== null ||
+        entry.numberingStartAt !== null ||
+        entry.numberingLevel !== null ||
+        entry.numberingApplyRestartPolicy !== null;
+}
+
+function formatParagraphNumberingStateForDebug(entry) {
+    if (!entry) return "listType=(leer)";
+    return "listType=" + (entry.listType !== "" ? entry.listType : "(leer)") +
+        " listName=" + (entry.listName !== "" ? '"' + entry.listName + '"' : "(leer)") +
+        " continue=" + (entry.numberingContinue === null ? "(null)" : String(entry.numberingContinue)) +
+        " startAt=" + (entry.numberingStartAt === null ? "(null)" : String(entry.numberingStartAt)) +
+        " level=" + (entry.numberingLevel === null ? "(null)" : String(entry.numberingLevel)) +
+        " applyRestart=" + (entry.numberingApplyRestartPolicy === null ? "(null)" : String(entry.numberingApplyRestartPolicy));
+}
+
+function getParagraphDebugSnippet(paragraph) {
+    if (!paragraph || !paragraph.isValid) return "";
+    try { return normalizeDebugSnippet(paragraph.contents, 90); } catch (e) { return ""; }
+}
+
+function compareParagraphNumberingState(expected, actual) {
+    if (!expected && !actual) return true;
+    if (!expected || !actual) return false;
+    return String(expected.listType || "") === String(actual.listType || "") &&
+        String(expected.listName || "") === String(actual.listName || "") &&
+        (expected.numberingContinue === null ? actual.numberingContinue === null : expected.numberingContinue === actual.numberingContinue) &&
+        (expected.numberingStartAt === null ? actual.numberingStartAt === null : Number(expected.numberingStartAt) === Number(actual.numberingStartAt)) &&
+        (expected.numberingLevel === null ? actual.numberingLevel === null : Number(expected.numberingLevel) === Number(actual.numberingLevel)) &&
+        (expected.numberingApplyRestartPolicy === null ? actual.numberingApplyRestartPolicy === null : expected.numberingApplyRestartPolicy === actual.numberingApplyRestartPolicy);
+}
+
+function collectParagraphNumberingMetadata(textObj) {
+    var metadata = [];
+    var paragraphs = getParagraphArrayFromTextObject(textObj);
+    var textLabel = getDebugTextTargetLabel(textObj);
+    var numberedCount = 0;
+    for (var i = 0; i < paragraphs.length; i++) {
+        var paragraph = paragraphs[i];
+        if (!paragraph || !paragraph.isValid) continue;
+
+        var entry = readParagraphNumberingState(paragraph);
+        metadata.push(entry);
+        if (paragraphHasNumberingState(entry)) {
+            numberedCount++;
+            writeDebugLog("numbering_capture target={" + textLabel + "} paragraph=" + i +
+                " " + formatParagraphNumberingStateForDebug(entry) +
+                ' text="' + getParagraphDebugSnippet(paragraph) + '"');
+        }
+    }
+    if (numberedCount > 0) {
+        writeDebugLog("numbering_capture:summary target={" + textLabel + "} paragraphs=" + paragraphs.length + " numberedParagraphs=" + numberedCount);
+    }
+    return metadata;
+}
+
+function restoreParagraphNumberingMetadata(textObj, paragraphMetadata) {
+    if (!textObj || !paragraphMetadata || paragraphMetadata.length === 0) return;
+
+    var paragraphs = getParagraphArrayFromTextObject(textObj);
+    if (!paragraphs || paragraphs.length === 0) return;
+
+    if (paragraphs.length !== paragraphMetadata.length) {
+        writeDebugLog("numbering_restore:mismatch source=" + paragraphMetadata.length + " target=" + paragraphs.length, "WARNUNG");
+    }
+
+    var applyCount = Math.min(paragraphs.length, paragraphMetadata.length);
+    var doc = app.activeDocument;
+    var textLabel = getDebugTextTargetLabel(textObj);
+    for (var i = 0; i < applyCount; i++) {
+        var paragraph = paragraphs[i];
+        var entry = paragraphMetadata[i];
+        if (!paragraph || !paragraph.isValid || !entry) continue;
+
+        if (paragraphHasNumberingState(entry)) {
+            writeDebugLog("numbering_restore:expected target={" + textLabel + "} paragraph=" + i +
+                " " + formatParagraphNumberingStateForDebug(entry) +
+                ' text="' + getParagraphDebugSnippet(paragraph) + '"');
+        }
+
+        try {
+            if (entry.listType !== "") paragraph.bulletsAndNumberingListType = ListType[entry.listType];
+        } catch (e1) {}
+        try {
+            if (entry.listName !== "") {
+                var numberingList = doc.numberingLists.itemByName(entry.listName);
+                if (numberingList && numberingList.isValid) paragraph.appliedNumberingList = numberingList;
+            }
+        } catch (e2) {}
+        try {
+            if (entry.numberingLevel !== null && entry.numberingLevel !== undefined) paragraph.numberingLevel = entry.numberingLevel;
+        } catch (e3) {}
+        try {
+            if (entry.numberingApplyRestartPolicy !== null && entry.numberingApplyRestartPolicy !== undefined) {
+                paragraph.numberingApplyRestartPolicy = entry.numberingApplyRestartPolicy;
+            }
+        } catch (e4) {}
+        try {
+            if (entry.numberingContinue !== null && entry.numberingContinue !== undefined) paragraph.numberingContinue = entry.numberingContinue;
+        } catch (e5) {}
+        try {
+            if (entry.numberingStartAt !== null && entry.numberingStartAt !== undefined) paragraph.numberingStartAt = entry.numberingStartAt;
+        } catch (e6) {}
+
+        if (paragraphHasNumberingState(entry)) {
+            var actualEntry = readParagraphNumberingState(paragraph);
+            writeDebugLog("numbering_restore:actual target={" + textLabel + "} paragraph=" + i +
+                " " + formatParagraphNumberingStateForDebug(actualEntry) +
+                ' text="' + getParagraphDebugSnippet(paragraph) + '"');
+            if (!compareParagraphNumberingState(entry, actualEntry)) {
+                writeDebugLog("numbering_restore:mismatch target={" + textLabel + "} paragraph=" + i +
+                    " expected={" + formatParagraphNumberingStateForDebug(entry) + "}" +
+                    " actual={" + formatParagraphNumberingStateForDebug(actualEntry) + "}" +
+                    ' text="' + getParagraphDebugSnippet(paragraph) + '"', "WARNUNG");
+            }
+        }
+    }
+
+    try {
+        if (textObj.parentStory && textObj.parentStory.isValid && textObj.parentStory.recompose) textObj.parentStory.recompose();
+        else if (textObj.recompose) textObj.recompose();
+    } catch (e7) {}
+}
+
+function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata) {
     if (!translatedXML || translatedXML === "") return;
     // Preserve tabs/line breaks between consecutive placeholders so inline image rows keep their original layout.
     translatedXML = normalizeTranslatedXML(translatedXML);
@@ -11731,19 +11902,25 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode) {
     }
 
     if (textFlow && textFlow.isValid) {
+        var translatedScope = null;
         try {
             if (isPartial) {
                 var normalizeEndIndex = currentIdx - 1;
                 if (normalizeEndIndex >= normalizeStartIndex) {
+                    translatedScope = textFlow.characters.itemByRange(normalizeStartIndex, normalizeEndIndex);
                     var scopeStartIndex = Math.max(0, normalizeStartIndex - 1);
                     var scopeEndIndex = Math.min(textFlow.characters.length - 1, normalizeEndIndex + 1);
                     var insertedRange = textFlow.characters.itemByRange(scopeStartIndex, scopeEndIndex);
                     normalizePostTranslationSpacing(insertedRange);
                 }
             } else {
+                translatedScope = textFlow;
                 normalizePostTranslationSpacing(textFlow);
             }
         } catch (e5) {}
+        try {
+            if (translatedScope !== null) restoreParagraphNumberingMetadata(translatedScope, paragraphNumberingMetadata);
+        } catch (e6) {}
     }
 }
 
