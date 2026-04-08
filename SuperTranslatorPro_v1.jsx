@@ -22,6 +22,7 @@ var REF_SYMBOLS_LABEL = "SuperTranslatorPRO_RefSymbols";
 var HYPERLINK_PAGE_MAP_LABEL = "SuperTranslatorPRO_HyperlinkPageMap";
 var AUTO_HYPERLINKS_LABEL = "SuperTranslatorPRO_BDAAutoHyperlinks";
 var BACK_PAGE_TRACKER_LABEL = "SuperTranslatorPRO_BackPageTracker";
+var TOC_PAGE_PREFIX_LABEL = "SuperTranslatorPRO_TOCPagePrefix";
 var UI_LANGUAGE_LABEL = "SuperTranslatorPRO_UILanguage";
 var COPYFIT_ENABLED_LABEL = "SuperTranslatorPRO_CopyfitEnabled";
 var COPYFIT_MAX_TRACKING_LABEL = "SuperTranslatorPRO_CopyfitMaxTracking";
@@ -561,6 +562,20 @@ function normalizeBackPageTrackerSetting(value) {
     return raw;
 }
 
+function sanitizeTOCPagePrefixText(value) {
+    var raw = (value === null || value === undefined) ? "" : String(value);
+    raw = raw.replace(/\r\n?/g, " ").replace(/\n/g, " ");
+    raw = raw.replace(/^\s+|\s+$/g, "");
+    raw = raw.replace(/^[\(\[\{]\s*/, "").replace(/\s*[\)\]\}]$/, "");
+    raw = raw.replace(/\s+/g, " ");
+    raw = raw.replace(/\s*[:：;,.\-–—]+\s*$/g, "");
+    return raw;
+}
+
+function normalizeTOCPagePrefixSetting(value) {
+    return sanitizeTOCPagePrefixText(value);
+}
+
 function getReferenceSymbolPairs(symbols) {
     var normalized = normalizeRefSymbols(symbols);
     var parts = normalized.split(/\s*,\s*/);
@@ -780,11 +795,20 @@ function hasTOCPageMarkerText(text) {
     return /\([^()]*\)/.test(String(text || ""));
 }
 
-function extractTOCPageSetting(text) {
+function extractTOCPageMarkerValue(text) {
     var match = String(text || "").match(/\(([^()]*)\)/);
     if (!match) return "";
-    var value = String(match[1] || "").replace(/^\s+|\s+$/g, "");
+    return String(match[1] || "").replace(/^\s+|\s+$/g, "");
+}
+
+function extractTOCPageSetting(text) {
+    var value = extractTOCPageMarkerValue(text);
     if (value === "" || /^[Xx]+$/.test(value)) return "";
+    var colonIndex = Math.max(value.lastIndexOf(":"), value.lastIndexOf("："));
+    if (colonIndex !== -1) {
+        var suffix = value.substring(colonIndex + 1).replace(/^\s+|\s+$/g, "");
+        if (suffix !== "") value = suffix;
+    }
     return value;
 }
 
@@ -1107,6 +1131,7 @@ var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) 
 var hyperlinkPageMappings = loadHyperlinkPageMappings(app.extractLabel(HYPERLINK_PAGE_MAP_LABEL) || "");
 var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
 var backPageTrackerSetting = normalizeBackPageTrackerSetting(app.extractLabel(BACK_PAGE_TRACKER_LABEL) || "©");
+var tocPagePrefixSetting = normalizeTOCPagePrefixSetting(app.extractLabel(TOC_PAGE_PREFIX_LABEL) || "");
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
 var DNT_LABEL = "SuperTranslatorPRO_DNT_Styles";
@@ -1141,6 +1166,7 @@ var germanSpellDialogLocation = null;
 var mainWindowIdleTask = null;
 var mainWindowLiveSignature = "";
 var manualLanguageDropdownExpanded = false;
+var tocPagePrefixTranslationCache = {};
 var DEEPL_TARGET_LANGUAGE_OPTIONS = [
     { code: "ACE", labelEn: "Acehnese" },
     { code: "AF", labelEn: "Afrikaans" },
@@ -5464,6 +5490,13 @@ btnSettings.onClick = function() {
     backPageTrackerInput.characters = 40;
     backPageTrackerInput.alignment = "fill";
     backPageTrackerInput.helpTip = t("back_page_tracker_help");
+    autoSection.add("statictext", undefined, t("toc_page_prefix_label"));
+    var tocPagePrefixInput = autoSection.add("edittext", undefined, tocPagePrefixSetting);
+    tocPagePrefixInput.characters = 40;
+    tocPagePrefixInput.alignment = "fill";
+    tocPagePrefixInput.helpTip = t("toc_page_prefix_help");
+    var tocPagePrefixHelpText = autoSection.add("statictext", undefined, t("toc_page_prefix_help"), { multiline: true });
+    tocPagePrefixHelpText.preferredSize.width = 640;
 
     createDialogHint(exportTab, t("settings_tab_export_hint"));
     var exportSection = createSettingsSection(exportTab, t("settings_tab_export"));
@@ -5669,6 +5702,7 @@ btnSettings.onClick = function() {
         tmPath = tmInput.text;
         refSymbolsSetting = normalizeRefSymbols(autoHyperlinkSymbolsInput.text);
         backPageTrackerSetting = normalizeBackPageTrackerSetting(backPageTrackerInput.text);
+        tocPagePrefixSetting = normalizeTOCPagePrefixSetting(tocPagePrefixInput.text);
         smartCopyfitEnabled = !!copyfitEnabledCheckbox.value;
         smartCopyfitMaxTracking = normalizeCopyfitMaxTrackingSetting(copyfitTrackingField.input.text);
         smartCopyfitMinScale = normalizeCopyfitMinScaleSetting(copyfitScaleField.input.text);
@@ -5696,6 +5730,7 @@ btnSettings.onClick = function() {
         app.insertLabel(TM_PATH_LABEL, tmPath); 
         app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
         app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
+        app.insertLabel(TOC_PAGE_PREFIX_LABEL, tocPagePrefixSetting);
         app.insertLabel(COPYFIT_ENABLED_LABEL, smartCopyfitEnabled ? "1" : "0");
         app.insertLabel(COPYFIT_MAX_TRACKING_LABEL, String(smartCopyfitMaxTracking));
         app.insertLabel(COPYFIT_MIN_SCALE_LABEL, String(smartCopyfitMinScale));
@@ -7970,7 +8005,7 @@ function runBDAMode(doc, config, preparedLegacy) {
 
     if (config.updateTOC) {
         updateProgress(8, t("bda_update_cover"), 8, t("bda_adjust_toc"));
-        updateTOCForLanguage(doc, "de", originalPages[0].name);
+        updateTOCForLanguage(doc, "de", originalPages[0].name, 8, 8);
     }
 
     var createdBackups = [];
@@ -8011,7 +8046,7 @@ function runBDAMode(doc, config, preparedLegacy) {
         }
         
         if (config.updateTOC) {
-            updateTOCForLanguage(doc, task.code, startPageStr);
+            updateTOCForLanguage(doc, task.code, startPageStr, overallStartPct, overallEndPct);
         }
 
         try {
@@ -8844,6 +8879,7 @@ function createFeedbackReport() {
             reportFile.writeln("CSV-Pfad: " + (csvPath || "(leer)"));
             reportFile.writeln("TM-Pfad: " + (tmPath || "(leer)"));
             reportFile.writeln("Referenz-Symbole: " + (refSymbolsSetting || "[]"));
+            reportFile.writeln("Titelseiten-Praefix vor Seitenzahl: " + (tocPagePrefixSetting || "(leer)"));
             reportFile.writeln("Formality: " + (formalitySetting || "default"));
             reportFile.writeln("DNT Styles: " + (dntStyles || "(leer)"));
             reportFile.writeln("Copyfit aktiv: " + (smartCopyfitEnabled ? "Ja" : "Nein"));
@@ -9023,7 +9059,49 @@ function syncMasterTextChanges(doc) {
 }
 
 // --- 5B. TOC RÖNTGEN-UPDATE LOGIK ---
-function updateTOCForLanguage(doc, langCode, newStartPage) {
+function getTOCPagePrefixTranslationCacheKey(langCode, sourcePrefix, providerId) {
+    return normalizeTranslationProvider(providerId) + "|" + normalizeTranslationLanguageCode(langCode) + "|" + sourcePrefix;
+}
+
+function getTranslatedTOCPagePrefix(langCode, overStartPct, overEndPct) {
+    var sourcePrefix = normalizeTOCPagePrefixSetting(tocPagePrefixSetting);
+    var normalizedLang = normalizeTranslationLanguageCode(langCode);
+    if (sourcePrefix === "" || normalizedLang === "" || normalizedLang === "DE") return sourcePrefix;
+
+    var providerId = getActiveTranslationProvider();
+    var cacheKey = getTOCPagePrefixTranslationCacheKey(normalizedLang, sourcePrefix, providerId);
+    if (tocPagePrefixTranslationCache.hasOwnProperty(cacheKey)) return tocPagePrefixTranslationCache[cacheKey];
+
+    var translatedPrefix = sourcePrefix;
+    try {
+        var translatedBatch = translateBatchWithProvider(
+            [buildPlainTranslationXML(sourcePrefix, null)],
+            getDeepLLangCode(normalizedLang),
+            overStartPct,
+            overEndPct,
+            providerId
+        );
+        if (translatedBatch && translatedBatch.length > 0 && translatedBatch[0]) {
+            var decodedPrefix = sanitizeTOCPagePrefixText(decodeDeepLXMLText(translatedBatch[0]));
+            if (decodedPrefix !== "") translatedPrefix = decodedPrefix;
+        }
+        writeGeneralDebugLog("toc_prefix_translate: lang=" + normalizedLang + " source=" + sourcePrefix + " translated=" + translatedPrefix);
+    } catch (e) {
+        writeGeneralDebugLog("toc_prefix_translate_error: lang=" + normalizedLang + " source=" + sourcePrefix + " error=" + (e.message || e), "WARNUNG");
+    }
+
+    tocPagePrefixTranslationCache[cacheKey] = translatedPrefix;
+    return translatedPrefix;
+}
+
+function formatTOCPageMarkerText(langCode, pageSetting, overStartPct, overEndPct) {
+    var pageText = String(pageSetting === null || pageSetting === undefined ? "" : pageSetting).replace(/^\s+|\s+$/g, "");
+    if (pageText === "") return "()";
+    var prefix = getTranslatedTOCPagePrefix(langCode, overStartPct, overEndPct);
+    return prefix === "" ? ("(" + pageText + ")") : ("(" + prefix + ": " + pageText + ")");
+}
+
+function updateTOCForLanguage(doc, langCode, newStartPage, overStartPct, overEndPct) {
     try {
         var page = doc.pages[0];
         var items = collectTOCTextEntries(page);
@@ -9043,8 +9121,10 @@ function updateTOCForLanguage(doc, langCode, newStartPage) {
             var targetText = getHyperlinkTextObjectFromItemEntry(targetItem);
             if (!targetText || !targetText.isValid) return;
             var oldText = getTOCItemContents(targetItem);
-            var newText = oldText.replace(/\([^()]*\)/, "(" + newStartPage + ")");
+            var newMarkerText = formatTOCPageMarkerText(langCode, newStartPage, overStartPct, overEndPct);
+            var newText = oldText.replace(/\([^()]*\)/, newMarkerText);
             targetText.contents = newText;
+            writeGeneralDebugLog("toc_marker_update: lang=" + normalizeTranslationLanguageCode(langCode) + " marker=" + newMarkerText + " page=" + newStartPage);
             createOrUpdateTOCLanguageHyperlink(doc, targetItem, langCode, newStartPage);
         }
     } catch(e) {}
