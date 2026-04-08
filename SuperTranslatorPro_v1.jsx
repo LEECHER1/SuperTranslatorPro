@@ -9759,6 +9759,77 @@ function splitEscapedTextForDeepL(text, openTag, closeTag, targetLangCode, paylo
     return parts;
 }
 
+function isPlainTextWithinDeepLLimit(text, targetLangCode, payloadLimit) {
+    return getDeepLSinglePayloadLength(String(text || ""), targetLangCode, false) <= payloadLimit;
+}
+
+function findForcedPlainTextSplitIndex(text, targetLangCode, payloadLimit) {
+    var raw = String(text || "");
+    var low = 1;
+    var high = raw.length;
+    var best = 0;
+
+    while (low <= high) {
+        var mid = Math.floor((low + high) / 2);
+        if (isPlainTextWithinDeepLLimit(raw.substring(0, mid), targetLangCode, payloadLimit)) {
+            best = mid;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    if (best <= 0) return 0;
+
+    var preferredBoundary = best;
+    var minScan = Math.max(1, best - 80);
+    for (var i = best; i >= minScan; i--) {
+        if (/[\s,.;:!?)]/.test(raw.charAt(i - 1))) {
+            preferredBoundary = i;
+            break;
+        }
+    }
+
+    return preferredBoundary;
+}
+
+function splitPlainTextForDeepL(text, targetLangCode, payloadLimit) {
+    var parts = [];
+    var remaining = String(text || "");
+
+    while (remaining !== "") {
+        if (isPlainTextWithinDeepLLimit(remaining, targetLangCode, payloadLimit)) {
+            parts.push(remaining);
+            break;
+        }
+
+        var tokens = remaining.split(/(\s+)/);
+        var current = "";
+        var consumed = 0;
+        for (var i = 0; i < tokens.length; i++) {
+            var token = String(tokens[i] || "");
+            if (token === "") continue;
+            var candidate = current + token;
+            if (!isPlainTextWithinDeepLLimit(candidate, targetLangCode, payloadLimit)) break;
+            current = candidate;
+            consumed += token.length;
+        }
+
+        if (consumed <= 0) {
+            consumed = findForcedPlainTextSplitIndex(remaining, targetLangCode, payloadLimit);
+        }
+
+        if (consumed <= 0 || consumed >= remaining.length) {
+            throw new Error("DeepL-Fehler: Ein einzelner Textabschnitt ist selbst nach dem Aufteilen zu gross.");
+        }
+
+        parts.push(remaining.substring(0, consumed));
+        remaining = remaining.substring(consumed);
+    }
+
+    return parts;
+}
+
 function tokenizeStructuredRunInnerXML(innerXML) {
     var tokens = [];
     var raw = String(innerXML || "");
@@ -9886,43 +9957,137 @@ function buildStructuredXMLSegmentsForDeepL(sourceXML, targetLangCode, payloadLi
     };
 }
 
-function translateOversizedStructuredXMLBlockDeepL(sourceXML, targetLangCode, overStartPct, overEndPct, payloadLimit) {
+function translateOversizedStructuredXMLBlockDeepLPlainFallback(sourceXML, targetLangCode, overStartPct, overEndPct, payloadLimit) {
     var safePayloadLimit = (payloadLimit && payloadLimit > 0) ? payloadLimit : 45000;
-    var segmented = buildStructuredXMLSegmentsForDeepL(sourceXML, targetLangCode, safePayloadLimit);
-    var segmentXMLs = [];
-    for (var i = 0; i < segmented.segments.length; i++) segmentXMLs.push(segmented.segments[i].xml);
-
-    var translatedSegments = translateBatchDeepL(segmentXMLs, targetLangCode, overStartPct, overEndPct);
-    if (!translatedSegments || translatedSegments.length !== segmented.segments.length) {
-        throw new Error("DeepL-Fehler: Die segmentierte Uebersetzung ist unvollstaendig.");
+    var runs = getStructuredXMLRunDescriptors(sourceXML);
+    if (runs.length === 0) {
+        throw new Error("DeepL-Fehler: Der XML-Block konnte nicht in Formatlaeufe zerlegt werden.");
     }
 
+    var translationPieces = [];
     var rebuiltRuns = [];
-    for (var r = 0; r < segmented.runs.length; r++) {
+    for (var r = 0; r < runs.length; r++) {
+        var tokens = tokenizeStructuredRunInnerXML(runs[r].innerXML);
+        var rebuiltTokens = [];
+
+        for (var tIndex = 0; tIndex < tokens.length; tIndex++) {
+            var token = tokens[tIndex];
+            if (token.type !== "text") {
+                rebuiltTokens.push({ type: "static", value: token.value });
+                continue;
+            }
+
+            var plainText = decodeXMLValue(token.value);
+            if (plainText === "" || plainText.replace(/\s+/g, "") === "") {
+                rebuiltTokens.push({ type: "static", value: token.value });
+                continue;
+            }
+
+            var splitParts = splitPlainTextForDeepL(plainText, targetLangCode, safePayloadLimit);
+            rebuiltTokens.push({ type: "translated", count: splitParts.length });
+            for (var sp = 0; sp < splitParts.length; sp++) translationPieces.push(splitParts[sp]);
+        }
+
         rebuiltRuns.push({
-            openTag: segmented.runs[r].openTag,
-            innerXML: "",
-            closeTag: segmented.runs[r].closeTag
+            openTag: runs[r].openTag,
+            closeTag: runs[r].closeTag,
+            tokens: rebuiltTokens
         });
     }
 
-    for (var s = 0; s < segmented.segments.length; s++) {
-        var translatedRuns = getStructuredXMLRunDescriptors(translatedSegments[s]);
-        var expectedUnits = segmented.segments[s].sourceUnits;
-        if (translatedRuns.length !== expectedUnits.length) {
-            throw new Error("DeepL-Fehler: Ein Teilsegment kam mit unerwarteter XML-Struktur zurueck.");
-        }
-        for (var u = 0; u < expectedUnits.length; u++) {
-            rebuiltRuns[expectedUnits[u].runIndex].innerXML += translatedRuns[u].innerXML;
-        }
+    if (translationPieces.length === 0) return normalizeStructuredXMLCandidate(sourceXML, sourceXML);
+
+    writeDebugLog("deepl:plain_fallback runs=" + runs.length + " pieces=" + translationPieces.length + " payloadLimit=" + safePayloadLimit, "WARNUNG");
+
+    var translatedPieces = translateBatchDeepLPlain(translationPieces, targetLangCode, overStartPct, overEndPct);
+    if (!translatedPieces || translatedPieces.length !== translationPieces.length) {
+        throw new Error("DeepL-Fehler: Die Plain-Text-Fallback-Uebersetzung ist unvollstaendig.");
     }
 
-    var rebuiltXML = normalizeStructuredXMLCandidate(buildStructuredXMLFromRuns(rebuiltRuns), sourceXML);
+    var translatedIndex = 0;
+    var finalRuns = [];
+    for (var rr = 0; rr < rebuiltRuns.length; rr++) {
+        var innerParts = [];
+        for (var rt = 0; rt < rebuiltRuns[rr].tokens.length; rt++) {
+            var rebuiltToken = rebuiltRuns[rr].tokens[rt];
+            if (rebuiltToken.type === "static") {
+                innerParts.push(rebuiltToken.value);
+                continue;
+            }
+
+            var translatedText = "";
+            for (var c = 0; c < rebuiltToken.count; c++) {
+                if (translatedIndex >= translatedPieces.length) {
+                    throw new Error("DeepL-Fehler: Zu wenige Plain-Text-Fallback-Ergebnisse fuer die Rekonstruktion.");
+                }
+                translatedText += escapeXMLTextValue(translatedPieces[translatedIndex]);
+                translatedIndex++;
+            }
+            innerParts.push(translatedText);
+        }
+
+        finalRuns.push({
+            openTag: rebuiltRuns[rr].openTag,
+            innerXML: innerParts.join(""),
+            closeTag: rebuiltRuns[rr].closeTag
+        });
+    }
+
+    if (translatedIndex !== translatedPieces.length) {
+        throw new Error("DeepL-Fehler: Zu viele Plain-Text-Fallback-Ergebnisse fuer die Rekonstruktion.");
+    }
+
+    var rebuiltXML = normalizeStructuredXMLCandidate(buildStructuredXMLFromRuns(finalRuns), sourceXML);
     if (!validateStructuredXMLTranslation(sourceXML, rebuiltXML)) {
-        throw new Error("DeepL-Fehler: Die segmentierte Uebersetzung konnte nicht als gueltiges XML rekonstruiert werden.");
+        throw new Error("DeepL-Fehler: Auch der Plain-Text-Fallback konnte kein gueltiges XML erzeugen.");
     }
 
     return rebuiltXML;
+}
+
+function translateOversizedStructuredXMLBlockDeepL(sourceXML, targetLangCode, overStartPct, overEndPct, payloadLimit) {
+    var safePayloadLimit = (payloadLimit && payloadLimit > 0) ? payloadLimit : 45000;
+    try {
+        var segmented = buildStructuredXMLSegmentsForDeepL(sourceXML, targetLangCode, safePayloadLimit);
+        var segmentXMLs = [];
+        for (var i = 0; i < segmented.segments.length; i++) segmentXMLs.push(segmented.segments[i].xml);
+
+        var translatedSegments = translateBatchDeepL(segmentXMLs, targetLangCode, overStartPct, overEndPct);
+        if (!translatedSegments || translatedSegments.length !== segmented.segments.length) {
+            throw new Error("DeepL-Fehler: Die segmentierte Uebersetzung ist unvollstaendig.");
+        }
+
+        var rebuiltRuns = [];
+        for (var r = 0; r < segmented.runs.length; r++) {
+            rebuiltRuns.push({
+                openTag: segmented.runs[r].openTag,
+                innerXML: "",
+                closeTag: segmented.runs[r].closeTag
+            });
+        }
+
+        for (var s = 0; s < segmented.segments.length; s++) {
+            var translatedRuns = getStructuredXMLRunDescriptors(translatedSegments[s]);
+            var expectedUnits = segmented.segments[s].sourceUnits;
+            if (translatedRuns.length !== expectedUnits.length) {
+                throw new Error("DeepL-Fehler: Ein Teilsegment kam mit unerwarteter XML-Struktur zurueck.");
+            }
+            for (var u = 0; u < expectedUnits.length; u++) {
+                rebuiltRuns[expectedUnits[u].runIndex].innerXML += translatedRuns[u].innerXML;
+            }
+        }
+
+        var rebuiltXML = normalizeStructuredXMLCandidate(buildStructuredXMLFromRuns(rebuiltRuns), sourceXML);
+        if (!validateStructuredXMLTranslation(sourceXML, rebuiltXML)) {
+            throw new Error("DeepL-Fehler: Die segmentierte Uebersetzung konnte nicht als gueltiges XML rekonstruiert werden.");
+        }
+
+        return rebuiltXML;
+    } catch (segmentationError) {
+        writeDebugLog("deepl:segment_reconstruct_failed error=" + (segmentationError.message || segmentationError) +
+            " source=" + String(sourceXML || "").substring(0, 500), "WARNUNG");
+        return translateOversizedStructuredXMLBlockDeepLPlainFallback(sourceXML, targetLangCode, overStartPct, overEndPct, safePayloadLimit);
+    }
 }
 
 function compareStringArrays(arrA, arrB) {
@@ -11415,6 +11580,11 @@ function decodeDeepLXMLText(xml) {
     xml = xml.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     xml = xml.replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t');
     return normalizeTechnicalTokenSpacingInString(xml);
+}
+
+function escapeXMLTextValue(value) {
+    if (value === null || value === undefined) return "";
+    return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function escapeXMLAttr(value) {
