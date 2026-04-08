@@ -3033,6 +3033,8 @@ function openGlossaryEditorDialog(currentPath) {
         footerGroup.alignment = "fill";
         footerGroup.alignChildren = ["fill", "center"];
         footerGroup.spacing = 8;
+        footerGroup.minimumSize.height = 40;
+        footerGroup.maximumSize.height = 40;
 
         var statusText = footerGroup.add("statictext", undefined, "", { multiline: true });
         statusText.alignment = "fill";
@@ -3086,6 +3088,58 @@ function openGlossaryEditorDialog(currentPath) {
             if (totalCount === 0) listInfoText.text = t("glossary_editor_empty_list");
             else if (visibleCount === 0) listInfoText.text = t("glossary_editor_no_matches");
             else listInfoText.text = "";
+        }
+
+        function applyGlossaryDialogResponsiveLayout() {
+            var dialogHeight = glossaryDialogHeight;
+            var dialogWidth = glossaryDialogWidth;
+            try {
+                var bounds = dlg.bounds;
+                dialogWidth = bounds[2] - bounds[0];
+                dialogHeight = bounds[3] - bounds[1];
+            } catch (boundsErr) {}
+
+            var contentHeight = Math.max(200, dialogHeight - 250);
+            var listHeight = Math.max(120, contentHeight - 70);
+            var tabsHeight = Math.max(80, contentHeight - 180);
+            var detailWidth = Math.max(380, dialogWidth - 320);
+            var metaWidth = Math.max(360, detailWidth - 90);
+            var fieldWidth = Math.max(110, Math.floor((detailWidth - 70) / 3));
+
+            try {
+                contentGroup.minimumSize.height = contentHeight;
+                contentGroup.maximumSize.height = contentHeight;
+                contentGroup.preferredSize.height = contentHeight;
+            } catch (contentSizeErr) {}
+
+            try {
+                listPanel.minimumSize.width = 230;
+                listPanel.maximumSize.width = 260;
+                listPanel.minimumSize.height = contentHeight;
+                listPanel.maximumSize.height = contentHeight;
+            } catch (listPanelWidthErr) {}
+
+            try {
+                detailPanel.minimumSize.height = contentHeight;
+                detailPanel.maximumSize.height = contentHeight;
+            } catch (detailPanelHeightErr) {}
+
+            try { entryList.preferredSize = [210, listHeight]; } catch (entryListSizeErr) {}
+            try { listInfoText.preferredSize.width = 210; } catch (listInfoSizeErr) {}
+            try { detailPanel.minimumSize.width = detailWidth; } catch (detailPanelWidthErr) {}
+            try { sourceLanguageHelpText.preferredSize.width = metaWidth; } catch (sourceHelpErr) {}
+            try { flagsHelpText.preferredSize.width = metaWidth; } catch (flagsHelpErr) {}
+            try { aliasesHelpText.preferredSize.width = metaWidth; } catch (aliasesHelpErr) {}
+            try { infoInput.preferredSize = [metaWidth, 30]; } catch (infoSizeErr) {}
+            try { infoHelpText.preferredSize.width = metaWidth; } catch (infoHelpErr) {}
+            try {
+                languagesPanel.minimumSize.height = tabsHeight + 36;
+                languagesPanel.maximumSize.height = tabsHeight + 36;
+            } catch (languagesPanelHeightErr) {}
+            try { languageTabs.preferredSize = [Math.max(360, detailWidth - 30), tabsHeight]; } catch (tabsSizeErr) {}
+
+            glossaryMetaWidth = metaWidth;
+            glossaryFieldWidth = fieldWidth;
         }
 
         function setDetailControlsEnabled(isEnabled) {
@@ -3307,9 +3361,11 @@ function openGlossaryEditorDialog(currentPath) {
             return true;
         };
         dlg.onShow = function() {
+            applyGlossaryDialogResponsiveLayout();
             keepWindowWithinBestScreen(dlg, myWindow, 20);
         };
         dlg.onResizing = dlg.onResize = function() {
+            applyGlossaryDialogResponsiveLayout();
             this.layout.resize();
             keepWindowWithinBestScreen(dlg, myWindow, 20);
         };
@@ -3317,6 +3373,7 @@ function openGlossaryEditorDialog(currentPath) {
         rebuildEntryList(editorState.entries.length > 0 ? editorState.entries[0].id : 0);
 
         centerAndFitWindowOnBestScreen(dlg, glossaryDialogWidth, glossaryDialogHeight, myWindow, { margin: 20 });
+        applyGlossaryDialogResponsiveLayout();
         var dialogResult = dlg.show();
         if (dialogAction === "reload" || dialogResult === 2) continue;
         return result;
