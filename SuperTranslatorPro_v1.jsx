@@ -2717,6 +2717,48 @@ function saveGlossaryEditorState(editorState) {
     return success;
 }
 
+function promptForNewGlossaryEntryName(sourceLanguageCode) {
+    var sourceLang = normalizeGlossaryLanguageCode(sourceLanguageCode || "DE");
+    if (sourceLang === "") sourceLang = "DE";
+
+    var dlg = new Window("dialog", t("glossary_editor_new_title"));
+    dlg.orientation = "column";
+    dlg.alignChildren = ["fill", "top"];
+    dlg.margins = 16;
+    dlg.spacing = 10;
+
+    dlg.add("statictext", undefined, t("glossary_editor_new_name_help"), { multiline: true });
+    var langLabel = dlg.add("statictext", undefined, t("glossary_editor_source_language") + " " + sourceLang + " (" + getLocalizedLanguageName(sourceLang) + ")");
+    langLabel.preferredSize.width = 420;
+
+    dlg.add("statictext", undefined, t("glossary_editor_new_name"));
+    var nameInput = dlg.add("edittext", undefined, "");
+    nameInput.characters = 42;
+    nameInput.active = true;
+
+    var buttonRow = dlg.add("group");
+    buttonRow.alignment = "right";
+    var btnCancel = buttonRow.add("button", undefined, t("cancel"), { name: "cancel" });
+    var btnCreate = buttonRow.add("button", undefined, t("glossary_editor_new_confirm"), { name: "ok" });
+
+    var result = null;
+    btnCreate.onClick = function() {
+        var entryName = trimGlossaryEditorValue(nameInput.text);
+        if (entryName === "") {
+            alert(t("glossary_editor_new_required"));
+            return;
+        }
+        result = entryName;
+        dlg.close(1);
+    };
+    btnCancel.onClick = function() {
+        dlg.close(0);
+    };
+
+    if (dlg.show() !== 1) return null;
+    return result;
+}
+
 function openGlossaryEditorDialog(currentPath) {
     var resolvedPath = resolveCSVPath(currentPath);
     if (!resolvedPath || resolvedPath === "") {
@@ -2841,16 +2883,20 @@ function openGlossaryEditorDialog(currentPath) {
         var flagsInput = metaPanel.add("edittext", undefined, "");
         flagsInput.alignment = "fill";
         flagsInput.characters = 40;
+        var flagsHelpText = metaPanel.add("statictext", undefined, t("glossary_editor_flags_help"), { multiline: true });
+        flagsHelpText.preferredSize.width = 680;
 
         metaPanel.add("statictext", undefined, t("glossary_editor_aliases"));
         var aliasesInput = metaPanel.add("edittext", undefined, "");
         aliasesInput.alignment = "fill";
         aliasesInput.characters = 40;
+        var aliasesHelpText = metaPanel.add("statictext", undefined, t("glossary_editor_aliases_help"), { multiline: true });
+        aliasesHelpText.preferredSize.width = 680;
 
         metaPanel.add("statictext", undefined, t("glossary_editor_info"));
         var infoInput = metaPanel.add("edittext", undefined, "", { multiline: true, scrolling: true });
         infoInput.alignment = "fill";
-        infoInput.preferredSize = [680, 72];
+        infoInput.preferredSize = [680, 48];
 
         var languagesPanel = detailPanel.add("panel", undefined, t("glossary_editor_languages"));
         languagesPanel.orientation = "column";
@@ -2877,12 +2923,12 @@ function openGlossaryEditorDialog(currentPath) {
             var options = multiline ? { multiline: true, scrolling: true } : undefined;
             var input = fieldGroup.add("edittext", undefined, "", options);
             input.alignment = "fill";
-            if (multiline) input.preferredSize = [300, preferredHeight || 54];
+            if (multiline) input.preferredSize = [220, preferredHeight || 54];
             else input.characters = 22;
             return { group: fieldGroup, label: label, input: input };
         }
 
-        var languageChunkSize = 8;
+        var languageChunkSize = 9;
         for (var chunkStart = 0, tabIndex = 1; chunkStart < languageHeaders.length; chunkStart += languageChunkSize, tabIndex++) {
             var chunkHeaders = languageHeaders.slice(chunkStart, chunkStart + languageChunkSize);
             var tab = languageTabs.add("tab", undefined, t("glossary_editor_tab_languages", { index: tabIndex }));
@@ -2890,14 +2936,14 @@ function openGlossaryEditorDialog(currentPath) {
             tab.alignChildren = ["fill", "top"];
             tab.spacing = 8;
 
-            for (var chunkRow = 0; chunkRow < chunkHeaders.length; chunkRow += 2) {
+            for (var chunkRow = 0; chunkRow < chunkHeaders.length; chunkRow += 3) {
                 var chunkRowGroup = tab.add("group");
                 chunkRowGroup.orientation = "row";
                 chunkRowGroup.alignChildren = ["fill", "top"];
                 chunkRowGroup.alignment = "fill";
                 chunkRowGroup.spacing = 10;
 
-                for (var chunkCol = 0; chunkCol < 2; chunkCol++) {
+                for (var chunkCol = 0; chunkCol < 3; chunkCol++) {
                     var headerPos = chunkRow + chunkCol;
                     if (headerPos >= chunkHeaders.length) {
                         var spacerGroup = chunkRowGroup.add("group");
@@ -3142,9 +3188,14 @@ function openGlossaryEditorDialog(currentPath) {
 
         btnNewEntry.onClick = function() {
             applyDetailChangesToSelection(true);
+            var newEntryName = promptForNewGlossaryEntryName(getSelectedSourceLanguageCode());
+            if (!newEntryName) return;
             var newRow = createBlankGlossaryEditorRow(editorState.headers.length);
             var sourceIdx = findGlossaryHeaderIndex(editorState.headers, "_SOURCE");
-            if (sourceIdx >= 0) newRow[sourceIdx] = "DE";
+            var selectedSourceLang = getSelectedSourceLanguageCode();
+            if (sourceIdx >= 0) newRow[sourceIdx] = selectedSourceLang;
+            var sourceLangIdx = findGlossaryHeaderIndex(editorState.headers, selectedSourceLang);
+            if (sourceLangIdx >= 0) newRow[sourceLangIdx] = newEntryName;
             var newEntry = { id: editorState.nextId++, row: newRow };
             refreshGlossaryEditorEntry(newEntry, editorState.headers);
             editorState.entries.push(newEntry);
