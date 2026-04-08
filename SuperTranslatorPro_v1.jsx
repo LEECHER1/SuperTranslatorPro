@@ -568,12 +568,27 @@ function sanitizeTOCPagePrefixText(value) {
     raw = raw.replace(/^\s+|\s+$/g, "");
     raw = raw.replace(/^[\(\[\{]\s*/, "").replace(/\s*[\)\]\}]$/, "");
     raw = raw.replace(/\s+/g, " ");
-    raw = raw.replace(/\s*[:：;,.\-–—]+\s*$/g, "");
     return raw;
 }
 
 function normalizeTOCPagePrefixSetting(value) {
     return sanitizeTOCPagePrefixText(value);
+}
+
+function getDefaultTOCPagePrefixSetting() {
+    return "ab Seite:";
+}
+
+function encodeTOCPagePrefixSettingForLabel(value) {
+    var normalized = normalizeTOCPagePrefixSetting(value);
+    return normalized === "" ? "__EMPTY__" : normalized;
+}
+
+function decodeTOCPagePrefixSettingFromLabel(value) {
+    var raw = String(value === null || value === undefined ? "" : value);
+    if (raw === "") return getDefaultTOCPagePrefixSetting();
+    if (raw === "__EMPTY__") return "";
+    return normalizeTOCPagePrefixSetting(raw);
 }
 
 function getReferenceSymbolPairs(symbols) {
@@ -1131,7 +1146,7 @@ var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) 
 var hyperlinkPageMappings = loadHyperlinkPageMappings(app.extractLabel(HYPERLINK_PAGE_MAP_LABEL) || "");
 var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
 var backPageTrackerSetting = normalizeBackPageTrackerSetting(app.extractLabel(BACK_PAGE_TRACKER_LABEL) || "©");
-var tocPagePrefixSetting = normalizeTOCPagePrefixSetting(app.extractLabel(TOC_PAGE_PREFIX_LABEL) || "");
+var tocPagePrefixSetting = decodeTOCPagePrefixSettingFromLabel(app.extractLabel(TOC_PAGE_PREFIX_LABEL));
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
 var DNT_LABEL = "SuperTranslatorPRO_DNT_Styles";
@@ -5730,7 +5745,7 @@ btnSettings.onClick = function() {
         app.insertLabel(TM_PATH_LABEL, tmPath); 
         app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
         app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
-        app.insertLabel(TOC_PAGE_PREFIX_LABEL, tocPagePrefixSetting);
+        app.insertLabel(TOC_PAGE_PREFIX_LABEL, encodeTOCPagePrefixSettingForLabel(tocPagePrefixSetting));
         app.insertLabel(COPYFIT_ENABLED_LABEL, smartCopyfitEnabled ? "1" : "0");
         app.insertLabel(COPYFIT_MAX_TRACKING_LABEL, String(smartCopyfitMaxTracking));
         app.insertLabel(COPYFIT_MIN_SCALE_LABEL, String(smartCopyfitMinScale));
@@ -9098,7 +9113,9 @@ function formatTOCPageMarkerText(langCode, pageSetting, overStartPct, overEndPct
     var pageText = String(pageSetting === null || pageSetting === undefined ? "" : pageSetting).replace(/^\s+|\s+$/g, "");
     if (pageText === "") return "()";
     var prefix = getTranslatedTOCPagePrefix(langCode, overStartPct, overEndPct);
-    return prefix === "" ? ("(" + pageText + ")") : ("(" + prefix + ": " + pageText + ")");
+    if (prefix === "") return "(" + pageText + ")";
+    if (/[:：]\s*$/.test(prefix)) return "(" + prefix.replace(/\s+$/g, "") + " " + pageText + ")";
+    return "(" + prefix + ": " + pageText + ")";
 }
 
 function updateTOCForLanguage(doc, langCode, newStartPage, overStartPct, overEndPct) {
