@@ -3924,6 +3924,9 @@ function updateLanguageMasterVersionLabels(doc) {
 var MAIN_WINDOW_DEFAULT_WIDTH = 920;
 var MAIN_WINDOW_DEFAULT_HEIGHT = 540;
 var MAIN_WINDOW_AUTO_HEIGHT = 660;
+var MAIN_CONTENT_HEIGHT_SELECTION = 150;
+var MAIN_CONTENT_HEIGHT_PAGES = 170;
+var MAIN_CONTENT_HEIGHT_AUTO = 250;
 var mainWindowCurrentWidth = MAIN_WINDOW_DEFAULT_WIDTH;
 var mainWindowCurrentHeight = MAIN_WINDOW_DEFAULT_HEIGHT;
 
@@ -4006,6 +4009,8 @@ contentPanel.alignChildren = ["fill", "top"];
 contentPanel.margins = 15;
 contentPanel.spacing = 10;
 contentPanel.minimumSize = [640, 160];
+contentPanel.preferredSize = [640, MAIN_CONTENT_HEIGHT_SELECTION];
+contentPanel.maximumSize = [10000, MAIN_CONTENT_HEIGHT_SELECTION];
 
 var selectionModeGroup = contentPanel.add("group");
 selectionModeGroup.orientation = "column";
@@ -4013,8 +4018,10 @@ selectionModeGroup.alignChildren = ["fill", "top"];
 selectionModeGroup.alignment = ["fill", "top"];
 var selectionHintText = selectionModeGroup.add("statictext", undefined, t("selection_hint"), { multiline: true });
 selectionHintText.preferredSize.width = 500;
+selectionHintText.maximumSize.height = 44;
 var selectionStateText = selectionModeGroup.add("statictext", undefined, "", { multiline: true });
 selectionStateText.preferredSize.width = 500;
+selectionStateText.maximumSize.height = 40;
 
 var pagesModeGroup = contentPanel.add("group");
 pagesModeGroup.orientation = "column";
@@ -4029,8 +4036,10 @@ editPages.characters = 14;
 editPages.helpTip = t("pages_help");
 var pagesHint = pagesModeGroup.add("statictext", undefined, t("pages_help"));
 pagesHint.preferredSize.width = 500;
+pagesHint.maximumSize.height = 44;
 var pagesStateText = pagesModeGroup.add("statictext", undefined, "", { multiline: true });
 pagesStateText.preferredSize.width = 500;
+pagesStateText.maximumSize.height = 40;
 
 var manualTargetGroup = contentPanel.add("group");
 manualTargetGroup.orientation = "column";
@@ -4051,6 +4060,7 @@ btnManualMoreLanguages.alignment = ["right", "center"];
 btnManualMoreLanguages.preferredSize.width = 210;
 var languageStateText = manualTargetGroup.add("statictext", undefined, "", { multiline: true });
 languageStateText.preferredSize.width = 500;
+languageStateText.maximumSize.height = 40;
 
 var autoModeGroup = contentPanel.add("group");
 autoModeGroup.orientation = "column";
@@ -4058,6 +4068,7 @@ autoModeGroup.alignChildren = ["fill", "top"];
 autoModeGroup.alignment = ["fill", "top"];
 var autoSourceHelpText = autoModeGroup.add("statictext", undefined, t("auto_source_help"), { multiline: true });
 autoSourceHelpText.preferredSize.width = 500;
+autoSourceHelpText.maximumSize.height = 44;
 var grpBDASource = autoModeGroup.add("group");
 grpBDASource.alignment = ["fill", "center"];
 grpBDASource.alignChildren = ["left", "center"];
@@ -4067,6 +4078,7 @@ bdaSourceInput.characters = 10;
 bdaSourceInput.helpTip = t("auto_source_help");
 var bdaSourceStateText = autoModeGroup.add("statictext", undefined, "", { multiline: true });
 bdaSourceStateText.preferredSize.width = 500;
+bdaSourceStateText.maximumSize.height = 40;
 var checkTOC = autoModeGroup.add("checkbox", undefined, t("toc_checkbox"));
 checkTOC.value = true;
 var checkAutoBDAHyperlinks = autoModeGroup.add("checkbox", undefined, t("auto_hyperlink_checkbox"));
@@ -4619,8 +4631,24 @@ function getMainWindowTargetSize() {
     };
 }
 
+function getMainContentTargetHeight() {
+    if (radioBDA && radioBDA.value) return MAIN_CONTENT_HEIGHT_AUTO;
+    if (radioPages && radioPages.value) return MAIN_CONTENT_HEIGHT_PAGES;
+    return MAIN_CONTENT_HEIGHT_SELECTION;
+}
+
+function applyMainContentPanelGeometry() {
+    if (!contentPanel) return;
+    var targetHeight = getMainContentTargetHeight();
+    try { contentPanel.minimumSize.height = targetHeight; } catch (minErr) {}
+    try { contentPanel.preferredSize.height = targetHeight; } catch (prefErr) {}
+    try { contentPanel.maximumSize.height = targetHeight; } catch (maxErr) {}
+}
+
 function fitMainWindowToTargetSize(centerOnScreen) {
     if (!myWindow) return;
+
+    applyMainContentPanelGeometry();
 
     var targetSize = getMainWindowTargetSize();
     var screenInfo = getBestScreenBoundsInfo(myWindow, targetSize.width, targetSize.height);
