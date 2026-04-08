@@ -3923,6 +3923,7 @@ function updateLanguageMasterVersionLabels(doc) {
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
 var MAIN_WINDOW_DEFAULT_WIDTH = 920;
 var MAIN_WINDOW_DEFAULT_HEIGHT = 540;
+var MAIN_WINDOW_AUTO_HEIGHT = 660;
 var mainWindowCurrentWidth = MAIN_WINDOW_DEFAULT_WIDTH;
 var mainWindowCurrentHeight = MAIN_WINDOW_DEFAULT_HEIGHT;
 
@@ -4009,7 +4010,7 @@ contentPanel.minimumSize = [640, 160];
 var selectionModeGroup = contentPanel.add("group");
 selectionModeGroup.orientation = "column";
 selectionModeGroup.alignChildren = ["fill", "top"];
-selectionModeGroup.alignment = "fill";
+selectionModeGroup.alignment = ["fill", "top"];
 var selectionHintText = selectionModeGroup.add("statictext", undefined, t("selection_hint"), { multiline: true });
 selectionHintText.preferredSize.width = 500;
 var selectionStateText = selectionModeGroup.add("statictext", undefined, "", { multiline: true });
@@ -4018,9 +4019,9 @@ selectionStateText.preferredSize.width = 500;
 var pagesModeGroup = contentPanel.add("group");
 pagesModeGroup.orientation = "column";
 pagesModeGroup.alignChildren = ["fill", "top"];
-pagesModeGroup.alignment = "fill";
+pagesModeGroup.alignment = ["fill", "top"];
 var pagesRow = pagesModeGroup.add("group");
-pagesRow.alignment = "fill";
+pagesRow.alignment = ["fill", "center"];
 pagesRow.alignChildren = ["left", "center"];
 var pagesLabelText = pagesRow.add("statictext", undefined, t("pages_label"));
 var editPages = pagesRow.add("edittext", undefined, "");
@@ -4034,13 +4035,13 @@ pagesStateText.preferredSize.width = 500;
 var manualTargetGroup = contentPanel.add("group");
 manualTargetGroup.orientation = "column";
 manualTargetGroup.alignChildren = ["fill", "top"];
-manualTargetGroup.alignment = "fill";
+manualTargetGroup.alignment = ["fill", "top"];
 var targetLanguageLabel = manualTargetGroup.add("statictext", undefined, t("target_language_short"));
 var langList = buildManualLanguageList();
 var manualLanguageSelectRow = manualTargetGroup.add("group");
 manualLanguageSelectRow.orientation = "row";
 manualLanguageSelectRow.alignChildren = ["fill", "center"];
-manualLanguageSelectRow.alignment = "fill";
+manualLanguageSelectRow.alignment = ["fill", "center"];
 manualLanguageSelectRow.spacing = 8;
 var dropdownLang = manualLanguageSelectRow.add("dropdownlist", undefined, langList);
 dropdownLang.alignment = ["fill", "center"];
@@ -4054,11 +4055,11 @@ languageStateText.preferredSize.width = 500;
 var autoModeGroup = contentPanel.add("group");
 autoModeGroup.orientation = "column";
 autoModeGroup.alignChildren = ["fill", "top"];
-autoModeGroup.alignment = "fill";
+autoModeGroup.alignment = ["fill", "top"];
 var autoSourceHelpText = autoModeGroup.add("statictext", undefined, t("auto_source_help"), { multiline: true });
 autoSourceHelpText.preferredSize.width = 500;
 var grpBDASource = autoModeGroup.add("group");
-grpBDASource.alignment = "fill";
+grpBDASource.alignment = ["fill", "center"];
 grpBDASource.alignChildren = ["left", "center"];
 var originalPagesLabel = grpBDASource.add("statictext", undefined, t("original_pages"));
 var bdaSourceInput = grpBDASource.add("edittext", undefined, "AUTO");
@@ -4609,30 +4610,68 @@ function positionDialogCenteredOnMainWindow(dialog, dialogWidth, dialogHeight) {
     centerAndFitWindowOnBestScreen(dialog, dialogWidth, dialogHeight, myWindow, { margin: 20 });
 }
 
-function keepMainWindowStableSize() {
+function getMainWindowTargetSize() {
+    var targetHeight = MAIN_WINDOW_DEFAULT_HEIGHT;
+    if (radioBDA && radioBDA.value) targetHeight = MAIN_WINDOW_AUTO_HEIGHT;
+    return {
+        width: MAIN_WINDOW_DEFAULT_WIDTH,
+        height: targetHeight
+    };
+}
+
+function fitMainWindowToTargetSize(centerOnScreen) {
     if (!myWindow) return;
-    var geometry = keepWindowWithinBestScreen(myWindow, myWindow, 20);
-    if (!geometry) {
-        geometry = centerAndFitWindowOnBestScreen(myWindow, MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT, myWindow, { margin: 20, lockSize: true });
-    } else {
-        try {
-            var fitted = getFittedWindowSize(geometry.screenInfo, MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT, 20);
-            mainWindowCurrentWidth = fitted.width;
-            mainWindowCurrentHeight = fitted.height;
-            myWindow.minimumSize = [mainWindowCurrentWidth, mainWindowCurrentHeight];
-            myWindow.preferredSize = [mainWindowCurrentWidth, mainWindowCurrentHeight];
-            myWindow.maximumSize = [mainWindowCurrentWidth, mainWindowCurrentHeight];
-            myWindow.bounds = [geometry.left, geometry.top, geometry.left + mainWindowCurrentWidth, geometry.top + mainWindowCurrentHeight];
-        } catch (e) {}
+
+    var targetSize = getMainWindowTargetSize();
+    var screenInfo = getBestScreenBoundsInfo(myWindow, targetSize.width, targetSize.height);
+    if (!screenInfo) {
+        var fallbackGeometry = centerAndFitWindowOnBestScreen(myWindow, targetSize.width, targetSize.height, myWindow, { margin: 20, lockSize: true });
+        if (!fallbackGeometry) return;
+        mainWindowCurrentWidth = fallbackGeometry.width;
+        mainWindowCurrentHeight = fallbackGeometry.height;
+        return;
     }
+
+    var fitted = getFittedWindowSize(screenInfo, targetSize.width, targetSize.height, 20);
+    var currentBounds = getWindowBoundsInfo(myWindow, fitted.width, fitted.height);
+    var left = screenInfo.left + fitted.margin + Math.round((fitted.availableWidth - fitted.width) / 2);
+    var top = screenInfo.top + fitted.margin + Math.round((fitted.availableHeight - fitted.height) / 2);
+
+    if (!centerOnScreen && currentBounds) {
+        left = currentBounds.left;
+        top = currentBounds.top;
+
+        var minLeft = screenInfo.left + fitted.margin;
+        var minTop = screenInfo.top + fitted.margin;
+        var maxLeft = screenInfo.right - fitted.margin - fitted.width;
+        var maxTop = screenInfo.bottom - fitted.margin - fitted.height;
+
+        if (left < minLeft) left = minLeft;
+        if (top < minTop) top = minTop;
+        if (left > maxLeft) left = maxLeft;
+        if (top > maxTop) top = maxTop;
+    }
+
+    mainWindowCurrentWidth = fitted.width;
+    mainWindowCurrentHeight = fitted.height;
+
+    try {
+        myWindow.minimumSize = [mainWindowCurrentWidth, mainWindowCurrentHeight];
+        myWindow.preferredSize = [mainWindowCurrentWidth, mainWindowCurrentHeight];
+        myWindow.maximumSize = [mainWindowCurrentWidth, mainWindowCurrentHeight];
+    } catch (sizeErr) {}
+
+    try { myWindow.bounds = [left, top, left + mainWindowCurrentWidth, top + mainWindowCurrentHeight]; } catch (boundsErr) {}
+    try { myWindow.layout.layout(true); } catch (layoutErr) {}
+    try { myWindow.layout.resize(); } catch (resizeErr) {}
+}
+
+function keepMainWindowStableSize() {
+    fitMainWindowToTargetSize(false);
 }
 
 function centerMainWindowOnScreen() {
-    if (!myWindow) return;
-    var geometry = centerAndFitWindowOnBestScreen(myWindow, MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT, myWindow, { margin: 20, lockSize: true });
-    if (!geometry) return;
-    mainWindowCurrentWidth = geometry.width;
-    mainWindowCurrentHeight = geometry.height;
+    fitMainWindowToTargetSize(true);
 }
 
 function relayoutMainWindowContents() {
