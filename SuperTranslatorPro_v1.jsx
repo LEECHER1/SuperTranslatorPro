@@ -2805,20 +2805,20 @@ function openGlossaryEditorDialog(currentPath) {
             sourceLanguageLabels.push("DE (" + getLocalizedLanguageName("DE") + ")");
         }
 
-        var glossaryDialogWidth = 1000;
-        var glossaryDialogHeight = 680;
-        var glossaryMetaWidth = 620;
-        var glossaryFieldWidth = 190;
+        var glossaryDialogWidth = 780;
+        var glossaryDialogHeight = 520;
+        var glossaryMetaWidth = 460;
+        var glossaryFieldWidth = 140;
 
-        var dlg = new Window("dialog", t("glossary_editor_title"), undefined, { resizeable: false });
+        var dlg = new Window("dialog", t("glossary_editor_title"), undefined, { resizeable: true });
         dlg.orientation = "column";
         dlg.alignChildren = ["fill", "top"];
-        dlg.spacing = 10;
-        dlg.minimumSize = [920, 620];
+        dlg.spacing = 8;
+        dlg.minimumSize = [720, 460];
         dlg.preferredSize = [glossaryDialogWidth, glossaryDialogHeight];
 
         var introText = dlg.add("statictext", undefined, t("glossary_editor_intro"), { multiline: true });
-        introText.preferredSize.width = 920;
+        introText.preferredSize.width = 700;
 
         var pathGroup = dlg.add("group");
         pathGroup.alignment = "fill";
@@ -2826,7 +2826,7 @@ function openGlossaryEditorDialog(currentPath) {
         pathGroup.add("statictext", undefined, t("glossary_editor_path"));
         var pathInput = pathGroup.add("edittext", undefined, editorState.path, { readonly: true });
         pathInput.alignment = ["fill", "center"];
-        pathInput.characters = 74;
+        pathInput.characters = 52;
 
         var contentGroup = dlg.add("group");
         contentGroup.orientation = "row";
@@ -2839,8 +2839,8 @@ function openGlossaryEditorDialog(currentPath) {
         listPanel.alignChildren = ["fill", "top"];
         listPanel.alignment = ["left", "fill"];
         listPanel.margins = 12;
-        listPanel.spacing = 8;
-        listPanel.preferredSize.width = 300;
+        listPanel.spacing = 6;
+        listPanel.preferredSize.width = 230;
 
         var searchGroup = listPanel.add("group");
         searchGroup.alignment = "fill";
@@ -2848,14 +2848,14 @@ function openGlossaryEditorDialog(currentPath) {
         searchGroup.add("statictext", undefined, t("glossary_editor_search"));
         var searchInput = searchGroup.add("edittext", undefined, "");
         searchInput.alignment = ["fill", "center"];
-        searchInput.characters = 18;
+        searchInput.characters = 12;
 
         var entryList = listPanel.add("listbox", undefined, [], { multiselect: false });
         entryList.alignment = "fill";
-        entryList.preferredSize = [270, 420];
+        entryList.preferredSize = [210, 270];
 
         var listInfoText = listPanel.add("statictext", undefined, "", { multiline: true });
-        listInfoText.preferredSize.width = 270;
+        listInfoText.preferredSize.width = 210;
 
         var listButtonGroup = listPanel.add("group");
         listButtonGroup.alignment = "fill";
@@ -2872,7 +2872,7 @@ function openGlossaryEditorDialog(currentPath) {
         detailPanel.alignChildren = ["fill", "top"];
         detailPanel.alignment = "fill";
         detailPanel.margins = 12;
-        detailPanel.spacing = 10;
+        detailPanel.spacing = 8;
 
         var metaPanel = detailPanel.add("group");
         metaPanel.orientation = "column";
@@ -2884,27 +2884,27 @@ function openGlossaryEditorDialog(currentPath) {
         sourceRow.alignChildren = ["left", "center"];
         sourceRow.add("statictext", undefined, t("glossary_editor_source_language"));
         var sourceLanguageDropdown = sourceRow.add("dropdownlist", undefined, sourceLanguageLabels);
-        sourceLanguageDropdown.preferredSize.width = 240;
+        sourceLanguageDropdown.preferredSize.width = 180;
         var sourceLanguageHelpText = metaPanel.add("statictext", undefined, t("glossary_editor_source_language_help"), { multiline: true });
         sourceLanguageHelpText.preferredSize.width = glossaryMetaWidth;
 
         metaPanel.add("statictext", undefined, t("glossary_editor_flags"));
         var flagsDropdown = metaPanel.add("dropdownlist", undefined, []);
-        flagsDropdown.preferredSize.width = 260;
+        flagsDropdown.preferredSize.width = 180;
         var flagsHelpText = metaPanel.add("statictext", undefined, t("glossary_editor_flags_help"), { multiline: true });
         flagsHelpText.preferredSize.width = glossaryMetaWidth;
 
         metaPanel.add("statictext", undefined, t("glossary_editor_aliases"));
         var aliasesInput = metaPanel.add("edittext", undefined, "");
         aliasesInput.alignment = "fill";
-        aliasesInput.characters = 34;
+        aliasesInput.characters = 22;
         var aliasesHelpText = metaPanel.add("statictext", undefined, t("glossary_editor_aliases_help"), { multiline: true });
         aliasesHelpText.preferredSize.width = glossaryMetaWidth;
 
         metaPanel.add("statictext", undefined, t("glossary_editor_info"));
         var infoInput = metaPanel.add("edittext", undefined, "", { multiline: true, scrolling: true });
         infoInput.alignment = "fill";
-        infoInput.preferredSize = [glossaryMetaWidth, 44];
+        infoInput.preferredSize = [glossaryMetaWidth, 30];
         var infoHelpText = metaPanel.add("statictext", undefined, t("glossary_editor_info_help"), { multiline: true });
         infoHelpText.preferredSize.width = glossaryMetaWidth;
 
@@ -2917,7 +2917,7 @@ function openGlossaryEditorDialog(currentPath) {
 
         var languageTabs = languagesPanel.add("tabbedpanel");
         languageTabs.alignment = "fill";
-        languageTabs.preferredSize = [640, 300];
+        languageTabs.preferredSize = [460, 170];
 
         var detailInputsByKey = {};
         detailInputsByKey._ALIASES = aliasesInput;
@@ -2962,7 +2962,7 @@ function openGlossaryEditorDialog(currentPath) {
             var options = multiline ? { multiline: true, scrolling: true } : undefined;
             var input = fieldGroup.add("edittext", undefined, "", options);
             input.alignment = "fill";
-            if (multiline) input.preferredSize = [glossaryFieldWidth, preferredHeight || 50];
+            if (multiline) input.preferredSize = [glossaryFieldWidth, preferredHeight || 42];
             else input.characters = 22;
             return { group: fieldGroup, label: label, input: input };
         }
@@ -3032,11 +3032,11 @@ function openGlossaryEditorDialog(currentPath) {
         var footerGroup = dlg.add("group");
         footerGroup.alignment = "fill";
         footerGroup.alignChildren = ["fill", "center"];
-        footerGroup.spacing = 10;
+        footerGroup.spacing = 8;
 
         var statusText = footerGroup.add("statictext", undefined, "", { multiline: true });
         statusText.alignment = "fill";
-        statusText.preferredSize.width = 560;
+        statusText.preferredSize.width = 420;
 
         var btnClose = footerGroup.add("button", undefined, t("glossary_editor_close"), { name: "cancel" });
         btnClose.preferredSize = [120, 28];
@@ -3306,10 +3306,17 @@ function openGlossaryEditorDialog(currentPath) {
             if (hasUnsavedGlossaryChanges() && !confirm(t("glossary_editor_discard_confirm"))) return false;
             return true;
         };
+        dlg.onShow = function() {
+            keepWindowWithinBestScreen(dlg, myWindow, 20);
+        };
+        dlg.onResizing = dlg.onResize = function() {
+            this.layout.resize();
+            keepWindowWithinBestScreen(dlg, myWindow, 20);
+        };
 
         rebuildEntryList(editorState.entries.length > 0 ? editorState.entries[0].id : 0);
 
-        centerAndFitWindowOnBestScreen(dlg, glossaryDialogWidth, glossaryDialogHeight, myWindow, { margin: 20, lockSize: true });
+        centerAndFitWindowOnBestScreen(dlg, glossaryDialogWidth, glossaryDialogHeight, myWindow, { margin: 20 });
         var dialogResult = dlg.show();
         if (dialogAction === "reload" || dialogResult === 2) continue;
         return result;
