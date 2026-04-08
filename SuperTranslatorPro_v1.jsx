@@ -9642,6 +9642,289 @@ function buildDeepLBatchPayload(textsArray, startIndex, targetLangCode, includeX
     };
 }
 
+function getDeepLSinglePayloadLength(text, targetLangCode, includeXMLHandling) {
+    var batch = buildDeepLBatchPayload([text], 0, targetLangCode, includeXMLHandling, 2147483647, 1);
+    return batch.payloadLen;
+}
+
+function getStructuredXMLRunDescriptors(xml) {
+    var runs = [];
+    var raw = normalizeTranslatedXML(xml);
+    var body = String(raw || "").replace(/^\s*<root>/i, "").replace(/<\/root>\s*$/i, "");
+    var regex = /(<t\b[^>]*>)([\s\S]*?)(<\/t>)/gi;
+    var match = null;
+    while ((match = regex.exec(body)) !== null) {
+        runs.push({
+            openTag: match[1],
+            innerXML: String(match[2] || ""),
+            closeTag: match[3]
+        });
+    }
+    return runs;
+}
+
+function buildStructuredXMLFromRuns(runDescriptors) {
+    var body = "";
+    for (var i = 0; i < runDescriptors.length; i++) {
+        body += runDescriptors[i].openTag + runDescriptors[i].innerXML + runDescriptors[i].closeTag;
+    }
+    return "<root>" + body + "</root>";
+}
+
+function isEscapedEntityOpenAt(text, boundaryIndex) {
+    var inside = false;
+    var raw = String(text || "");
+    for (var i = 0; i < boundaryIndex && i < raw.length; i++) {
+        var ch = raw.charAt(i);
+        if (ch === "&") inside = true;
+        else if (ch === ";" && inside) inside = false;
+    }
+    return inside;
+}
+
+function isStructuredRunPieceWithinDeepLLimit(openTag, innerXML, closeTag, targetLangCode, payloadLimit) {
+    var xml = "<root>" + openTag + String(innerXML || "") + closeTag + "</root>";
+    return getDeepLSinglePayloadLength(xml, targetLangCode, true) <= payloadLimit;
+}
+
+function findForcedEscapedTextSplitIndex(text, openTag, closeTag, targetLangCode, payloadLimit) {
+    var raw = String(text || "");
+    var low = 1;
+    var high = raw.length;
+    var best = 0;
+
+    while (low <= high) {
+        var mid = Math.floor((low + high) / 2);
+        if (isStructuredRunPieceWithinDeepLLimit(openTag, raw.substring(0, mid), closeTag, targetLangCode, payloadLimit)) {
+            best = mid;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    if (best <= 0) return 0;
+
+    var boundary = best;
+    while (boundary > 0 && isEscapedEntityOpenAt(raw, boundary)) boundary--;
+    if (boundary <= 0) boundary = best;
+
+    var preferredBoundary = boundary;
+    var minScan = Math.max(1, boundary - 80);
+    for (var i = boundary; i >= minScan; i--) {
+        if (isEscapedEntityOpenAt(raw, i)) continue;
+        if (/[\s,.;:!?)]/.test(raw.charAt(i - 1))) {
+            preferredBoundary = i;
+            break;
+        }
+    }
+
+    return preferredBoundary;
+}
+
+function splitEscapedTextForDeepL(text, openTag, closeTag, targetLangCode, payloadLimit) {
+    var parts = [];
+    var remaining = String(text || "");
+
+    while (remaining !== "") {
+        if (isStructuredRunPieceWithinDeepLLimit(openTag, remaining, closeTag, targetLangCode, payloadLimit)) {
+            parts.push(remaining);
+            break;
+        }
+
+        var tokens = remaining.split(/(\s+)/);
+        var current = "";
+        var consumed = 0;
+        for (var i = 0; i < tokens.length; i++) {
+            var token = String(tokens[i] || "");
+            if (token === "") continue;
+            var candidate = current + token;
+            if (!isStructuredRunPieceWithinDeepLLimit(openTag, candidate, closeTag, targetLangCode, payloadLimit)) break;
+            current = candidate;
+            consumed += token.length;
+        }
+
+        if (consumed <= 0) {
+            consumed = findForcedEscapedTextSplitIndex(remaining, openTag, closeTag, targetLangCode, payloadLimit);
+        }
+
+        if (consumed <= 0 || consumed >= remaining.length) {
+            throw new Error("DeepL-Fehler: Ein einzelner Textabschnitt ist selbst nach dem Aufteilen zu gross.");
+        }
+
+        parts.push(remaining.substring(0, consumed));
+        remaining = remaining.substring(consumed);
+    }
+
+    return parts;
+}
+
+function tokenizeStructuredRunInnerXML(innerXML) {
+    var tokens = [];
+    var raw = String(innerXML || "");
+    var regex = /<nt>[\s\S]*?<\/nt>|<(?:pbr|lbr|tab)\s*\/>/gi;
+    var lastIndex = 0;
+    var match = null;
+
+    while ((match = regex.exec(raw)) !== null) {
+        if (match.index > lastIndex) {
+            tokens.push({ type: "text", value: raw.substring(lastIndex, match.index) });
+        }
+        tokens.push({
+            type: /^<nt>/i.test(match[0]) ? "nt" : "tag",
+            value: match[0]
+        });
+        lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < raw.length) tokens.push({ type: "text", value: raw.substring(lastIndex) });
+    return tokens;
+}
+
+function splitStructuredRunInnerForDeepL(openTag, innerXML, closeTag, targetLangCode, payloadLimit) {
+    if (isStructuredRunPieceWithinDeepLLimit(openTag, innerXML, closeTag, targetLangCode, payloadLimit)) {
+        return [String(innerXML || "")];
+    }
+
+    var tokens = tokenizeStructuredRunInnerXML(innerXML);
+    if (tokens.length === 0) return [String(innerXML || "")];
+
+    var parts = [];
+    var current = "";
+
+    var appendAtomicToken = function(tokenValue, allowTextSplit) {
+        var value = String(tokenValue || "");
+        if (value === "") return;
+
+        if (allowTextSplit) {
+            var textParts = splitEscapedTextForDeepL(value, openTag, closeTag, targetLangCode, payloadLimit);
+            for (var tp = 0; tp < textParts.length; tp++) appendAtomicToken(textParts[tp], false);
+            return;
+        }
+
+        if (current !== "" && isStructuredRunPieceWithinDeepLLimit(openTag, current + value, closeTag, targetLangCode, payloadLimit)) {
+            current += value;
+            return;
+        }
+
+        if (current !== "") {
+            parts.push(current);
+            current = "";
+        }
+
+        if (!isStructuredRunPieceWithinDeepLLimit(openTag, value, closeTag, targetLangCode, payloadLimit)) {
+            throw new Error("DeepL-Fehler: Ein geschuetzter XML-Abschnitt ist fuer einen Einzelaufruf zu gross.");
+        }
+
+        current = value;
+    };
+
+    for (var i = 0; i < tokens.length; i++) {
+        if (tokens[i].type === "text") appendAtomicToken(tokens[i].value, true);
+        else appendAtomicToken(tokens[i].value, false);
+    }
+
+    if (current !== "") parts.push(current);
+    return parts;
+}
+
+function buildStructuredXMLSegmentsForDeepL(sourceXML, targetLangCode, payloadLimit) {
+    var runs = getStructuredXMLRunDescriptors(sourceXML);
+    if (runs.length === 0) {
+        throw new Error("DeepL-Fehler: Der XML-Block konnte nicht in Formatlaeufe zerlegt werden.");
+    }
+
+    var units = [];
+    for (var r = 0; r < runs.length; r++) {
+        var innerParts = splitStructuredRunInnerForDeepL(runs[r].openTag, runs[r].innerXML, runs[r].closeTag, targetLangCode, payloadLimit);
+        for (var p = 0; p < innerParts.length; p++) {
+            units.push({
+                runIndex: r,
+                openTag: runs[r].openTag,
+                innerXML: innerParts[p],
+                closeTag: runs[r].closeTag
+            });
+        }
+    }
+
+    var segments = [];
+    var currentUnits = [];
+
+    for (var u = 0; u < units.length; u++) {
+        var probeUnits = currentUnits.concat([units[u]]);
+        var probeXML = buildStructuredXMLFromRuns(probeUnits);
+        if (currentUnits.length > 0 && getDeepLSinglePayloadLength(probeXML, targetLangCode, true) > payloadLimit) {
+            segments.push({
+                sourceUnits: currentUnits,
+                xml: buildStructuredXMLFromRuns(currentUnits)
+            });
+            currentUnits = [];
+        }
+
+        currentUnits.push(units[u]);
+        if (getDeepLSinglePayloadLength(buildStructuredXMLFromRuns(currentUnits), targetLangCode, true) > payloadLimit) {
+            throw new Error("DeepL-Fehler: Ein XML-Teilsegment ueberschreitet weiterhin die zulassige Request-Groesse.");
+        }
+    }
+
+    if (currentUnits.length > 0) {
+        segments.push({
+            sourceUnits: currentUnits,
+            xml: buildStructuredXMLFromRuns(currentUnits)
+        });
+    }
+
+    if (segments.length <= 1 && units.length <= 1) {
+        throw new Error("DeepL-Fehler: Der uebergrosse XML-Block konnte nicht sinnvoll aufgeteilt werden.");
+    }
+
+    writeDebugLog("deepl:segment_block runs=" + runs.length + " units=" + units.length + " segments=" + segments.length + " payloadLimit=" + payloadLimit);
+
+    return {
+        runs: runs,
+        segments: segments
+    };
+}
+
+function translateOversizedStructuredXMLBlockDeepL(sourceXML, targetLangCode, overStartPct, overEndPct, payloadLimit) {
+    var safePayloadLimit = (payloadLimit && payloadLimit > 0) ? payloadLimit : 45000;
+    var segmented = buildStructuredXMLSegmentsForDeepL(sourceXML, targetLangCode, safePayloadLimit);
+    var segmentXMLs = [];
+    for (var i = 0; i < segmented.segments.length; i++) segmentXMLs.push(segmented.segments[i].xml);
+
+    var translatedSegments = translateBatchDeepL(segmentXMLs, targetLangCode, overStartPct, overEndPct);
+    if (!translatedSegments || translatedSegments.length !== segmented.segments.length) {
+        throw new Error("DeepL-Fehler: Die segmentierte Uebersetzung ist unvollstaendig.");
+    }
+
+    var rebuiltRuns = [];
+    for (var r = 0; r < segmented.runs.length; r++) {
+        rebuiltRuns.push({
+            openTag: segmented.runs[r].openTag,
+            innerXML: "",
+            closeTag: segmented.runs[r].closeTag
+        });
+    }
+
+    for (var s = 0; s < segmented.segments.length; s++) {
+        var translatedRuns = getStructuredXMLRunDescriptors(translatedSegments[s]);
+        var expectedUnits = segmented.segments[s].sourceUnits;
+        if (translatedRuns.length !== expectedUnits.length) {
+            throw new Error("DeepL-Fehler: Ein Teilsegment kam mit unerwarteter XML-Struktur zurueck.");
+        }
+        for (var u = 0; u < expectedUnits.length; u++) {
+            rebuiltRuns[expectedUnits[u].runIndex].innerXML += translatedRuns[u].innerXML;
+        }
+    }
+
+    var rebuiltXML = normalizeStructuredXMLCandidate(buildStructuredXMLFromRuns(rebuiltRuns), sourceXML);
+    if (!validateStructuredXMLTranslation(sourceXML, rebuiltXML)) {
+        throw new Error("DeepL-Fehler: Die segmentierte Uebersetzung konnte nicht als gueltiges XML rekonstruiert werden.");
+    }
+
+    return rebuiltXML;
+}
+
 function compareStringArrays(arrA, arrB) {
     if (arrA.length !== arrB.length) return false;
     for (var i = 0; i < arrA.length; i++) {
@@ -10389,6 +10672,13 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
             var batchBuild = buildDeepLBatchPayload(textsArray, b, targetLangCode, true, maxPayloadLen, maxBatchSize);
             var payloadStr = batchBuild.payloadStr;
             var endBatch = batchBuild.endBatch;
+
+            if ((endBatch === (b + 1)) && batchBuild.payloadLen > maxPayloadLen) {
+                writeDebugLog("deepl:oversized_single_block index=" + b + " payloadLen=" + batchBuild.payloadLen + " limit=" + maxPayloadLen, "WARNUNG");
+                translated.push(translateOversizedStructuredXMLBlockDeepL(textsArray[b], targetLangCode, currentOverPct, currentOverPct, maxPayloadLen));
+                b = endBatch;
+                break;
+            }
 
             updateProgress(currentTaskPct, t("deepl_request_blocks", { start: (b + 1), end: endBatch, total: textsArray.length }), currentOverPct, null);
             
