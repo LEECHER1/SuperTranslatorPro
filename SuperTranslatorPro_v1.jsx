@@ -1111,9 +1111,12 @@ var backPageTrackerSetting = normalizeBackPageTrackerSetting(app.extractLabel(BA
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
 var DNT_LABEL = "SuperTranslatorPRO_DNT_Styles";
 var DEBUG_TABLE_RESTORE_LABEL = "SuperTranslatorPRO_DebugTableRestore";
+var DEBUG_GENERAL_LABEL = "SuperTranslatorPRO_DebugGeneral";
 var formalitySetting = app.extractLabel(FORMALITY_LABEL) || "default";
 var dntStyles = app.extractLabel(DNT_LABEL) || "";
 var tableRestoreDebugEnabled = (app.extractLabel(DEBUG_TABLE_RESTORE_LABEL) === "1");
+var generalDebugSettingRaw = app.extractLabel(DEBUG_GENERAL_LABEL);
+var generalDebugEnabled = generalDebugSettingRaw === "" ? tableRestoreDebugEnabled : (generalDebugSettingRaw === "1");
 var smartCopyfitEnabled = normalizeCopyfitEnabledSetting(app.extractLabel(COPYFIT_ENABLED_LABEL) || "1");
 var smartCopyfitMaxTracking = normalizeCopyfitMaxTrackingSetting(app.extractLabel(COPYFIT_MAX_TRACKING_LABEL) || "-10");
 var smartCopyfitMinScale = normalizeCopyfitMinScaleSetting(app.extractLabel(COPYFIT_MIN_SCALE_LABEL) || "98");
@@ -1611,7 +1614,8 @@ function ensureGlossaryPathConfigured(currentResolvedPath, storedPath) {
 }
 
 var logPath = Folder.temp + "/SuperTranslatorPRO_Log.txt";
-var debugLogPath = Folder.temp + "/SuperTranslatorPRO_DebugLog.txt";
+var debugLogPath = Folder.temp + "/SuperTranslatorPRO_GeneralDebugLog.txt";
+var tableDebugLogPath = Folder.temp + "/SuperTranslatorPRO_TableImageDebugLog.txt";
 var debugSessionId = "";
 
 // --- 0A. PROTOKOLL (LOGGING) ---
@@ -1629,10 +1633,32 @@ function writeLog(message, type) {
     } catch(e) {}
 }
 
-function writeDebugLog(message, type) {
-    if (!tableRestoreDebugEnabled) return;
+function isAnyDebugLoggingEnabled() {
+    return !!(generalDebugEnabled || tableRestoreDebugEnabled);
+}
+
+function resolveDebugChannel(message, channel) {
+    var explicit = String(channel || "").toLowerCase();
+    if (explicit === "table" || explicit === "tables" || explicit === "images" || explicit === "table_image") return "table";
+    if (explicit === "general") return "general";
+    var text = String(message || "");
+    if (/^(restore:|table_park:|image_park:|parking:|storage:)/.test(text)) return "table";
+    return "general";
+}
+
+function getDebugChannelPath(channel) {
+    return channel === "table" ? tableDebugLogPath : debugLogPath;
+}
+
+function isDebugChannelEnabled(channel) {
+    return channel === "table" ? !!tableRestoreDebugEnabled : !!generalDebugEnabled;
+}
+
+function writeDebugLog(message, type, channel) {
+    var resolvedChannel = resolveDebugChannel(message, channel);
+    if (!isDebugChannelEnabled(resolvedChannel)) return;
     try {
-        var f = new File(debugLogPath);
+        var f = new File(getDebugChannelPath(resolvedChannel));
         var d = new Date();
         var timeStr = d.getFullYear() + "-" + ("0"+(d.getMonth()+1)).slice(-2) + "-" + ("0"+d.getDate()).slice(-2) + " " + ("0"+d.getHours()).slice(-2) + ":" + ("0"+d.getMinutes()).slice(-2) + ":" + ("0"+d.getSeconds()).slice(-2);
         var prefix = type ? "[" + type + "]" : "[DEBUG]";
@@ -1645,20 +1671,43 @@ function writeDebugLog(message, type) {
     } catch (e) {}
 }
 
+function writeGeneralDebugLog(message, type) {
+    writeDebugLog(message, type, "general");
+}
+
+function writeTableDebugLog(message, type) {
+    writeDebugLog(message, type, "table");
+}
+
 function beginDebugSession(doc, config) {
-    if (!tableRestoreDebugEnabled) return;
+    if (!isAnyDebugLoggingEnabled()) return;
     debugSessionId = String(new Date().getTime()) + "_" + String(Math.floor(Math.random() * 100000));
-    writeDebugLog("=== DEBUG-SESSION GESTARTET ===");
-    try {
-        writeDebugLog("Dokument: " + (doc && doc.name ? doc.name : "(unbekannt)") +
-            " | Modus: " + (config && config.mode ? config.mode : "") +
-            " | Zielsprache: " + (config && config.lang ? config.lang : "") +
-            " | Seitenmodus: " + ((config && config.sourcePages) ? config.sourcePages : "") +
-            " | BDA-Quelle: " + ((config && config.bdaSourcePages) ? config.bdaSourcePages : ""));
-    } catch (e1) {}
-    try {
-        writeDebugLog("CSV: " + (csvPath || "(leer)") + " | TM: " + (tmPath || "(leer)") + " | Debug-Log: " + debugLogPath);
-    } catch (e2) {}
+    if (generalDebugEnabled) {
+        writeGeneralDebugLog("=== DEBUG-SESSION GESTARTET ===");
+        try {
+            writeGeneralDebugLog("Dokument: " + (doc && doc.name ? doc.name : "(unbekannt)") +
+                " | Modus: " + (config && config.mode ? config.mode : "") +
+                " | Zielsprache: " + (config && config.lang ? config.lang : "") +
+                " | Seitenmodus: " + ((config && config.sourcePages) ? config.sourcePages : "") +
+                " | BDA-Quelle: " + ((config && config.bdaSourcePages) ? config.bdaSourcePages : ""));
+        } catch (e1) {}
+        try {
+            writeGeneralDebugLog("CSV: " + (csvPath || "(leer)") + " | TM: " + (tmPath || "(leer)") + " | Allg. Debug-Log: " + debugLogPath);
+        } catch (e2) {}
+    }
+    if (tableRestoreDebugEnabled) {
+        writeTableDebugLog("=== DEBUG-SESSION GESTARTET ===");
+        try {
+            writeTableDebugLog("Dokument: " + (doc && doc.name ? doc.name : "(unbekannt)") +
+                " | Modus: " + (config && config.mode ? config.mode : "") +
+                " | Zielsprache: " + (config && config.lang ? config.lang : "") +
+                " | Seitenmodus: " + ((config && config.sourcePages) ? config.sourcePages : "") +
+                " | BDA-Quelle: " + ((config && config.bdaSourcePages) ? config.bdaSourcePages : ""));
+        } catch (e3) {}
+        try {
+            writeTableDebugLog("Tabellen/Bilder-Log: " + tableDebugLogPath);
+        } catch (e4) {}
+    }
 }
 
 function normalizeDebugSnippet(text, limit) {
@@ -5474,12 +5523,20 @@ btnSettings.onClick = function() {
     btnLog.preferredSize = [150, 28];
     var btnDebugLog = developerLogButtonRow.add("button", undefined, t("debug_log_file"));
     btnDebugLog.preferredSize = [150, 28];
+    var btnTableDebugLog = developerLogButtonRow.add("button", undefined, t("table_debug_log_file"));
+    btnTableDebugLog.preferredSize = [170, 28];
 
     var developerPathsSection = createSettingsSection(developerTab, t("settings_section_developer_paths"));
     var developerLogPathView = createReadonlyDeveloperField(developerPathsSection, t("settings_log_path"), logPath);
     var developerDebugLogPathView = createReadonlyDeveloperField(developerPathsSection, t("settings_debug_log_path"), debugLogPath);
+    var developerTableDebugLogPathView = createReadonlyDeveloperField(developerPathsSection, t("settings_table_debug_log_path"), tableDebugLogPath);
 
     var developerDebugSection = createSettingsSection(developerTab, t("settings_section_developer_debug"));
+    var debugGeneralCheckbox = developerDebugSection.add("checkbox", undefined, t("debug_general"));
+    debugGeneralCheckbox.value = generalDebugEnabled;
+    debugGeneralCheckbox.helpTip = t("debug_general_help");
+    var debugGeneralHelpText = developerDebugSection.add("statictext", undefined, t("debug_general_help"), { multiline: true });
+    debugGeneralHelpText.preferredSize.width = 640;
     var debugTableRestoreCheckbox = developerDebugSection.add("checkbox", undefined, t("debug_tables_images"));
     debugTableRestoreCheckbox.value = tableRestoreDebugEnabled;
     debugTableRestoreCheckbox.helpTip = t("debug_tables_images_help");
@@ -5489,14 +5546,20 @@ btnSettings.onClick = function() {
     function refreshDeveloperPanelUI() {
         var logStatus = fileExistsSafe(logPath) ? t("settings_developer_file_available") : t("settings_developer_file_missing");
         var debugLogStatus = fileExistsSafe(debugLogPath) ? t("settings_developer_file_available") : t("settings_developer_file_missing");
+        var tableDebugLogStatus = fileExistsSafe(tableDebugLogPath) ? t("settings_developer_file_available") : t("settings_developer_file_missing");
+        var generalDebugStatus = debugGeneralCheckbox.value ? t("status_on") : t("status_off");
         var debugStatus = debugTableRestoreCheckbox.value ? t("status_on") : t("status_off");
         developerStatusBox.text =
             t("settings_developer_main_log_status") + " " + logStatus + "\n" +
             t("settings_developer_debug_log_status") + " " + debugLogStatus + "\n" +
+            t("settings_developer_table_debug_log_status") + " " + tableDebugLogStatus + "\n" +
+            t("settings_developer_general_debug_status") + " " + generalDebugStatus + "\n" +
             t("settings_developer_debug_tables_status") + " " + debugStatus;
         developerLogPathView.text = logPath;
         developerDebugLogPathView.text = debugLogPath;
+        developerTableDebugLogPathView.text = tableDebugLogPath;
     }
+    debugGeneralCheckbox.onClick = refreshDeveloperPanelUI;
     debugTableRestoreCheckbox.onClick = refreshDeveloperPanelUI;
     refreshDeveloperPanelUI();
 
@@ -5645,6 +5708,8 @@ btnSettings.onClick = function() {
         app.insertLabel(PDF_EXPORT_WEB_SPREADS_LABEL, pdfExportWebSpreadsSetting ? "1" : "0");
         app.insertLabel(PDF_EXPORT_WEB_HYPERLINKS_LABEL, pdfExportWebHyperlinksSetting ? "1" : "0");
         app.insertLabel(UI_LANGUAGE_LABEL, normalizeUILanguageSetting(selectedUILanguage));
+        generalDebugEnabled = !!debugGeneralCheckbox.value;
+        app.insertLabel(DEBUG_GENERAL_LABEL, generalDebugEnabled ? "1" : "0");
         tableRestoreDebugEnabled = !!debugTableRestoreCheckbox.value;
         app.insertLabel(DEBUG_TABLE_RESTORE_LABEL, tableRestoreDebugEnabled ? "1" : "0");
         
@@ -5677,6 +5742,11 @@ btnSettings.onClick = function() {
         var f = new File(debugLogPath);
         if (f.exists) { f.execute(); } else { alert(t("no_debug_log_file")); }
         try { refreshDeveloperPanelUI(); } catch (developerRefreshErr2) {}
+    };
+    btnTableDebugLog.onClick = function() {
+        var f = new File(tableDebugLogPath);
+        if (f.exists) { f.execute(); } else { alert(t("no_table_debug_log_file")); }
+        try { refreshDeveloperPanelUI(); } catch (developerRefreshErr3) {}
     };
     btnInfo.onClick = function() {
         alert(buildAboutText(), t("about_title"));
@@ -8781,8 +8851,10 @@ function createFeedbackReport() {
             reportFile.writeln("Copyfit Scale bis: " + smartCopyfitMinScale + "%");
             reportFile.writeln("Copyfit Tracking-Schrittweite: " + smartCopyfitTrackingStep);
             reportFile.writeln("Copyfit Scale-Schrittweite: " + smartCopyfitScaleStep + "%");
+            reportFile.writeln("Allg. Debug aktiv: " + (generalDebugEnabled ? "Ja" : "Nein"));
+            reportFile.writeln("Allg. Debug-Log Pfad: " + debugLogPath);
             reportFile.writeln("Debug Tabellen/Bilder: " + (tableRestoreDebugEnabled ? "Ja" : "Nein"));
-            reportFile.writeln("Debug-Log Pfad: " + debugLogPath);
+            reportFile.writeln("Tabellen/Bilder-Log Pfad: " + tableDebugLogPath);
             reportFile.writeln("\n--- Bitte hier beschreiben: \n");
             reportFile.close();
             alert(t("feedback_created", { path: reportFile.fsName }));
