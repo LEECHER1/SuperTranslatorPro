@@ -1584,6 +1584,7 @@ function promptForGlossaryPath(currentPath, allowLater) {
         };
     }
 
+    centerAndFitWindowOnBestScreen(dlg, 0, 0, myWindow, { margin: 24 });
     if (dlg.show() !== 1) return "";
     return resultPath;
 }
@@ -2756,6 +2757,7 @@ function promptForNewGlossaryEntryName(sourceLanguageCode) {
         dlg.close(0);
     };
 
+    centerAndFitWindowOnBestScreen(dlg, 0, 0, myWindow, { margin: 24 });
     if (dlg.show() !== 1) return null;
     return result;
 }
@@ -3299,9 +3301,17 @@ function openGlossaryEditorDialog(currentPath) {
             if (hasUnsavedGlossaryChanges() && !confirm(t("glossary_editor_discard_confirm"))) return false;
             return true;
         };
+        dlg.onShow = function() {
+            centerAndFitWindowOnBestScreen(dlg, 1120, 760, myWindow, { margin: 20 });
+        };
+        dlg.onResizing = dlg.onResize = function() {
+            this.layout.resize();
+            keepWindowWithinBestScreen(dlg, myWindow, 20);
+        };
 
         rebuildEntryList(editorState.entries.length > 0 ? editorState.entries[0].id : 0);
 
+        centerAndFitWindowOnBestScreen(dlg, 1120, 760, myWindow, { margin: 20 });
         var dialogResult = dlg.show();
         if (dialogAction === "reload" || dialogResult === 2) continue;
         return result;
@@ -3849,17 +3859,19 @@ function updateLanguageMasterVersionLabels(doc) {
 }
 
 // --- 1. BENUTZEROBERFLÄCHE (UI) ---
-var MAIN_WINDOW_WIDTH = 920;
-var MAIN_WINDOW_HEIGHT = 540;
+var MAIN_WINDOW_DEFAULT_WIDTH = 920;
+var MAIN_WINDOW_DEFAULT_HEIGHT = 540;
+var mainWindowCurrentWidth = MAIN_WINDOW_DEFAULT_WIDTH;
+var mainWindowCurrentHeight = MAIN_WINDOW_DEFAULT_HEIGHT;
 
 var myWindow = new Window("palette", SCRIPT_NAME + " v" + SCRIPT_VERSION, undefined, { resizeable: false });
 myWindow.orientation = "column";
 myWindow.alignChildren = ["fill", "top"];
 myWindow.spacing = 10;
 myWindow.margins = 14;
-myWindow.minimumSize = [MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT];
-myWindow.preferredSize = [MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT];
-myWindow.maximumSize = [MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT];
+myWindow.minimumSize = [MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT];
+myWindow.preferredSize = [MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT];
+myWindow.maximumSize = [MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT];
 
 var headerGroup = myWindow.add("group");
 headerGroup.orientation = "row";
@@ -4271,6 +4283,239 @@ function getBoundsCoordinate(boundsObj, propertyName, fallbackIndex, fallbackVal
     return fallbackValue;
 }
 
+function getSizeCoordinate(sizeObj, propertyName, fallbackIndex, fallbackValue) {
+    if (!sizeObj) return fallbackValue;
+    try {
+        if (typeof sizeObj[propertyName] !== "undefined") return sizeObj[propertyName];
+    } catch (e) {}
+    try {
+        if (typeof sizeObj[fallbackIndex] !== "undefined") return sizeObj[fallbackIndex];
+    } catch (e2) {}
+    return fallbackValue;
+}
+
+function getScreenBoundsInfo(screenObj) {
+    if (!screenObj) return null;
+    var bounds = null;
+    try { bounds = screenObj.visibleBounds || screenObj.bounds; } catch (e) { bounds = null; }
+    if (!bounds) return null;
+    var left = getBoundsCoordinate(bounds, "left", 0, 0);
+    var top = getBoundsCoordinate(bounds, "top", 1, 0);
+    var right = getBoundsCoordinate(bounds, "right", 2, left);
+    var bottom = getBoundsCoordinate(bounds, "bottom", 3, top);
+    if (right <= left || bottom <= top) return null;
+    return {
+        left: left,
+        top: top,
+        right: right,
+        bottom: bottom,
+        width: right - left,
+        height: bottom - top
+    };
+}
+
+function getWindowBoundsInfo(windowObj, fallbackWidth, fallbackHeight) {
+    if (!windowObj) return null;
+    var bounds = null;
+    try { bounds = windowObj.bounds; } catch (e) { bounds = null; }
+    var left = getBoundsCoordinate(bounds, "left", 0, 0);
+    var top = getBoundsCoordinate(bounds, "top", 1, 0);
+    var right = getBoundsCoordinate(bounds, "right", 2, left);
+    var bottom = getBoundsCoordinate(bounds, "bottom", 3, top);
+    var width = right - left;
+    var height = bottom - top;
+    if (width <= 0) width = fallbackWidth || 0;
+    if (height <= 0) height = fallbackHeight || 0;
+    if (width <= 0) width = getSizeCoordinate(windowObj.size, "width", 0, 0);
+    if (height <= 0) height = getSizeCoordinate(windowObj.size, "height", 1, 0);
+    if (width <= 0) width = getSizeCoordinate(windowObj.preferredSize, "width", 0, 0);
+    if (height <= 0) height = getSizeCoordinate(windowObj.preferredSize, "height", 1, 0);
+    if (width <= 0) width = getSizeCoordinate(windowObj.minimumSize, "width", 0, 0);
+    if (height <= 0) height = getSizeCoordinate(windowObj.minimumSize, "height", 1, 0);
+    if (width <= 0) width = fallbackWidth || 0;
+    if (height <= 0) height = fallbackHeight || 0;
+    return {
+        left: left,
+        top: top,
+        right: left + width,
+        bottom: top + height,
+        width: width,
+        height: height
+    };
+}
+
+function getRectOverlapArea(rectA, rectB) {
+    if (!rectA || !rectB) return 0;
+    var overlapWidth = Math.max(0, Math.min(rectA.right, rectB.right) - Math.max(rectA.left, rectB.left));
+    var overlapHeight = Math.max(0, Math.min(rectA.bottom, rectB.bottom) - Math.max(rectA.top, rectB.top));
+    return overlapWidth * overlapHeight;
+}
+
+function getRectCenterDistance(rectA, rectB) {
+    if (!rectA || !rectB) return Number.MAX_VALUE;
+    var centerAX = rectA.left + ((rectA.right - rectA.left) / 2);
+    var centerAY = rectA.top + ((rectA.bottom - rectA.top) / 2);
+    var centerBX = rectB.left + ((rectB.right - rectB.left) / 2);
+    var centerBY = rectB.top + ((rectB.bottom - rectB.top) / 2);
+    var dx = centerAX - centerBX;
+    var dy = centerAY - centerBY;
+    return Math.sqrt((dx * dx) + (dy * dy));
+}
+
+function getBestScreenBoundsInfo(anchorWindow, fallbackWidth, fallbackHeight) {
+    var screens = [];
+    try { screens = $.screens || []; } catch (e) { screens = []; }
+    if (!screens || screens.length === 0) return null;
+
+    var anchorCandidate = anchorWindow || null;
+    if (!anchorCandidate) {
+        try {
+            if (myWindow && myWindow.visible) anchorCandidate = myWindow;
+        } catch (e2) {}
+    }
+    var anchorBounds = getWindowBoundsInfo(anchorCandidate, fallbackWidth, fallbackHeight);
+
+    var bestScreen = null;
+    var bestOverlap = -1;
+    var bestDistance = Number.MAX_VALUE;
+
+    for (var i = 0; i < screens.length; i++) {
+        var screenInfo = getScreenBoundsInfo(screens[i]);
+        if (!screenInfo) continue;
+        if (!anchorBounds) {
+            if (!bestScreen) bestScreen = screenInfo;
+            continue;
+        }
+        var overlap = getRectOverlapArea(anchorBounds, screenInfo);
+        var distance = getRectCenterDistance(anchorBounds, screenInfo);
+        if (!bestScreen || overlap > bestOverlap || (overlap === bestOverlap && distance < bestDistance)) {
+            bestScreen = screenInfo;
+            bestOverlap = overlap;
+            bestDistance = distance;
+        }
+    }
+    return bestScreen;
+}
+
+function getFittedWindowSize(screenInfo, desiredWidth, desiredHeight, margin) {
+    var safeMargin = (margin === 0) ? 0 : (margin || 20);
+    if (!screenInfo) {
+        return {
+            width: desiredWidth || 0,
+            height: desiredHeight || 0,
+            availableWidth: desiredWidth || 0,
+            availableHeight: desiredHeight || 0,
+            margin: safeMargin
+        };
+    }
+
+    var availableWidth = Math.max(1, screenInfo.width - (safeMargin * 2));
+    var availableHeight = Math.max(1, screenInfo.height - (safeMargin * 2));
+    var resolvedWidth = (desiredWidth && desiredWidth > 0) ? desiredWidth : availableWidth;
+    var resolvedHeight = (desiredHeight && desiredHeight > 0) ? desiredHeight : availableHeight;
+    var minWidth = Math.min(260, availableWidth);
+    var minHeight = Math.min(180, availableHeight);
+
+    return {
+        width: Math.max(minWidth, Math.min(resolvedWidth, availableWidth)),
+        height: Math.max(minHeight, Math.min(resolvedHeight, availableHeight)),
+        availableWidth: availableWidth,
+        availableHeight: availableHeight,
+        margin: safeMargin
+    };
+}
+
+function centerAndFitWindowOnBestScreen(windowObj, desiredWidth, desiredHeight, anchorWindow, options) {
+    if (!windowObj) return null;
+    var opts = options || {};
+    var safeMargin = (typeof opts.margin !== "undefined") ? opts.margin : 20;
+
+    try { windowObj.layout.layout(true); } catch (layoutErr) {}
+
+    var currentBounds = getWindowBoundsInfo(windowObj, desiredWidth, desiredHeight);
+    var resolvedWidth = (desiredWidth && desiredWidth > 0) ? desiredWidth : (currentBounds ? currentBounds.width : 0);
+    var resolvedHeight = (desiredHeight && desiredHeight > 0) ? desiredHeight : (currentBounds ? currentBounds.height : 0);
+    var screenInfo = getBestScreenBoundsInfo(anchorWindow || windowObj, resolvedWidth, resolvedHeight);
+    if (!screenInfo) {
+        try { windowObj.center(); } catch (centerErr) {}
+        return null;
+    }
+
+    var fitted = getFittedWindowSize(screenInfo, resolvedWidth, resolvedHeight, safeMargin);
+    var minWidth = getSizeCoordinate(windowObj.minimumSize, "width", 0, 0);
+    var minHeight = getSizeCoordinate(windowObj.minimumSize, "height", 1, 0);
+
+    try {
+        if (opts.lockSize) {
+            windowObj.minimumSize = [fitted.width, fitted.height];
+            windowObj.preferredSize = [fitted.width, fitted.height];
+            windowObj.maximumSize = [fitted.width, fitted.height];
+        } else {
+            windowObj.minimumSize = [
+                minWidth > 0 ? Math.min(minWidth, fitted.availableWidth) : 0,
+                minHeight > 0 ? Math.min(minHeight, fitted.availableHeight) : 0
+            ];
+            windowObj.maximumSize = [fitted.availableWidth, fitted.availableHeight];
+            try { windowObj.preferredSize = [Math.min(fitted.width, fitted.availableWidth), Math.min(fitted.height, fitted.availableHeight)]; } catch (preferredErr) {}
+        }
+    } catch (sizeLimitErr) {}
+
+    var left = screenInfo.left + fitted.margin + Math.round((fitted.availableWidth - fitted.width) / 2);
+    var top = screenInfo.top + fitted.margin + Math.round((fitted.availableHeight - fitted.height) / 2);
+
+    try { windowObj.bounds = [left, top, left + fitted.width, top + fitted.height]; } catch (boundsErr) {}
+    try { windowObj.layout.resize(); } catch (resizeErr) {}
+
+    return {
+        left: left,
+        top: top,
+        width: fitted.width,
+        height: fitted.height,
+        screenInfo: screenInfo
+    };
+}
+
+function keepWindowWithinBestScreen(windowObj, anchorWindow, margin) {
+    if (!windowObj) return null;
+    var currentBounds = getWindowBoundsInfo(windowObj, 0, 0);
+    if (!currentBounds) return null;
+
+    var screenInfo = getBestScreenBoundsInfo(anchorWindow || windowObj, currentBounds.width, currentBounds.height);
+    if (!screenInfo) return null;
+
+    var fitted = getFittedWindowSize(screenInfo, currentBounds.width, currentBounds.height, margin);
+    var left = currentBounds.left;
+    var top = currentBounds.top;
+    var minLeft = screenInfo.left + fitted.margin;
+    var minTop = screenInfo.top + fitted.margin;
+    var maxLeft = screenInfo.right - fitted.margin - fitted.width;
+    var maxTop = screenInfo.bottom - fitted.margin - fitted.height;
+
+    if (left < minLeft) left = minLeft;
+    if (top < minTop) top = minTop;
+    if (left > maxLeft) left = maxLeft;
+    if (top > maxTop) top = maxTop;
+
+    try {
+        var minWidth = getSizeCoordinate(windowObj.minimumSize, "width", 0, 0);
+        var minHeight = getSizeCoordinate(windowObj.minimumSize, "height", 1, 0);
+        windowObj.minimumSize = [
+            minWidth > 0 ? Math.min(minWidth, fitted.availableWidth) : 0,
+            minHeight > 0 ? Math.min(minHeight, fitted.availableHeight) : 0
+        ];
+        windowObj.maximumSize = [fitted.availableWidth, fitted.availableHeight];
+    } catch (limitErr) {}
+
+    try { windowObj.bounds = [left, top, left + fitted.width, top + fitted.height]; } catch (boundsErr) {}
+    return {
+        left: left,
+        top: top,
+        width: fitted.width,
+        height: fitted.height,
+        screenInfo: screenInfo
+    };
+}
+
 function positionDialogRightOfMainWindow(dialog, dialogWidth, dialogHeight) {
     if (!dialog || !myWindow) return;
     try {
@@ -4299,68 +4544,33 @@ function positionDialogRightOfMainWindow(dialog, dialogWidth, dialogHeight) {
 }
 
 function positionDialogCenteredOnMainWindow(dialog, dialogWidth, dialogHeight) {
-    if (!dialog || !myWindow) return;
-    try {
-        var anchorBounds = myWindow.bounds;
-        var anchorLeft = getBoundsCoordinate(anchorBounds, "left", 0, 0);
-        var anchorTop = getBoundsCoordinate(anchorBounds, "top", 1, 0);
-        var anchorRight = getBoundsCoordinate(anchorBounds, "right", 2, anchorLeft + dialogWidth);
-        var anchorBottom = getBoundsCoordinate(anchorBounds, "bottom", 3, anchorTop + dialogHeight);
-
-        var anchorWidth = anchorRight - anchorLeft;
-        var anchorHeight = anchorBottom - anchorTop;
-        var left = anchorLeft + Math.round((anchorWidth - dialogWidth) / 2);
-        var top = anchorTop + Math.round((anchorHeight - dialogHeight) / 2);
-
-        try {
-            if ($.screens && $.screens.length > 0) {
-                var screenBounds = $.screens[0].visibleBounds || $.screens[0].bounds;
-                var screenLeft = getBoundsCoordinate(screenBounds, "left", 0, 0);
-                var screenTop = getBoundsCoordinate(screenBounds, "top", 1, 0);
-                var screenRight = getBoundsCoordinate(screenBounds, "right", 2, left + dialogWidth);
-                var screenBottom = getBoundsCoordinate(screenBounds, "bottom", 3, top + dialogHeight);
-                if (left < screenLeft + 20) left = screenLeft + 20;
-                if (top < screenTop + 20) top = screenTop + 20;
-                if (left + dialogWidth > screenRight) left = Math.max(screenLeft + 20, screenRight - dialogWidth - 20);
-                if (top + dialogHeight > screenBottom) top = Math.max(screenTop + 20, screenBottom - dialogHeight - 20);
-            }
-        } catch (screenErr) {}
-
-        dialog.location = [left, top];
-    } catch (e4) {}
+    centerAndFitWindowOnBestScreen(dialog, dialogWidth, dialogHeight, myWindow, { margin: 20 });
 }
 
 function keepMainWindowStableSize() {
     if (!myWindow) return;
-    try {
-        var bounds = myWindow.bounds;
-        var left = getBoundsCoordinate(bounds, "left", 0, 0);
-        var top = getBoundsCoordinate(bounds, "top", 1, 0);
-        myWindow.bounds = [left, top, left + MAIN_WINDOW_WIDTH, top + MAIN_WINDOW_HEIGHT];
-    } catch (e) {}
+    var geometry = keepWindowWithinBestScreen(myWindow, myWindow, 20);
+    if (!geometry) {
+        geometry = centerAndFitWindowOnBestScreen(myWindow, MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT, myWindow, { margin: 20, lockSize: true });
+    } else {
+        try {
+            var fitted = getFittedWindowSize(geometry.screenInfo, MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT, 20);
+            mainWindowCurrentWidth = fitted.width;
+            mainWindowCurrentHeight = fitted.height;
+            myWindow.minimumSize = [mainWindowCurrentWidth, mainWindowCurrentHeight];
+            myWindow.preferredSize = [mainWindowCurrentWidth, mainWindowCurrentHeight];
+            myWindow.maximumSize = [mainWindowCurrentWidth, mainWindowCurrentHeight];
+            myWindow.bounds = [geometry.left, geometry.top, geometry.left + mainWindowCurrentWidth, geometry.top + mainWindowCurrentHeight];
+        } catch (e) {}
+    }
 }
 
 function centerMainWindowOnScreen() {
     if (!myWindow) return;
-    try {
-        if ($.screens && $.screens.length > 0) {
-            var screenBounds = $.screens[0].visibleBounds || $.screens[0].bounds;
-            var screenLeft = getBoundsCoordinate(screenBounds, "left", 0, 0);
-            var screenTop = getBoundsCoordinate(screenBounds, "top", 1, 0);
-            var screenRight = getBoundsCoordinate(screenBounds, "right", 2, screenLeft + MAIN_WINDOW_WIDTH);
-            var screenBottom = getBoundsCoordinate(screenBounds, "bottom", 3, screenTop + MAIN_WINDOW_HEIGHT);
-            var left = screenLeft + Math.round(((screenRight - screenLeft) - MAIN_WINDOW_WIDTH) / 2);
-            var top = screenTop + Math.round(((screenBottom - screenTop) - MAIN_WINDOW_HEIGHT) / 2);
-            myWindow.bounds = [left, top, left + MAIN_WINDOW_WIDTH, top + MAIN_WINDOW_HEIGHT];
-            return;
-        }
-    } catch (screenErr) {}
-
-    try {
-        keepMainWindowStableSize();
-        myWindow.center();
-        keepMainWindowStableSize();
-    } catch (e) {}
+    var geometry = centerAndFitWindowOnBestScreen(myWindow, MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT, myWindow, { margin: 20, lockSize: true });
+    if (!geometry) return;
+    mainWindowCurrentWidth = geometry.width;
+    mainWindowCurrentHeight = geometry.height;
 }
 
 function relayoutMainWindowContents() {
@@ -4754,9 +4964,14 @@ function showHyperlinkDialog(doc) {
     };
 
     btnClose.onClick = function() { dlg.close(0); };
+    dlg.onShow = function() {
+        centerAndFitWindowOnBestScreen(dlg, 580, 520, myWindow, { margin: 20 });
+    };
     dlg.onResizing = dlg.onResize = function() {
         this.layout.resize();
+        keepWindowWithinBestScreen(dlg, myWindow, 20);
     };
+    centerAndFitWindowOnBestScreen(dlg, 580, 520, myWindow, { margin: 20 });
     if (dlg.show() !== 1) return null;
     return {
         symbols: refSymbolsSetting,
@@ -4945,14 +5160,8 @@ btnSettings.onClick = function() {
 
     function getSettingsScreenMaxHeight(defaultHeight) {
         var fallback = defaultHeight || 720;
-        try {
-            if ($.screens && $.screens.length > 0) {
-                var screenBounds = $.screens[0].visibleBounds || $.screens[0].bounds;
-                var screenTop = getBoundsCoordinate(screenBounds, "top", 1, 0);
-                var screenBottom = getBoundsCoordinate(screenBounds, "bottom", 3, fallback);
-                return Math.max(360, (screenBottom - screenTop) - 40);
-            }
-        } catch (screenErr) {}
+        var screenInfo = getBestScreenBoundsInfo(setWin || myWindow, 760, fallback);
+        if (screenInfo) return Math.max(360, screenInfo.height - 40);
         return fallback;
     }
 
@@ -5560,25 +5769,19 @@ btnSettings.onClick = function() {
     btnCancelSet.onClick = function() { setWin.close(); };
     setWin.onShow = function() {
         try { applySettingsDialogGeometry(true); } catch (showGeometryErr) {}
-        var bounds = null;
-        var width = 760;
-        var height = 500;
-        try {
-            bounds = setWin.bounds;
-            width = bounds[2] - bounds[0];
-            height = bounds[3] - bounds[1];
-        } catch (boundsErr) {}
-        positionDialogCenteredOnMainWindow(setWin, width, height);
+        centerAndFitWindowOnBestScreen(setWin, 760, 500, myWindow, { margin: 20 });
         try { refreshTypographyScrollUI(); } catch (showScrollErr) {}
     };
     setWin.onResizing = setWin.onResize = function() {
         this.layout.resize();
         try { refreshTypographyScrollUI(); } catch (resizeScrollErr) {}
+        keepWindowWithinBestScreen(setWin, myWindow, 20);
     };
     tabs.onChange = function() {
         try { refreshTypographyScrollUI(); } catch (tabScrollErr) {}
     };
     try { applySettingsDialogGeometry(true); } catch (initialGeometryErr) {}
+    centerAndFitWindowOnBestScreen(setWin, 760, 500, myWindow, { margin: 20 });
     setWin.show();
 };
 
@@ -5912,6 +6115,7 @@ function promptLegacyTargetLanguageSelection(preselectedCodes, doc, includeExten
     };
     btnCancel.onClick = function() { action = "cancel"; dlg.close(); };
 
+    centerAndFitWindowOnBestScreen(dlg, 0, 0, myWindow, { margin: 20 });
     dlg.show();
     if (action === "expand") return promptLegacyTargetLanguageSelection(preselectedCodes, doc, true, capturedSelection);
     if (action !== "ok") return null;
@@ -6768,18 +6972,14 @@ function openGermanFrameCorrectionDialog(corrections) {
                 return true;
             };
             dlg.onShow = function() {
-                if (germanSpellDialogLocation && germanSpellDialogLocation.length === 2) {
-                    try {
-                        dlg.location = [germanSpellDialogLocation[0], germanSpellDialogLocation[1]];
-                        return;
-                    } catch (storedLocationErr) {}
-                }
-                positionDialogRightOfMainWindow(dlg, 620, 500);
+                centerAndFitWindowOnBestScreen(dlg, 620, 500, myWindow, { margin: 20 });
             };
             dlg.onResizing = dlg.onResize = function() {
                 this.layout.resize();
+                keepWindowWithinBestScreen(dlg, myWindow, 20);
             };
 
+            centerAndFitWindowOnBestScreen(dlg, 620, 500, myWindow, { margin: 20 });
             dlg.show();
 
             if (action === "stop") {
@@ -6973,6 +7173,7 @@ function openGermanCorrectionDialog(findings) {
             dlg.close();
         };
 
+        centerAndFitWindowOnBestScreen(dlg, 0, 0, myWindow, { margin: 20 });
         dlg.show();
 
         if (action === "stop") {
@@ -7015,6 +7216,7 @@ function runMasterSpellingCheck(doc) {
     var progressTextLocal = progressWin.add("statictext", undefined, t("german_prepare_check"));
     progressTextLocal.preferredSize.width = 380;
     var progressBarLocal = progressWin.add("progressbar", undefined, 0, targets.length);
+    centerAndFitWindowOnBestScreen(progressWin, 420, 120, myWindow, { margin: 20, lockSize: true });
     progressWin.show();
 
     var corrections = [];
@@ -7134,8 +7336,10 @@ function createProgressWindow() {
     
     progressWin.onResizing = progressWin.onResize = function() {
         this.layout.resize();
+        keepWindowWithinBestScreen(progressWin, myWindow, 20);
     };
     
+    centerAndFitWindowOnBestScreen(progressWin, 560, 340, myWindow, { margin: 20 });
     progressWin.show();
     progressWin.update();
 }
@@ -11097,4 +11301,5 @@ function getPagesFromString(doc, pageStr) {
 }
 
 // === START ===
+centerMainWindowOnScreen();
 myWindow.show();
