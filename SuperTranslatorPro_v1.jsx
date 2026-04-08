@@ -6155,6 +6155,12 @@ function createLegacyTargetMasters(doc, germanMaster, selectedCodes, anchorMaste
         if (!duplicated || !duplicated.isValid) throw new Error((UI_IS_GERMAN ? "Musterseite für " : "Master page for ") + code.toUpperCase() + (UI_IS_GERMAN ? " konnte nicht dupliziert werden." : " could not be duplicated."));
 
         try { duplicated.move(LocationOptions.AFTER, anchor); } catch (moveErr) {}
+        var masterThreadPairs = [];
+        var masterPageCount = Math.min(germanMaster.pages.length, duplicated.pages.length);
+        for (var mp = 0; mp < masterPageCount; mp++) {
+            masterThreadPairs.push({ sourceItem: germanMaster.pages[mp], targetItem: duplicated.pages[mp] });
+        }
+        restoreTextFrameThreadingFromPairs(masterThreadPairs);
         setMasterSpreadLanguageNaming(duplicated, makeAlphabeticIndex(prefixIndex), code);
         if (!replaceMasterLanguageBadgeText(duplicated, code)) {
             try { if (duplicated.isValid) duplicated.remove(); } catch (cleanupErr) {}
@@ -7854,18 +7860,15 @@ function runBDAMode(doc, config, preparedLegacy) {
             try { newPage.appliedMaster = task.master; } catch(e) {}
             newPagesForThisLang.push(newPage);
         }
+
+        var pageThreadPairs = [];
+        for (var npPair = 0; npPair < Math.min(originalPages.length, newPagesForThisLang.length); npPair++) {
+            pageThreadPairs.push({ sourceItem: originalPages[npPair], targetItem: newPagesForThisLang[npPair] });
+        }
+        restoreTextFrameThreadingFromPairs(pageThreadPairs);
         
         var startPageStr = newPagesForThisLang[0].name; 
-        var targetTextObjArray = [];
-        for (var np = 0; np < newPagesForThisLang.length; np++) {
-            var pItems = newPagesForThisLang[np].allPageItems;
-            for(var tf=0; tf<pItems.length; tf++) {
-                if (pItems[tf].constructor.name === "TextFrame") {
-                    var st; try { st = pItems[tf].parentStory; } catch(e) { st = pItems[tf].texts[0]; }
-                    targetTextObjArray.push(st);
-                }
-            }
-        }
+        var targetTextObjArray = collectUniqueTextStoriesFromItems(newPagesForThisLang);
 
         try {
             executeTranslation(doc, targetTextObjArray, false, "", task.deepLCode, overallStartPct, overallEndPct);
@@ -8318,6 +8321,135 @@ function getTextFrameStory(tf) {
     return story;
 }
 
+function getThreadableTextFrames(item) {
+    if (!item || !item.isValid) return [];
+    try {
+        if (item.constructor && item.constructor.name === "TextFrame") return [item];
+    } catch (e) {}
+    return getTextFramesFromContainer(item);
+}
+
+function clearTextFrameThreadLink(textFrame) {
+    if (!textFrame || !textFrame.isValid) return false;
+    try {
+        textFrame.nextTextFrame = NothingEnum.nothing;
+        return true;
+    } catch (e) {}
+    try {
+        textFrame.nextTextFrame = null;
+        return true;
+    } catch (e2) {}
+    return false;
+}
+
+function restoreTextFrameThreadingFromPairs(pairs) {
+    if (!pairs || pairs.length === 0) return 0;
+
+    var frameMap = {};
+    var targetSeen = {};
+    var targetFramesToClear = [];
+
+    for (var i = 0; i < pairs.length; i++) {
+        var pair = pairs[i];
+        if (!pair || !pair.sourceItem || !pair.targetItem) continue;
+
+        var sourceFrames = getThreadableTextFrames(pair.sourceItem);
+        var targetFrames = getThreadableTextFrames(pair.targetItem);
+        var frameCount = Math.min(sourceFrames.length, targetFrames.length);
+
+        for (var f = 0; f < frameCount; f++) {
+            var sourceFrame = sourceFrames[f];
+            var targetFrame = targetFrames[f];
+            if (!sourceFrame || !sourceFrame.isValid || !targetFrame || !targetFrame.isValid) continue;
+
+            var sourceId = null;
+            var targetId = null;
+            try { sourceId = sourceFrame.id; } catch (eId) { sourceId = null; }
+            try { targetId = targetFrame.id; } catch (eId2) { targetId = null; }
+            if (sourceId === null || sourceId === undefined) continue;
+
+            frameMap[String(sourceId)] = {
+                sourceFrame: sourceFrame,
+                targetFrame: targetFrame
+            };
+
+            if (targetId !== null && targetId !== undefined && !targetSeen[String(targetId)]) {
+                targetSeen[String(targetId)] = true;
+                targetFramesToClear.push(targetFrame);
+            }
+        }
+    }
+
+    for (var c = 0; c < targetFramesToClear.length; c++) {
+        clearTextFrameThreadLink(targetFramesToClear[c]);
+    }
+
+    var restored = 0;
+    var recomposeStories = {};
+    for (var sourceKey in frameMap) {
+        if (!frameMap.hasOwnProperty(sourceKey)) continue;
+
+        var mappedEntry = frameMap[sourceKey];
+        var nextSourceFrame = null;
+        try { nextSourceFrame = mappedEntry.sourceFrame.nextTextFrame; } catch (eNext) { nextSourceFrame = null; }
+        if (!nextSourceFrame || !nextSourceFrame.isValid) continue;
+
+        var nextSourceId = null;
+        try { nextSourceId = nextSourceFrame.id; } catch (eNextId) { nextSourceId = null; }
+        if (nextSourceId === null || nextSourceId === undefined) continue;
+
+        var nextMappedEntry = frameMap[String(nextSourceId)];
+        if (!nextMappedEntry || !nextMappedEntry.targetFrame || !nextMappedEntry.targetFrame.isValid) continue;
+
+        try {
+            mappedEntry.targetFrame.nextTextFrame = nextMappedEntry.targetFrame;
+            restored++;
+
+            var targetStory = getTextFrameStory(mappedEntry.targetFrame);
+            if (targetStory) {
+                var storyId = null;
+                try { storyId = targetStory.id; } catch (eStoryId) { storyId = null; }
+                if (storyId !== null && storyId !== undefined) recomposeStories[String(storyId)] = targetStory;
+            }
+        } catch (eLink) {}
+    }
+
+    for (var storyKey in recomposeStories) {
+        if (!recomposeStories.hasOwnProperty(storyKey)) continue;
+        try {
+            if (recomposeStories[storyKey] && recomposeStories[storyKey].isValid && recomposeStories[storyKey].recompose) {
+                recomposeStories[storyKey].recompose();
+            }
+        } catch (eRecompose) {}
+    }
+
+    return restored;
+}
+
+function collectUniqueTextStoriesFromItems(items) {
+    var targets = [];
+    var seenStoryIds = {};
+    if (!items || items.length === 0) return targets;
+
+    for (var i = 0; i < items.length; i++) {
+        var frames = getThreadableTextFrames(items[i]);
+        for (var f = 0; f < frames.length; f++) {
+            var story = getTextFrameStory(frames[f]);
+            if (!story) continue;
+
+            var storyId = null;
+            try { storyId = story.id; } catch (eId) { storyId = null; }
+            if (storyId !== null && storyId !== undefined) {
+                if (seenStoryIds[String(storyId)]) continue;
+                seenStoryIds[String(storyId)] = true;
+            }
+            targets.push(story);
+        }
+    }
+
+    return targets;
+}
+
 function findAndReplaceTextInStory(story, findString, replaceString) {
     if (!story || !findString || findString === "" || replaceString === undefined || replaceString === null) return false;
     try {
@@ -8461,7 +8593,6 @@ function syncBDATextChanges(doc, config) {
         var targetPages = targetsByLang[langCode];
         targetPages.sort(function(a,b){ return a.documentOffset - b.documentOffset; });
         var deepLLang = getDeepLLangCode(langCode);
-        var targetTextObjArray = [];
         var pendingReplacements = [];
         var reservedTargetItemIds = {};
 
@@ -8511,22 +8642,7 @@ function syncBDATextChanges(doc, config) {
                         }
                     } catch (eBounds) {}
 
-                    pendingReplacements.push({ oldItem: oldTargetItem, newItem: duplicated });
-                    var newFrames = [];
-                    if (duplicated.constructor.name === "TextFrame") {
-                        newFrames.push(duplicated);
-                    } else if (duplicated.allPageItems && duplicated.allPageItems.length > 0) {
-                        var nested = duplicated.allPageItems;
-                        for (var n = 0; n < nested.length; n++) {
-                            if (nested[n].constructor.name === "TextFrame") {
-                                newFrames.push(nested[n]);
-                            }
-                        }
-                    }
-                    for (var nf = 0; nf < newFrames.length; nf++) {
-                        var st = getTextFrameStory(newFrames[nf]);
-                        if (st) targetTextObjArray.push(st);
-                    }
+                    pendingReplacements.push({ sourceItem: sourceItem, oldItem: oldTargetItem, newItem: duplicated });
                 }
             } catch (e) {}
         }
@@ -8535,6 +8651,12 @@ function syncBDATextChanges(doc, config) {
             var overallStartPct = 10 + (li / langCodes.length) * 85;
             var overallEndPct = 10 + ((li + 1) / langCodes.length) * 85;
             try {
+                restoreTextFrameThreadingFromPairs(pendingReplacements);
+                var replacementItems = [];
+                for (var ri = 0; ri < pendingReplacements.length; ri++) {
+                    if (pendingReplacements[ri] && pendingReplacements[ri].newItem) replacementItems.push(pendingReplacements[ri].newItem);
+                }
+                var targetTextObjArray = collectUniqueTextStoriesFromItems(replacementItems);
                 if (targetTextObjArray.length > 0) {
                     updateProgress(10, t("sync_translate_changed", { lang: langCode.toUpperCase() }), overallStartPct, t("bda_language_progress", { current: (li + 1), total: langCodes.length, lang: langCode.toUpperCase() }));
                     executeTranslation(doc, targetTextObjArray, false, "", deepLLang, overallStartPct, overallEndPct);
@@ -9379,7 +9501,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 finalTranslations[i] = ""; 
                 emptyCount++;
             } else if (!glossaryMatchInText && tm[selectedLang][xml]) {
-                finalTranslations[i] = normalizeTranslatedXML(tm[selectedLang][xml]);
+                finalTranslations[i] = normalizeStructuredXMLCandidate(tm[selectedLang][xml], xml);
                 globalStats.savedChars += textOnlyLength;
                 tmHitCount++;
             } else {
@@ -9408,7 +9530,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             for(var q=0; q < translationQueue.length; q++) {
                 var trXML = translatedBatch[q];
                 if (trXML) { 
-                    trXML = normalizeTranslatedXML(trXML);
+                    trXML = normalizeStructuredXMLCandidate(trXML, translationQueue[q].xml);
                     finalTranslations[translationQueue[q].index] = trXML;
                     tm[selectedLang][translationQueue[q].xml] = trXML;
                     tmDelta[selectedLang][translationQueue[q].xml] = trXML;
@@ -9580,6 +9702,7 @@ function normalizeStructuredXMLCandidate(xml, sourceXML) {
     if (sourceXML && /<root>/i.test(String(sourceXML)) && !/<root>/i.test(raw) && /<t\b/i.test(raw)) {
         raw = "<root>" + raw + "</root>";
     }
+    raw = preserveRunBoundaryWhitespace(sourceXML, raw);
     return normalizeTranslatedXML(raw);
 }
 
@@ -10303,7 +10426,7 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
                     throw new Error(t("deepl_incomplete"));
                 }
                 for (var k = 0; k < parsedObj.translations.length; k++) {
-                    translated.push(normalizeTranslatedXML(parsedObj.translations[k].text));
+                    translated.push(normalizeStructuredXMLCandidate(parsedObj.translations[k].text, textsArray[b + k]));
                 }
                 b = endBatch;
                 break;
@@ -10487,6 +10610,41 @@ function normalizeTranslatedXML(xml) {
     if (!xml || xml === "") return xml;
     return String(xml).replace(/^\s+|\s+$/g, '')
                       .replace(/>\s+</g, '><');
+}
+
+function preserveRunBoundaryWhitespace(sourceXML, translatedXML) {
+    if (!sourceXML || !translatedXML) return translatedXML;
+
+    var sourceRuns = String(sourceXML).match(/<t\b[^>]*>[\s\S]*?<\/t>/gi);
+    var sourceRunCount = sourceRuns ? sourceRuns.length : 0;
+    var translatedRunIndex = 0;
+    if (sourceRunCount === 0) return translatedXML;
+
+    return String(translatedXML).replace(/<t\b([^>]*)>([\s\S]*?)<\/t>/gi, function(fullMatch, attrText, innerText) {
+        if (translatedRunIndex >= sourceRunCount) return fullMatch;
+
+        var sourceInnerMatch = /<t\b[^>]*>([\s\S]*?)<\/t>/i.exec(sourceRuns[translatedRunIndex]);
+        translatedRunIndex++;
+        if (!sourceInnerMatch) return fullMatch;
+
+        var sourceInnerText = String(sourceInnerMatch[1] || "");
+        var sourceCoreText = sourceInnerText.replace(/^\s+|\s+$/g, "");
+        if (sourceCoreText === "") {
+            return "<t" + attrText + ">" + sourceInnerText + "</t>";
+        }
+
+        var translatedInnerText = String(innerText || "");
+        var translatedCoreText = translatedInnerText.replace(/^\s+|\s+$/g, "");
+        if (translatedCoreText === "") return fullMatch;
+
+        var sourceLeadingMatch = sourceInnerText.match(/^\s+/);
+        var sourceTrailingMatch = sourceInnerText.match(/\s+$/);
+        var adjustedInnerText = (sourceLeadingMatch ? sourceLeadingMatch[0] : "") +
+            translatedCoreText +
+            (sourceTrailingMatch ? sourceTrailingMatch[0] : "");
+
+        return "<t" + attrText + ">" + adjustedInnerText + "</t>";
+    });
 }
 
 function normalizeTechnicalTokenSpacingInString(text) {
