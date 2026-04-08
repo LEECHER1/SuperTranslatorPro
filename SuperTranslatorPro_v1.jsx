@@ -4870,10 +4870,6 @@ btnSettings.onClick = function() {
     topGrp.alignment = "fill";
     topGrp.alignChildren = ["right", "center"];
     topGrp.spacing = 8;
-    var btnLog = topGrp.add("button", undefined, t("log_file"));
-    btnLog.preferredSize = [110, 28];
-    var btnDebugLog = topGrp.add("button", undefined, t("debug_log_file"));
-    btnDebugLog.preferredSize = [110, 28];
     var btnInfo = topGrp.add("button", undefined, t("info"));
     btnInfo.preferredSize = [90, 28];
 
@@ -5062,6 +5058,10 @@ btnSettings.onClick = function() {
     var uiTab = tabs.add("tab", undefined, t("settings_tab_ui"));
     uiTab.orientation = "column";
     uiTab.alignChildren = ["fill", "top"];
+
+    var developerTab = tabs.add("tab", undefined, t("settings_tab_developer"));
+    developerTab.orientation = "column";
+    developerTab.alignChildren = ["fill", "top"];
 
     function createSettingsField(parent, labelText, value, chars) {
         var fieldGroup = parent.add("group");
@@ -5398,9 +5398,6 @@ btnSettings.onClick = function() {
     backPageTrackerInput.characters = 40;
     backPageTrackerInput.alignment = "fill";
     backPageTrackerInput.helpTip = t("back_page_tracker_help");
-    var debugTableRestoreCheckbox = autoSection.add("checkbox", undefined, t("debug_tables_images"));
-    debugTableRestoreCheckbox.value = tableRestoreDebugEnabled;
-    debugTableRestoreCheckbox.helpTip = t("debug_tables_images_help");
 
     createDialogHint(exportTab, t("settings_tab_export_hint"));
     var exportSection = createSettingsSection(exportTab, t("settings_tab_export"));
@@ -5441,6 +5438,27 @@ btnSettings.onClick = function() {
     
     var pdfExportWebHyperlinksCheckbox = exportSection.add("checkbox", undefined, t("export_pdf_hyperlinks"));
     pdfExportWebHyperlinksCheckbox.value = pdfExportWebHyperlinksSetting;
+
+    createDialogHint(developerTab, t("settings_tab_developer_hint"));
+    var developerLogsSection = createSettingsSection(developerTab, t("settings_section_developer_logs"));
+    var developerLogButtonRow = developerLogsSection.add("group");
+    developerLogButtonRow.orientation = "row";
+    developerLogButtonRow.alignment = ["left", "center"];
+    developerLogButtonRow.alignChildren = ["left", "center"];
+    developerLogButtonRow.spacing = 8;
+    var btnLog = developerLogButtonRow.add("button", undefined, t("log_file"));
+    btnLog.preferredSize = [140, 28];
+    var btnDebugLog = developerLogButtonRow.add("button", undefined, t("debug_log_file"));
+    btnDebugLog.preferredSize = [140, 28];
+    developerLogsSection.add("statictext", undefined, t("settings_log_path") + " " + logPath, { multiline: true });
+    developerLogsSection.add("statictext", undefined, t("settings_debug_log_path") + " " + debugLogPath, { multiline: true });
+
+    var developerDebugSection = createSettingsSection(developerTab, t("settings_section_developer_debug"));
+    var debugTableRestoreCheckbox = developerDebugSection.add("checkbox", undefined, t("debug_tables_images"));
+    debugTableRestoreCheckbox.value = tableRestoreDebugEnabled;
+    debugTableRestoreCheckbox.helpTip = t("debug_tables_images_help");
+    var debugTablesHelpText = developerDebugSection.add("statictext", undefined, t("debug_tables_images_help"), { multiline: true });
+    debugTablesHelpText.preferredSize.width = 640;
 
     function refreshSettingsOverview() {
         var selectedProviderIndex = (providerDrop.selection && providerDrop.selection.index >= 0) ? providerDrop.selection.index : 0;
