@@ -2866,10 +2866,9 @@ function openGlossaryEditorDialog(currentPath) {
         detailPanel.margins = 12;
         detailPanel.spacing = 10;
 
-        var metaPanel = detailPanel.add("panel", undefined, t("glossary_editor_details"));
+        var metaPanel = detailPanel.add("group");
         metaPanel.orientation = "column";
         metaPanel.alignChildren = ["fill", "top"];
-        metaPanel.margins = 12;
         metaPanel.spacing = 8;
 
         var sourceRow = metaPanel.add("group");
@@ -2878,11 +2877,12 @@ function openGlossaryEditorDialog(currentPath) {
         sourceRow.add("statictext", undefined, t("glossary_editor_source_language"));
         var sourceLanguageDropdown = sourceRow.add("dropdownlist", undefined, sourceLanguageLabels);
         sourceLanguageDropdown.preferredSize.width = 260;
+        var sourceLanguageHelpText = metaPanel.add("statictext", undefined, t("glossary_editor_source_language_help"), { multiline: true });
+        sourceLanguageHelpText.preferredSize.width = 680;
 
         metaPanel.add("statictext", undefined, t("glossary_editor_flags"));
-        var flagsInput = metaPanel.add("edittext", undefined, "");
-        flagsInput.alignment = "fill";
-        flagsInput.characters = 40;
+        var flagsDropdown = metaPanel.add("dropdownlist", undefined, []);
+        flagsDropdown.preferredSize.width = 300;
         var flagsHelpText = metaPanel.add("statictext", undefined, t("glossary_editor_flags_help"), { multiline: true });
         flagsHelpText.preferredSize.width = 680;
 
@@ -2897,6 +2897,8 @@ function openGlossaryEditorDialog(currentPath) {
         var infoInput = metaPanel.add("edittext", undefined, "", { multiline: true, scrolling: true });
         infoInput.alignment = "fill";
         infoInput.preferredSize = [680, 48];
+        var infoHelpText = metaPanel.add("statictext", undefined, t("glossary_editor_info_help"), { multiline: true });
+        infoHelpText.preferredSize.width = 680;
 
         var languagesPanel = detailPanel.add("panel", undefined, t("glossary_editor_languages"));
         languagesPanel.orientation = "column";
@@ -2910,9 +2912,38 @@ function openGlossaryEditorDialog(currentPath) {
         languageTabs.preferredSize = [700, 360];
 
         var detailInputsByKey = {};
-        detailInputsByKey._FLAGS = flagsInput;
         detailInputsByKey._ALIASES = aliasesInput;
         detailInputsByKey._INFO = infoInput;
+
+        function setFlagsDropdownValue(rawValue) {
+            var normalizedRaw = trimGlossaryEditorValue(rawValue);
+            var optionSpecs = [
+                { value: "", label: t("glossary_editor_flag_none") },
+                { value: "DNT", label: t("glossary_editor_flag_dnt") }
+            ];
+            var hasExactOption = false;
+            for (var optionIdx = 0; optionIdx < optionSpecs.length; optionIdx++) {
+                if (optionSpecs[optionIdx].value === normalizedRaw) {
+                    hasExactOption = true;
+                    break;
+                }
+            }
+            if (normalizedRaw !== "" && !hasExactOption) optionSpecs.push({ value: normalizedRaw, label: normalizedRaw });
+
+            flagsDropdown.removeAll();
+            var selectedIndex = 0;
+            for (var specIdx = 0; specIdx < optionSpecs.length; specIdx++) {
+                var optionItem = flagsDropdown.add("item", optionSpecs[specIdx].label);
+                optionItem.flagValue = optionSpecs[specIdx].value;
+                if (optionSpecs[specIdx].value === normalizedRaw) selectedIndex = specIdx;
+            }
+            flagsDropdown.selection = selectedIndex;
+        }
+
+        function getFlagsDropdownValue() {
+            if (!flagsDropdown.selection) return "";
+            return trimGlossaryEditorValue(flagsDropdown.selection.flagValue || "");
+        }
 
         function createGlossaryEditorField(parent, labelText, multiline, preferredHeight) {
             var fieldGroup = parent.add("group");
@@ -3073,6 +3104,7 @@ function openGlossaryEditorDialog(currentPath) {
             if (!entry) {
                 activeEntryId = 0;
                 selectSourceLanguageDropdown("DE");
+                setFlagsDropdownValue("");
                 for (var i = 0; i < editorState.headers.length; i++) {
                     var clearKey = normalizeGlossaryHeaderKey(editorState.headers[i]);
                     if (clearKey === "_SOURCE") continue;
@@ -3092,6 +3124,8 @@ function openGlossaryEditorDialog(currentPath) {
                 var value = entry.row[headerIndex] || "";
                 if (headerKey === "_SOURCE") {
                     selectSourceLanguageDropdown(value);
+                } else if (headerKey === "_FLAGS") {
+                    setFlagsDropdownValue(value);
                 } else if (detailInputsByKey[headerKey]) {
                     detailInputsByKey[headerKey].text = value;
                 }
@@ -3115,6 +3149,8 @@ function openGlossaryEditorDialog(currentPath) {
                 var headerKey = normalizeGlossaryHeaderKey(editorState.headers[headerIndex]);
                 if (headerKey === "_SOURCE") {
                     selectedEntry.row[headerIndex] = getSelectedSourceLanguageCode();
+                } else if (headerKey === "_FLAGS") {
+                    selectedEntry.row[headerIndex] = getFlagsDropdownValue();
                 } else if (detailInputsByKey[headerKey]) {
                     selectedEntry.row[headerIndex] = trimGlossaryEditorValue(detailInputsByKey[headerKey].text);
                 }
@@ -3164,12 +3200,12 @@ function openGlossaryEditorDialog(currentPath) {
         }
 
         sourceLanguageDropdown.onChange = markDetailChangesPending;
-        flagsInput.onChanging = markDetailChangesPending;
+        flagsDropdown.onChange = markDetailChangesPending;
         aliasesInput.onChanging = markDetailChangesPending;
         infoInput.onChanging = markDetailChangesPending;
         for (var detailKey in detailInputsByKey) {
             if (!detailInputsByKey.hasOwnProperty(detailKey)) continue;
-            if (detailInputsByKey[detailKey] === flagsInput || detailInputsByKey[detailKey] === aliasesInput || detailInputsByKey[detailKey] === infoInput) continue;
+            if (detailInputsByKey[detailKey] === aliasesInput || detailInputsByKey[detailKey] === infoInput) continue;
             detailInputsByKey[detailKey].onChanging = markDetailChangesPending;
         }
 
