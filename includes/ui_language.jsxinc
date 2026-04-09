@@ -243,7 +243,7 @@ var UI_STRINGS = {
     legacy_create: { de: "Übernehmen", en: "Apply" },
     legacy_language_label: { de: "Sprache", en: "Language" },
     legacy_order_label: { de: "Reihenfolge", en: "Order" },
-    legacy_no_german_master: { de: "Keine deutsche Musterseite erkannt. Erwartet wurde ein schwarzes Kästchen mit 'de'.", en: "No German master page detected. Expected a black badge with 'de'." },
+    legacy_no_german_master: { de: "Keine Quellsprache auf der Musterseite erkannt, z. B. de oder en.", en: "No German master page detected. Expected a black badge with 'de'." },
     legacy_creation_cancelled: { de: "Musterseiten-Erzeugung abgebrochen.", en: "Master-page creation cancelled." },
     legacy_no_languages_selected: { de: "Keine Zielsprachen für die automatische Musterseiten-Generierung ausgewählt.", en: "No target languages selected for automatic master-page creation." },
     hyperlink_settings_button: { de: "Hyperlinks", en: "Hyperlinks" },
