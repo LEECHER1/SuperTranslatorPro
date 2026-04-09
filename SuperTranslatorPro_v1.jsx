@@ -4138,9 +4138,10 @@ function updateLanguageMasterVersionLabels(doc) {
     var versionLabel = getCurrentArticleVersionLabel();
     var masterSpreads = doc.masterSpreads;
     for (var m = 0; m < masterSpreads.length; m++) {
-        var masterName = masterSpreads[m].name;
-        if (!isVersionManagedMasterName(masterName)) continue;
-        var pages = masterSpreads[m].pages;
+        var masterSpread = masterSpreads[m];
+        var masterName = masterSpread.name;
+        if (!isVersionManagedMasterSpread(masterSpread)) continue;
+        var pages = masterSpread.pages;
         for (var p = 0; p < pages.length; p++) {
             var allItems = pages[p].allPageItems;
             for (var i = 0; i < allItems.length; i++) {
@@ -8287,9 +8288,10 @@ function updateLanguageMasterVersionLabels(doc) {
     var versionLabel = getCurrentArticleVersionLabel();
     var masterSpreads = doc.masterSpreads;
     for (var m = 0; m < masterSpreads.length; m++) {
-        var masterName = masterSpreads[m].name;
-        if (!isVersionManagedMasterName(masterName)) continue;
-        var pages = masterSpreads[m].pages;
+        var masterSpread = masterSpreads[m];
+        var masterName = masterSpread.name;
+        if (!isVersionManagedMasterSpread(masterSpread)) continue;
+        var pages = masterSpread.pages;
         for (var p = 0; p < pages.length; p++) {
             var allItems = pages[p].allPageItems;
             for (var i = 0; i < allItems.length; i++) {
@@ -9109,6 +9111,36 @@ function getMasterLang(masterName) {
 function isVersionManagedMasterName(masterName) {
     if (getMasterLang(masterName)) return true;
     return /(^|[^A-Za-z0-9])ALL([^A-Za-z0-9]|$)/i.test(String(masterName || ""));
+}
+
+function isAllMasterSpread(masterSpread) {
+    if (!masterSpread || !masterSpread.isValid) return false;
+    if (/(^|[^A-Za-z0-9])ALL([^A-Za-z0-9]|$)/i.test(String(masterSpread.name || ""))) return true;
+    for (var p = 0; p < masterSpread.pages.length; p++) {
+        var frames = getTextFramesFromContainer(masterSpread.pages[p]);
+        for (var f = 0; f < frames.length; f++) {
+            var frame = frames[f];
+            var story = getTextFrameStory(frame);
+            if (!story || !story.isValid) continue;
+            var raw = "";
+            try { raw = String(story.contents || ""); } catch (e) { raw = ""; }
+            if (raw === "") continue;
+            var compact = raw.replace(/\s+/g, "");
+            var lettersOnly = compact.replace(/[^A-Za-z]/g, "").toUpperCase();
+            if (lettersOnly !== "ALL") continue;
+            if (compact.length <= 6) return true;
+            try {
+                if (hasBlackBadgeBackground(frame)) return true;
+            } catch (badgeErr) {}
+        }
+    }
+    return false;
+}
+
+function isVersionManagedMasterSpread(masterSpread) {
+    if (!masterSpread || !masterSpread.isValid) return false;
+    if (isVersionManagedMasterName(masterSpread.name)) return true;
+    return isAllMasterSpread(masterSpread);
 }
 
 function getMasterPrefix(masterName) {
