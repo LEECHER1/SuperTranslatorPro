@@ -4139,7 +4139,7 @@ function updateLanguageMasterVersionLabels(doc) {
     var masterSpreads = doc.masterSpreads;
     for (var m = 0; m < masterSpreads.length; m++) {
         var masterName = masterSpreads[m].name;
-        if (!getMasterLang(masterName)) continue;
+        if (!isVersionManagedMasterName(masterName)) continue;
         var pages = masterSpreads[m].pages;
         for (var p = 0; p < pages.length; p++) {
             var allItems = pages[p].allPageItems;
@@ -8288,7 +8288,7 @@ function updateLanguageMasterVersionLabels(doc) {
     var masterSpreads = doc.masterSpreads;
     for (var m = 0; m < masterSpreads.length; m++) {
         var masterName = masterSpreads[m].name;
-        if (!getMasterLang(masterName)) continue;
+        if (!isVersionManagedMasterName(masterName)) continue;
         var pages = masterSpreads[m].pages;
         for (var p = 0; p < pages.length; p++) {
             var allItems = pages[p].allPageItems;
@@ -9104,6 +9104,11 @@ function getMasterLang(masterName) {
     if (isSupportedLegacyLanguageCode(directCode)) return directCode.toLowerCase();
     var match = findSupportedTranslationLanguageCodeMatch(normalized, true);
     return match ? match.code.toLowerCase() : null;
+}
+
+function isVersionManagedMasterName(masterName) {
+    if (getMasterLang(masterName)) return true;
+    return /(^|[^A-Za-z0-9])ALL([^A-Za-z0-9]|$)/i.test(String(masterName || ""));
 }
 
 function getMasterPrefix(masterName) {
