@@ -7727,10 +7727,14 @@ btnTranslate.onClick = function() {
         autoBDAHyperlinksSetting = !!config.autoReferenceLinks;
         app.insertLabel(AUTO_HYPERLINKS_LABEL, autoBDAHyperlinksSetting ? "1" : "0");
         backPageTrackerSetting = normalizeBackPageTrackerSetting(config.backPageTracker);
+        config.backPageTracker = backPageTrackerSetting;
         app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
         if (config.autoReferenceLinks) {
             refSymbolsSetting = normalizeRefSymbols(config.autoReferenceSymbols);
             app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
+        }
+        if (!config.onlyTextUpdate && !isBackPageTrackerEnabled(config.backPageTracker)) {
+            alert(t("back_page_tracker_disabled_notice"));
         }
     }
 

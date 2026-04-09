@@ -35,6 +35,7 @@ var UI_STRINGS = {
     toc_page_prefix_label: { de: "Text vor Seitenzahl auf Seite 1 (Quellsprache):", en: "Text before page number on page 1 (source language):" },
     toc_page_prefix_help: { de: "Optionaler Text vor der Seitenzahl auf Seite 1, z. B. 'ab Seite'. Ausgabe dann z. B. '(ab Seite: 33)'. Der Text wird fuer Zielsprachen automatisch uebersetzt. Leer = nur '(33)'.", en: "Optional text before the page number on page 1, for example 'from page'. Output then becomes e.g. '(from page: 33)'. The text is translated automatically for target languages. Leave empty for '(33)' only." },
     back_page_not_found_notice: { de: "Hinweis: Es konnte keine Rückseite sicher erkannt werden.\nDer Automatiklauf wird trotzdem fortgesetzt.\nWenn nötig, bitte die Rückseiten-Suche in den Einstellungen anpassen.", en: "Note: No back page could be identified with confidence.\nThe automatic run will continue anyway.\nIf needed, adjust the back-page search in the settings." },
+    back_page_tracker_disabled_notice: { de: "Hinweis: Die Rückseiten-Suche ist deaktiviert.\nDie Rückseite wird in diesem Automatiklauf nicht automatisch erkannt.", en: "Note: Back-page search is disabled.\nThe back page will not be detected automatically in this automatic run." },
     only_text_update: { de: "Nur Textänderungen übernehmen", en: "Only update changed text" },
     translate_start: { de: "Übersetzung starten", en: "Start Translation" },
     spellcheck_button: { de: "Quellsprache prüfen", en: "Check source language" },
