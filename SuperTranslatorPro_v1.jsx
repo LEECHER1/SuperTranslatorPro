@@ -4339,6 +4339,9 @@ var bdaSourceStateText = autoModeGroup.add("statictext", undefined, "", { multil
 bdaSourceStateText.preferredSize.width = 500;
 var checkTOC = autoModeGroup.add("checkbox", undefined, t("toc_checkbox"));
 checkTOC.value = true;
+var checkBackPageSearch = autoModeGroup.add("checkbox", undefined, t("auto_back_page_search_checkbox"));
+checkBackPageSearch.helpTip = t("auto_back_page_search_help");
+var mainBackPageSearchEnabled = isBackPageTrackerEnabled(backPageTrackerSetting);
 var checkAutoBDAHyperlinks = autoModeGroup.add("checkbox", undefined, t("auto_hyperlink_checkbox"));
 checkAutoBDAHyperlinks.value = autoBDAHyperlinksSetting;
 checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
@@ -4349,6 +4352,25 @@ cbOnlyTextUpdate.enabled = false;
 function updateBDAHyperlinkControls(enabled) {
     checkAutoBDAHyperlinks.enabled = !!enabled;
 }
+
+function updateBDABackPageSearchControls(enabled, resetToDefault) {
+    if (!checkBackPageSearch) return;
+    var hasTrackerSetting = isBackPageTrackerEnabled(backPageTrackerSetting);
+    if (!hasTrackerSetting) {
+        mainBackPageSearchEnabled = false;
+        checkBackPageSearch.value = false;
+        checkBackPageSearch.enabled = false;
+        checkBackPageSearch.helpTip = t("auto_back_page_search_help_disabled");
+        return;
+    }
+
+    if (resetToDefault) mainBackPageSearchEnabled = true;
+    checkBackPageSearch.value = !!mainBackPageSearchEnabled;
+    checkBackPageSearch.enabled = !!enabled;
+    checkBackPageSearch.helpTip = t("auto_back_page_search_help");
+}
+
+updateBDABackPageSearchControls(false, true);
 
 var groupButtons = myWindow.add("group");
 groupButtons.alignment = "fill";
@@ -4468,6 +4490,8 @@ function refreshMainWindowUIText() {
     originalPagesLabel.text = t("original_pages");
     bdaSourceInput.helpTip = t("auto_source_help");
     checkTOC.text = t("toc_checkbox");
+    checkBackPageSearch.text = t("auto_back_page_search_checkbox");
+    updateBDABackPageSearchControls(radioBDA.value, false);
     checkAutoBDAHyperlinks.text = t("auto_hyperlink_checkbox");
     checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
     cbOnlyTextUpdate.text = t("only_text_update");
@@ -4794,6 +4818,7 @@ function setActiveMainMode(mode) {
     dropdownLang.enabled = normalizedMode !== "BDA";
     bdaSourceInput.enabled = normalizedMode === "BDA";
     checkTOC.enabled = normalizedMode === "BDA";
+    updateBDABackPageSearchControls(normalizedMode === "BDA", false);
     cbOnlyTextUpdate.enabled = normalizedMode === "BDA";
     if (normalizedMode !== "BDA") cbOnlyTextUpdate.value = false;
     updateBDAHyperlinkControls(normalizedMode === "BDA");
@@ -4844,6 +4869,11 @@ bdaSourceInput.onChanging = refreshMainValidationUI;
 checkAutoBDAHyperlinks.onClick = function() {
     updateBDAHyperlinkControls(radioBDA.value);
     refreshMainStatusUI();
+    refreshMainValidationUI();
+};
+
+checkBackPageSearch.onClick = function() {
+    mainBackPageSearchEnabled = !!checkBackPageSearch.value;
     refreshMainValidationUI();
 };
 
@@ -5879,6 +5909,7 @@ btnSettings.onClick = function() {
         tmPath = tmInput.text;
         refSymbolsSetting = normalizeRefSymbols(autoHyperlinkSymbolsInput.text);
         backPageTrackerSetting = normalizeBackPageTrackerSetting(backPageTrackerInput.text);
+        mainBackPageSearchEnabled = isBackPageTrackerEnabled(backPageTrackerSetting);
         tocPagePrefixSetting = normalizeTOCPagePrefixSetting(tocPagePrefixInput.text);
         smartCopyfitEnabled = !!copyfitEnabledCheckbox.value;
         smartCopyfitMaxTracking = normalizeCopyfitMaxTrackingSetting(copyfitTrackingField.input.text);
@@ -7700,7 +7731,9 @@ btnPrintPDF.onClick = function() { quickExportPDF(false); };
 btnWebPDF.onClick = function() { quickExportPDF(true); };
 
 btnTranslate.onClick = function() {
-    var shouldShowBackPageTrackerDisabledNotice = radioBDA.value && !isBackPageTrackerEnabled(backPageTrackerSetting);
+    var hasConfiguredBackPageTracker = isBackPageTrackerEnabled(backPageTrackerSetting);
+    var useBackPageTracker = radioBDA.value && hasConfiguredBackPageTracker && checkBackPageSearch && checkBackPageSearch.value;
+    var shouldShowBackPageTrackerDisabledNotice = radioBDA.value && !hasConfiguredBackPageTracker;
     if (shouldShowBackPageTrackerDisabledNotice) {
         alert(t("back_page_tracker_disabled_notice"));
     }
@@ -7728,6 +7761,7 @@ btnTranslate.onClick = function() {
         autoReferenceLinks: checkAutoBDAHyperlinks ? checkAutoBDAHyperlinks.value : false,
         autoReferenceSymbols: refSymbolsSetting,
         backPageTracker: backPageTrackerSetting,
+        useBackPageTracker: useBackPageTracker,
         backPageTrackerDisabledNoticeShown: shouldShowBackPageTrackerDisabledNotice
     };
 
@@ -7755,7 +7789,6 @@ btnTranslate.onClick = function() {
         app.insertLabel(AUTO_HYPERLINKS_LABEL, autoBDAHyperlinksSetting ? "1" : "0");
         backPageTrackerSetting = normalizeBackPageTrackerSetting(config.backPageTracker);
         config.backPageTracker = backPageTrackerSetting;
-        app.insertLabel(BACK_PAGE_TRACKER_LABEL, backPageTrackerSetting);
         if (config.autoReferenceLinks) {
             refSymbolsSetting = normalizeRefSymbols(config.autoReferenceSymbols);
             app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
@@ -8163,17 +8196,20 @@ function runBDAMode(doc, config, preparedLegacy) {
     if (!config.onlyTextUpdate) updateLanguageMasterVersionLabels(doc);
     if (langTasks.length === 0) { throw new Error(t("bda_no_templates")); }
 
-    var activeBackPageTrackerSetting = (config.backPageTracker !== undefined && config.backPageTracker !== null) ? config.backPageTracker : backPageTrackerSetting;
-    var backPageTrackerEnabled = isBackPageTrackerEnabled(activeBackPageTrackerSetting);
-    if (!backPageTrackerEnabled && !config.backPageTrackerDisabledNoticeShown) {
+    var backPageSearchRequested = (config.useBackPageTracker !== false);
+    var activeBackPageTrackerSetting = backPageSearchRequested
+        ? ((config.backPageTracker !== undefined && config.backPageTracker !== null) ? config.backPageTracker : backPageTrackerSetting)
+        : "";
+    var backPageTrackerEnabled = backPageSearchRequested && isBackPageTrackerEnabled(activeBackPageTrackerSetting);
+    if (backPageSearchRequested && !backPageTrackerEnabled && !config.backPageTrackerDisabledNoticeShown) {
         config.backPageTrackerDisabledNoticeShown = true;
         alert(t("back_page_tracker_disabled_notice"));
     }
-    var backPageInfo = findOriginalBackPageInfo(doc, activeBackPageTrackerSetting);
+    var backPageInfo = backPageSearchRequested ? findOriginalBackPageInfo(doc, activeBackPageTrackerSetting) : { page: null, master: null };
     var originalBackPage = backPageInfo.page;
     if (originalBackPage && originalBackPage.isValid) {
         ensureBackMasterForPage(doc, originalBackPage, backPageInfo.master);
-    } else if (backPageTrackerEnabled) {
+    } else if (backPageSearchRequested && backPageTrackerEnabled) {
         alert(t("back_page_not_found_notice"));
     }
 
