@@ -1142,6 +1142,7 @@ var CSV_LOCK_POLL_MS = 250;
 var CSV_LOCK_STALE_MS = 120000;
 var glossaryRuntimeId = String(new Date().getTime()) + "_" + String(Math.floor(Math.random() * 100000));
 var glossaryWarningCache = {};
+var glossaryRuntimeState = { requestedPath: "", resolvedPath: "", loadedPath: "", source: "", cachePath: "" };
 var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
 var hyperlinkPageMappings = loadHyperlinkPageMappings(app.extractLabel(HYPERLINK_PAGE_MAP_LABEL) || "");
 var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
@@ -2280,6 +2281,26 @@ function getGlossaryBackupFileForPath(path) {
     return new File(normalizedPath + ".bak");
 }
 
+function buildGlossaryCacheKey(path) {
+    var normalizedPath = normalizeExplicitFilePath(path).toLowerCase();
+    if (normalizedPath === "") normalizedPath = "default";
+    var hash = 0;
+    for (var i = 0; i < normalizedPath.length; i++) {
+        hash = ((hash * 31) + normalizedPath.charCodeAt(i)) % 2147483647;
+    }
+    return String(hash);
+}
+
+function getGlossaryCacheFileForPath(path) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "") return null;
+    var baseName = normalizedPath.replace(/^.*[\/\\]/, "");
+    baseName = baseName.replace(/[^A-Za-z0-9._-]+/g, "_");
+    if (baseName === "") baseName = "glossary.csv";
+    if (baseName.length > 48) baseName = baseName.substring(baseName.length - 48);
+    return new File(Folder.userData + "/SuperTranslatorPRO_GlossaryCache_" + buildGlossaryCacheKey(normalizedPath) + "_" + baseName);
+}
+
 function getGlossaryLockFolderForPath(path) {
     var normalizedPath = normalizeExplicitFilePath(path);
     if (normalizedPath === "") return null;
@@ -2308,6 +2329,15 @@ function buildGlossaryCorruptSnapshotFileForPath(path) {
         ("0" + d.getMinutes()).slice(-2) +
         ("0" + d.getSeconds()).slice(-2);
     return new File(normalizedPath + ".corrupt." + stamp + ".csv");
+}
+
+function updateGlossaryRuntimeState(requestedPath, resolvedPath, loadedPath, source, cachePath) {
+    glossaryRuntimeState.requestedPath = normalizeExplicitFilePath(requestedPath);
+    glossaryRuntimeState.resolvedPath = normalizeExplicitFilePath(resolvedPath);
+    glossaryRuntimeState.loadedPath = normalizeExplicitFilePath(loadedPath);
+    glossaryRuntimeState.source = String(source || "");
+    glossaryRuntimeState.cachePath = normalizeExplicitFilePath(cachePath);
+    try { if (typeof refreshMainStatusUI === "function") refreshMainStatusUI(); } catch (refreshErr) {}
 }
 
 function reportGlossaryWarningOnce(cacheKey, messageKey, logMessage) {
@@ -2469,6 +2499,7 @@ function loadBestCSVRowsFromPath(path) {
     if (!f.exists) return { ok: false, path: normalizedPath, missing: true };
 
     var rows = null;
+    var bestContent = null;
     var bestScore = 999999;
     var bestSeparator = ";";
     var bestEncoding = "UTF-8";
@@ -2482,34 +2513,112 @@ function loadBestCSVRowsFromPath(path) {
         if (candidateRows.length >= 2 && candidateRows[0] && candidateRows[0].length >= 2 && candidateScore < bestScore) {
             bestScore = candidateScore;
             rows = candidateRows;
+            bestContent = candidateContent;
             bestSeparator = candidateSep;
             bestEncoding = encodings[encIdx] || "";
         }
     }
 
     if (!rows || rows.length < 2) return { ok: false, path: normalizedPath };
-    return { ok: true, rows: rows, path: normalizedPath, separator: bestSeparator, encoding: bestEncoding };
+    return { ok: true, rows: rows, content: bestContent, path: normalizedPath, separator: bestSeparator, encoding: bestEncoding };
+}
+
+function syncGlossaryCacheContent(path, content) {
+    var normalizedPath = normalizeExplicitFilePath(path);
+    if (normalizedPath === "" || content === null || content === undefined || content === "") return false;
+    var cacheFile = getGlossaryCacheFileForPath(normalizedPath);
+    if (!cacheFile) return false;
+
+    try {
+        var sourceTick = getFileModifiedTick(normalizedPath);
+        var cacheTick = getFileModifiedTick(cacheFile.fsName);
+        if (cacheFile.exists && sourceTick > 0 && cacheTick >= sourceTick) return true;
+    } catch (tickErr) {}
+
+    var success = writeGlossaryContentAtomically(cacheFile.fsName, sanitizeCSVContent(content), { skipCacheSync: true });
+    if (!success) writeLog("Lokaler Glossar-Cache konnte nicht aktualisiert werden: " + cacheFile.fsName, "WARNUNG");
+    return success;
+}
+
+function loadCachedGlossaryRowsState(referencePath) {
+    var cacheFile = getGlossaryCacheFileForPath(referencePath);
+    if (!cacheFile) return { ok: false, path: "", cachePath: "" };
+
+    var cacheResult = loadBestCSVRowsFromPath(cacheFile.fsName);
+    if (cacheResult.ok) {
+        cacheResult.source = "cache";
+        cacheResult.cachePath = cacheFile.fsName;
+        return cacheResult;
+    }
+
+    var cacheBackupFile = getGlossaryBackupFileForPath(cacheFile.fsName);
+    if (cacheBackupFile && cacheBackupFile.exists) {
+        var cacheBackupResult = loadBestCSVRowsFromPath(cacheBackupFile.fsName);
+        if (cacheBackupResult.ok) {
+            cacheBackupResult.source = "cache_backup";
+            cacheBackupResult.cachePath = cacheFile.fsName;
+            return cacheBackupResult;
+        }
+    }
+
+    cacheResult.source = "cache";
+    cacheResult.cachePath = cacheFile.fsName;
+    return cacheResult;
 }
 
 function loadGlossaryRowsState(path) {
+    var requestedPath = normalizeExplicitFilePath(path);
     var resolvedPath = resolveCSVPath(path);
-    if (!resolvedPath || resolvedPath === "") return { ok: false, path: "" };
+    var normalizedResolvedPath = normalizeExplicitFilePath(resolvedPath);
+    var cacheKeyPath = requestedPath !== "" ? requestedPath : normalizedResolvedPath;
+    var cacheFile = getGlossaryCacheFileForPath(cacheKeyPath);
+    var primaryResult = {
+        ok: false,
+        path: normalizedResolvedPath || requestedPath || "",
+        requestedPath: requestedPath,
+        resolvedPath: normalizedResolvedPath,
+        cachePath: cacheFile ? cacheFile.fsName : ""
+    };
 
-    waitForGlossaryLockRelease(resolvedPath, CSV_LOCK_TIMEOUT_MS);
+    if (normalizedResolvedPath !== "") {
+        waitForGlossaryLockRelease(normalizedResolvedPath, CSV_LOCK_TIMEOUT_MS);
 
-    var primaryResult = loadBestCSVRowsFromPath(resolvedPath);
-    if (primaryResult.ok) {
-        primaryResult.source = "primary";
-        return primaryResult;
+        primaryResult = loadBestCSVRowsFromPath(normalizedResolvedPath);
+        primaryResult.requestedPath = requestedPath;
+        primaryResult.resolvedPath = normalizedResolvedPath;
+        primaryResult.cachePath = cacheFile ? cacheFile.fsName : "";
+        if (primaryResult.ok) {
+            primaryResult.source = "primary";
+            primaryResult.loadedPath = primaryResult.path;
+            try { syncGlossaryCacheContent(cacheKeyPath || normalizedResolvedPath, primaryResult.content); } catch (cacheSyncErr) {}
+            return primaryResult;
+        }
+
+        var backupFile = getGlossaryBackupFileForPath(normalizedResolvedPath);
+        if (backupFile && backupFile.exists) {
+            var backupResult = loadBestCSVRowsFromPath(backupFile.fsName);
+            backupResult.requestedPath = requestedPath;
+            backupResult.resolvedPath = normalizedResolvedPath;
+            backupResult.cachePath = cacheFile ? cacheFile.fsName : "";
+            if (backupResult.ok) {
+                backupResult.source = "backup";
+                backupResult.primaryPath = normalizedResolvedPath;
+                backupResult.loadedPath = backupResult.path;
+                try { syncGlossaryCacheContent(cacheKeyPath || normalizedResolvedPath, backupResult.content); } catch (cacheSyncBackupErr) {}
+                return backupResult;
+            }
+        }
     }
 
-    var backupFile = getGlossaryBackupFileForPath(resolvedPath);
-    if (backupFile && backupFile.exists) {
-        var backupResult = loadBestCSVRowsFromPath(backupFile.fsName);
-        if (backupResult.ok) {
-            backupResult.source = "backup";
-            backupResult.primaryPath = resolvedPath;
-            return backupResult;
+    if (cacheKeyPath !== "") {
+        var cacheResult = loadCachedGlossaryRowsState(cacheKeyPath);
+        if (cacheResult.ok) {
+            cacheResult.requestedPath = requestedPath;
+            cacheResult.resolvedPath = normalizedResolvedPath;
+            cacheResult.primaryPath = normalizedResolvedPath || requestedPath;
+            cacheResult.loadedPath = cacheResult.path;
+            cacheResult.path = normalizedResolvedPath || requestedPath || cacheResult.path;
+            return cacheResult;
         }
     }
 
@@ -2566,6 +2675,9 @@ function writeGlossaryContentAtomically(path, content, options) {
         if (!tempFile.rename(targetFile.name)) {
             if (!tempFile.copy(targetFile.fsName)) throw new Error("Glossary temp file could not be moved into place.");
             try { tempFile.remove(); } catch (tempRemoveErr) {}
+        }
+        if (!opts.skipCacheSync) {
+            try { syncGlossaryCacheContent(normalizedPath, content); } catch (cacheSyncErr) {}
         }
         return true;
     } catch (e) {
@@ -3654,6 +3766,13 @@ function getCSVDecodeScore(content, rows) {
 
 function loadCSVGlossary(path) {
     var state = loadGlossaryRowsState(path);
+    updateGlossaryRuntimeState(
+        state.requestedPath || path,
+        state.resolvedPath || state.primaryPath || state.path,
+        state.loadedPath || "",
+        state.ok ? state.source : "unavailable",
+        state.cachePath || ""
+    );
     if (!state.ok) {
         if (state.path && !state.missing) {
             reportGlossaryWarningOnce(
@@ -3672,6 +3791,12 @@ function loadCSVGlossary(path) {
             "glossary_read_warning",
             "Glossar-Hauptdatei war nicht lesbar. Sicherung wird verwendet." +
                 (corruptSnapshot ? " Defekte Datei gesichert unter: " + corruptSnapshot.fsName : "")
+        );
+    } else if (state.source === "cache" || state.source === "cache_backup") {
+        reportGlossaryWarningOnce(
+            "glossary_cache_used",
+            "glossary_cache_warning",
+            "Glossar-Netzwerkquelle nicht verfuegbar. Lokaler Offline-Cache wird verwendet: " + (state.loadedPath || state.cachePath || "")
         );
     }
 
@@ -4263,6 +4388,20 @@ function getStatusPathLabel(pathValue) {
     return normalized.replace(/^.*[\/\\]/, "");
 }
 
+function getGlossaryStatusLabel(pathValue) {
+    var baseLabel = getStatusPathLabel(pathValue);
+    var normalizedPath = normalizeExplicitFilePath(pathValue);
+    var requestedPath = normalizeExplicitFilePath(glossaryRuntimeState.requestedPath);
+    var resolvedPath = normalizeExplicitFilePath(glossaryRuntimeState.resolvedPath);
+    if (normalizedPath === "") return baseLabel;
+    if (normalizedPath !== requestedPath && normalizedPath !== resolvedPath) return baseLabel;
+    if (glossaryRuntimeState.source === "backup") return baseLabel + " (" + t("glossary_status_backup") + ")";
+    if (glossaryRuntimeState.source === "cache" || glossaryRuntimeState.source === "cache_backup") {
+        return baseLabel + " (" + t("glossary_status_offline_cache") + ")";
+    }
+    return baseLabel;
+}
+
 function getProviderStatusSummaryText() {
     var providerId = getActiveTranslationProvider();
     var display = getTranslationProviderDisplayName(providerId);
@@ -4450,7 +4589,7 @@ function ensureMainWindowLiveRefresh() {
 function refreshMainStatusUI() {
     var autoLinksEnabled = checkAutoBDAHyperlinks ? !!checkAutoBDAHyperlinks.value : !!autoBDAHyperlinksSetting;
     statusSummaryText.text =
-        t("status_provider") + " " + getProviderStatusSummaryText() + "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvPath) + "\n" +
+        t("status_provider") + " " + getProviderStatusSummaryText() + "   |   " + t("status_glossary") + " " + getGlossaryStatusLabel(csvPath) + "\n" +
         t("status_memory") + " " + getStatusPathLabel(tmPath) + "\n" +
         t("status_links") + " " + (autoLinksEnabled ? t("status_on") : t("status_off")) + "   |   " + t("status_symbols") + " " + normalizeRefSymbols(refSymbolsSetting);
     try { myWindow.layout.layout(true); } catch (layoutErr) {}
@@ -5623,7 +5762,7 @@ btnSettings.onClick = function() {
         var draftFontFallbackRules = normalizeFontFallbackRulesSetting(fontFallbackRulesInput.text);
         settingsOverviewText.text =
             t("status_provider") + " " + getTranslationProviderDisplayName(selectedProviderId) +
-            "   |   " + t("status_glossary") + " " + getStatusPathLabel(csvInput.text) + "\n" +
+            "   |   " + t("status_glossary") + " " + getGlossaryStatusLabel(csvInput.text) + "\n" +
             t("status_memory") + " " + getStatusPathLabel(tmInput.text) +
             "   |   " + t("status_symbols") + " " + normalizeRefSymbols(autoHyperlinkSymbolsInput.text) + "\n" +
             t("settings_copyfit_summary", {
@@ -8209,19 +8348,45 @@ function getDocSnapshotKey(doc) {
 }
 
 function getGlossaryVersionToken(path) {
-    path = resolveCSVPath(path);
-    if (!path || path === "") return "";
-    waitForGlossaryLockRelease(path, CSV_LOCK_TIMEOUT_MS);
+    var requestedPath = normalizeExplicitFilePath(path);
+    var resolvedPath = normalizeExplicitFilePath(resolveCSVPath(path));
+    var stateRequestedPath = normalizeExplicitFilePath(glossaryRuntimeState.requestedPath);
+    var stateResolvedPath = normalizeExplicitFilePath(glossaryRuntimeState.resolvedPath);
+    var stateLoadedPath = normalizeExplicitFilePath(glossaryRuntimeState.loadedPath);
+    if (
+        stateLoadedPath !== "" &&
+        (
+            (requestedPath !== "" && (requestedPath === stateRequestedPath || requestedPath === stateResolvedPath)) ||
+            (resolvedPath !== "" && (resolvedPath === stateResolvedPath || resolvedPath === stateRequestedPath))
+        )
+    ) {
+        try {
+            var loadedFile = new File(stateLoadedPath);
+            if (loadedFile.exists) {
+                var loadedSuffix = "";
+                if (glossaryRuntimeState.source === "backup") loadedSuffix = "|backup";
+                else if (glossaryRuntimeState.source === "cache" || glossaryRuntimeState.source === "cache_backup") loadedSuffix = "|cache";
+                return loadedFile.fsName + "|" + String(loadedFile.modified) + loadedSuffix;
+            }
+        } catch (loadedErr) {}
+    }
+
+    if (!resolvedPath && !requestedPath) return "";
+    if (resolvedPath) waitForGlossaryLockRelease(resolvedPath, CSV_LOCK_TIMEOUT_MS);
     try {
-        var f = new File(path);
+        var f = new File(resolvedPath);
         if (!f.exists) {
-            var backupFile = getGlossaryBackupFileForPath(path);
-            if (!backupFile || !backupFile.exists) return "";
-            return backupFile.fsName + "|" + String(backupFile.modified) + "|backup";
+            var backupFile = getGlossaryBackupFileForPath(resolvedPath);
+            if (backupFile && backupFile.exists) return backupFile.fsName + "|" + String(backupFile.modified) + "|backup";
+            var cacheFile = getGlossaryCacheFileForPath(requestedPath !== "" ? requestedPath : resolvedPath);
+            if (cacheFile && cacheFile.exists) return cacheFile.fsName + "|" + String(cacheFile.modified) + "|cache";
+            var cacheBackupFile = cacheFile ? getGlossaryBackupFileForPath(cacheFile.fsName) : null;
+            if (cacheBackupFile && cacheBackupFile.exists) return cacheBackupFile.fsName + "|" + String(cacheBackupFile.modified) + "|cache";
+            return "";
         }
         return f.fsName + "|" + String(f.modified);
     } catch (e) {
-        return String(path);
+        return String(resolvedPath || requestedPath);
     }
 }
 
