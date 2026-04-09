@@ -29,6 +29,7 @@ var COPYFIT_MAX_TRACKING_LABEL = "SuperTranslatorPRO_CopyfitMaxTracking";
 var COPYFIT_MIN_SCALE_LABEL = "SuperTranslatorPRO_CopyfitMinScale";
 var COPYFIT_TRACKING_STEP_LABEL = "SuperTranslatorPRO_CopyfitTrackingStep";
 var COPYFIT_SCALE_STEP_LABEL = "SuperTranslatorPRO_CopyfitScaleStep";
+var SOURCE_FORMATTING_ENABLED_LABEL = "SuperTranslatorPRO_SourceFormattingEnabled";
 var FONT_FALLBACK_ENABLED_LABEL = "SuperTranslatorPRO_FontFallbackEnabled";
 var FONT_FALLBACK_RULES_LABEL = "SuperTranslatorPRO_FontFallbackRules";
 var PDF_EXPORT_PRINT_PRESET_LABEL = "SuperTranslatorPRO_PDF_Print_Preset";
@@ -96,6 +97,10 @@ function normalizeCopyfitScaleStepSetting(value) {
     if (parsed < 1) parsed = 1;
     if (parsed > 10) parsed = 10;
     return parsed;
+}
+
+function normalizeSourceFormattingEnabledSetting(value) {
+    return String(value || "0") === "1";
 }
 
 function normalizeMultilineSetting(value) {
@@ -1166,6 +1171,7 @@ var smartCopyfitMaxTracking = normalizeCopyfitMaxTrackingSetting(app.extractLabe
 var smartCopyfitMinScale = normalizeCopyfitMinScaleSetting(app.extractLabel(COPYFIT_MIN_SCALE_LABEL) || "98");
 var smartCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(app.extractLabel(COPYFIT_TRACKING_STEP_LABEL) || "2");
 var smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(app.extractLabel(COPYFIT_SCALE_STEP_LABEL) || "1");
+var preserveSourceFormattingEnabled = normalizeSourceFormattingEnabledSetting(app.extractLabel(SOURCE_FORMATTING_ENABLED_LABEL) || "0");
 var fontFallbackEnabled = normalizeFontFallbackEnabledSetting(app.extractLabel(FONT_FALLBACK_ENABLED_LABEL) || "1");
 var fontFallbackRulesSetting = decodeFontFallbackRulesSettingFromLabel(app.extractLabel(FONT_FALLBACK_RULES_LABEL) || "");
 var pdfExportPrintPresetSetting = app.extractLabel(PDF_EXPORT_PRINT_PRESET_LABEL) || "";
@@ -5111,7 +5117,7 @@ btnSettings.onClick = function() {
     overviewPanel.alignChildren = ["fill", "top"];
     overviewPanel.margins = 12;
     var settingsOverviewText = overviewPanel.add("statictext", undefined, "", { multiline: true });
-    settingsOverviewText.preferredSize = [700, 58];
+    settingsOverviewText.preferredSize = [700, 82];
 
     var tabs = setWin.add("tabbedpanel");
     tabs.alignment = ["fill", "fill"];
@@ -5500,6 +5506,7 @@ btnSettings.onClick = function() {
 
     createDialogHint(typographyContent, t("settings_tab_typography_hint"));
     var typographyCopyfitSection = createSettingsSection(typographyContent, t("settings_section_typography_copyfit"));
+    var typographySourceFormattingSection = createSettingsSection(typographyContent, t("settings_section_typography_source_formatting"));
     var typographyFontFallbackSection = createSettingsSection(typographyContent, t("settings_section_typography_font_fallback"));
 
     var uiSection = createSettingsSection(uiTab, t("settings_tab_ui"));
@@ -5609,6 +5616,13 @@ btnSettings.onClick = function() {
 
     var copyfitHint = typographyCopyfitSection.add("statictext", undefined, t("copyfit_settings_help"), { multiline: true });
     copyfitHint.preferredSize.width = 640;
+
+    var sourceFormattingEnabledCheckbox = typographySourceFormattingSection.add("checkbox", undefined, t("source_formatting_enabled"));
+    sourceFormattingEnabledCheckbox.value = !!preserveSourceFormattingEnabled;
+    sourceFormattingEnabledCheckbox.helpTip = t("source_formatting_enabled_help");
+
+    var sourceFormattingHint = typographySourceFormattingSection.add("statictext", undefined, t("source_formatting_enabled_help"), { multiline: true });
+    sourceFormattingHint.preferredSize.width = 640;
 
     var fontFallbackEnabledCheckbox = typographyFontFallbackSection.add("checkbox", undefined, t("font_fallback_enabled"));
     fontFallbackEnabledCheckbox.value = !!fontFallbackEnabled;
@@ -5762,6 +5776,7 @@ btnSettings.onClick = function() {
         var draftCopyfitScale = normalizeCopyfitMinScaleSetting(copyfitScaleField.input.text);
         var draftCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(copyfitTrackingStepField.input.text);
         var draftCopyfitScaleStep = normalizeCopyfitScaleStepSetting(copyfitScaleStepField.input.text);
+        var draftPreserveSourceFormattingEnabled = !!sourceFormattingEnabledCheckbox.value;
         var draftFontFallbackEnabled = !!fontFallbackEnabledCheckbox.value;
         var draftFontFallbackRules = normalizeFontFallbackRulesSetting(fontFallbackRulesInput.text);
         settingsOverviewText.text =
@@ -5779,6 +5794,9 @@ btnSettings.onClick = function() {
             t("settings_font_fallback_summary", {
                 enabled: draftFontFallbackEnabled ? t("settings_copyfit_enabled_on") : t("settings_copyfit_enabled_off"),
                 count: countConfiguredFontFallbackRules(draftFontFallbackRules)
+            }) + "\n" +
+            t("settings_source_formatting_summary", {
+                enabled: draftPreserveSourceFormattingEnabled ? t("settings_copyfit_enabled_on") : t("settings_copyfit_enabled_off")
             }) + "\n" +
             t("settings_ui_language") + " " + buildUILanguageSettingOptions()[(uiLanguageDrop.selection && uiLanguageDrop.selection.index >= 0) ? uiLanguageDrop.selection.index : 0];
     }
@@ -5800,6 +5818,7 @@ btnSettings.onClick = function() {
     copyfitScaleField.input.onChanging = refreshSettingsOverview;
     copyfitTrackingStepField.input.onChanging = refreshSettingsOverview;
     copyfitScaleStepField.input.onChanging = refreshSettingsOverview;
+    sourceFormattingEnabledCheckbox.onClick = refreshSettingsOverview;
     fontFallbackEnabledCheckbox.onClick = function() {
         refreshTypographySettingsUI();
         refreshSettingsOverview();
@@ -5866,6 +5885,7 @@ btnSettings.onClick = function() {
         smartCopyfitMinScale = normalizeCopyfitMinScaleSetting(copyfitScaleField.input.text);
         smartCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(copyfitTrackingStepField.input.text);
         smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(copyfitScaleStepField.input.text);
+        preserveSourceFormattingEnabled = !!sourceFormattingEnabledCheckbox.value;
         fontFallbackEnabled = !!fontFallbackEnabledCheckbox.value;
         fontFallbackRulesSetting = normalizeFontFallbackRulesSetting(fontFallbackRulesInput.text);
         pdfExportPrintPresetSetting = pdfExportPrintPresetInput.selection ? pdfExportPrintPresetInput.selection.text : "";
@@ -5894,6 +5914,7 @@ btnSettings.onClick = function() {
         app.insertLabel(COPYFIT_MIN_SCALE_LABEL, String(smartCopyfitMinScale));
         app.insertLabel(COPYFIT_TRACKING_STEP_LABEL, String(smartCopyfitTrackingStep));
         app.insertLabel(COPYFIT_SCALE_STEP_LABEL, String(smartCopyfitScaleStep));
+        app.insertLabel(SOURCE_FORMATTING_ENABLED_LABEL, preserveSourceFormattingEnabled ? "1" : "0");
         app.insertLabel(FONT_FALLBACK_ENABLED_LABEL, fontFallbackEnabled ? "1" : "0");
         app.insertLabel(FONT_FALLBACK_RULES_LABEL, encodeFontFallbackRulesSettingForLabel(fontFallbackRulesSetting));
         app.insertLabel(PDF_EXPORT_PRINT_PRESET_LABEL, pdfExportPrintPresetSetting);
@@ -12063,6 +12084,18 @@ function decodeXMLAttr(value) {
     return decodeXMLValue(value);
 }
 
+function getTextStyleRangeArray(textObj) {
+    var ranges = [];
+    if (!textObj) return ranges;
+    try {
+        if (textObj.textStyleRanges && textObj.textStyleRanges.everyItem) ranges = textObj.textStyleRanges.everyItem().getElements();
+        else if (textObj.textStyleRanges) ranges = textObj.textStyleRanges;
+    } catch (e) {
+        try { ranges = textObj.textStyleRanges || []; } catch (e2) { ranges = []; }
+    }
+    return ranges || [];
+}
+
 function buildTextObjectXML(textObj) {
     var xmlString = "<root>";
     var ranges = textObj.textStyleRanges;
@@ -12280,10 +12313,77 @@ function restoreParagraphNumberingMetadata(textObj, paragraphMetadata) {
     } catch (e7) {}
 }
 
+function decodeStructuredRunText(innerXML) {
+    var textContent = decodeXMLValue(innerXML);
+    textContent = textContent.replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t').replace(/<\/?nt[^>]*>/gi, '');
+    return normalizeTechnicalTokenSpacingInString(textContent);
+}
+
+function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata) {
+    if (!targetTextObj || !targetTextObj.isValid) return false;
+
+    var sourceRanges = getTextStyleRangeArray(targetTextObj);
+    var translatedRuns = getStructuredXMLRunDescriptors(translatedXML);
+    if (sourceRanges.length === 0 || translatedRuns.length === 0) return false;
+    if (sourceRanges.length !== translatedRuns.length) {
+        writeDebugLog("source_formatting:run_count_mismatch target={" + getDebugTextTargetLabel(targetTextObj) + "} sourceRanges=" + sourceRanges.length + " translatedRuns=" + translatedRuns.length, "WARNUNG");
+        return false;
+    }
+
+    for (var preflightIndex = 0; preflightIndex < sourceRanges.length; preflightIndex++) {
+        if (!sourceRanges[preflightIndex] || !sourceRanges[preflightIndex].isValid) {
+            writeDebugLog("source_formatting:invalid_source_range target={" + getDebugTextTargetLabel(targetTextObj) + "} range=" + preflightIndex, "WARNUNG");
+            return false;
+        }
+    }
+
+    try {
+        for (var rangeIndex = sourceRanges.length - 1; rangeIndex >= 0; rangeIndex--) {
+            var sourceRange = sourceRanges[rangeIndex];
+            var textContent = decodeStructuredRunText(translatedRuns[rangeIndex].innerXML);
+            var fallbackInfo = resolveFontFallbackForText(inDesignLangCode, textContent);
+            var originalFamily = "";
+            var originalStyle = "";
+
+            try { originalFamily = String(sourceRange.appliedFont.fontFamily || ""); } catch (fontFamilyErr) { originalFamily = ""; }
+            try { originalStyle = String(sourceRange.fontStyle || ""); } catch (fontStyleErr) { originalStyle = ""; }
+            sourceRange.contents = textContent;
+
+            if (textContent !== "" && fallbackInfo) {
+                applyOptionalFontFallback(sourceRange, originalFamily, originalStyle, fallbackInfo, inDesignLangCode, textContent);
+            }
+        }
+    } catch (applyErr) {
+        writeDebugLog("source_formatting:apply_failed target={" + getDebugTextTargetLabel(targetTextObj) + "} error=" + (applyErr.message || applyErr), "WARNUNG");
+        return false;
+    }
+
+    try {
+        if (inDesignLangCode !== "") {
+            var doc = app.activeDocument;
+            var langObj = resolveInDesignLanguageObject(doc, inDesignLangCode);
+            if (langObj && langObj.isValid) targetTextObj.appliedLanguage = langObj;
+        }
+    } catch (langErr) {}
+
+    try { normalizePostTranslationSpacing(targetTextObj); } catch (spacingErr) {}
+    try { restoreParagraphNumberingMetadata(targetTextObj, paragraphNumberingMetadata); } catch (numberingErr) {}
+    try {
+        if (targetTextObj.parentStory && targetTextObj.parentStory.isValid && targetTextObj.parentStory.recompose) targetTextObj.parentStory.recompose();
+        else if (targetTextObj.recompose) targetTextObj.recompose();
+    } catch (recomposeErr) {}
+
+    writeDebugLog("source_formatting:applied target={" + getDebugTextTargetLabel(targetTextObj) + "} runs=" + sourceRanges.length);
+    return true;
+}
+
 function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata) {
     if (!translatedXML || translatedXML === "") return;
     // Preserve tabs/line breaks between consecutive placeholders so inline image rows keep their original layout.
     translatedXML = normalizeTranslatedXML(translatedXML);
+    if (preserveSourceFormattingEnabled && applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata)) {
+        return;
+    }
     var isPartial = false; var textFlow = null; var currentIdx = 0;
     var normalizeStartIndex = 0;
     try {
