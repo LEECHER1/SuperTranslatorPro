@@ -7679,6 +7679,11 @@ btnPrintPDF.onClick = function() { quickExportPDF(false); };
 btnWebPDF.onClick = function() { quickExportPDF(true); };
 
 btnTranslate.onClick = function() {
+    var shouldShowBackPageTrackerDisabledNotice = radioBDA.value && !isBackPageTrackerEnabled(backPageTrackerSetting);
+    if (shouldShowBackPageTrackerDisabledNotice) {
+        alert(t("back_page_tracker_disabled_notice"));
+    }
+
     refreshMainValidationUI();
     var validationIssues = getMainValidationIssues();
     if (validationIssues.length > 0) {
@@ -7701,7 +7706,8 @@ btnTranslate.onClick = function() {
         onlyTextUpdate: cbOnlyTextUpdate ? cbOnlyTextUpdate.value : false,
         autoReferenceLinks: checkAutoBDAHyperlinks ? checkAutoBDAHyperlinks.value : false,
         autoReferenceSymbols: refSymbolsSetting,
-        backPageTracker: backPageTrackerSetting
+        backPageTracker: backPageTrackerSetting,
+        backPageTrackerDisabledNoticeShown: shouldShowBackPageTrackerDisabledNotice
     };
 
     if (config.mode !== "BDA" && config.lang === "") {
@@ -7732,9 +7738,6 @@ btnTranslate.onClick = function() {
         if (config.autoReferenceLinks) {
             refSymbolsSetting = normalizeRefSymbols(config.autoReferenceSymbols);
             app.insertLabel(REF_SYMBOLS_LABEL, refSymbolsSetting);
-        }
-        if (!config.onlyTextUpdate && !isBackPageTrackerEnabled(config.backPageTracker)) {
-            alert(t("back_page_tracker_disabled_notice"));
         }
     }
 
@@ -8141,6 +8144,10 @@ function runBDAMode(doc, config, preparedLegacy) {
 
     var activeBackPageTrackerSetting = (config.backPageTracker !== undefined && config.backPageTracker !== null) ? config.backPageTracker : backPageTrackerSetting;
     var backPageTrackerEnabled = isBackPageTrackerEnabled(activeBackPageTrackerSetting);
+    if (!backPageTrackerEnabled && !config.backPageTrackerDisabledNoticeShown) {
+        config.backPageTrackerDisabledNoticeShown = true;
+        alert(t("back_page_tracker_disabled_notice"));
+    }
     var backPageInfo = findOriginalBackPageInfo(doc, activeBackPageTrackerSetting);
     var originalBackPage = backPageInfo.page;
     if (originalBackPage && originalBackPage.isValid) {
