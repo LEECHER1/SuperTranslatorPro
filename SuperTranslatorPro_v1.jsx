@@ -557,9 +557,12 @@ function normalizeRefSymbols(symbols) {
 
 function normalizeBackPageTrackerSetting(value) {
     var raw = (value === null || value === undefined) ? "" : String(value);
-    raw = raw.replace(/^\s+|\s+$/g, "");
-    if (raw === "") raw = "©";
+    raw = raw.replace(/\r\n?/g, "\n").replace(/^\s+|\s+$/g, "");
     return raw;
+}
+
+function isBackPageTrackerEnabled(settingValue) {
+    return normalizeBackPageTrackerSetting(settingValue) !== "";
 }
 
 function sanitizeTOCPagePrefixText(value) {
@@ -1146,7 +1149,7 @@ var glossaryRuntimeState = { requestedPath: "", resolvedPath: "", loadedPath: ""
 var refSymbolsSetting = normalizeRefSymbols(app.extractLabel(REF_SYMBOLS_LABEL) || "[]");
 var hyperlinkPageMappings = loadHyperlinkPageMappings(app.extractLabel(HYPERLINK_PAGE_MAP_LABEL) || "");
 var autoBDAHyperlinksSetting = (app.extractLabel(AUTO_HYPERLINKS_LABEL) === "1");
-var backPageTrackerSetting = normalizeBackPageTrackerSetting(app.extractLabel(BACK_PAGE_TRACKER_LABEL) || "©");
+var backPageTrackerSetting = normalizeBackPageTrackerSetting(app.extractLabel(BACK_PAGE_TRACKER_LABEL) || "");
 var tocPagePrefixSetting = decodeTOCPagePrefixSettingFromLabel(app.extractLabel(TOC_PAGE_PREFIX_LABEL));
 
 var FORMALITY_LABEL = "SuperTranslatorPRO_Formality";
@@ -7806,6 +7809,7 @@ function normalizeBackPageSearchTerm(term) {
 
 function parseBackPageTrackerTerms(settingValue) {
     var raw = normalizeBackPageTrackerSetting(settingValue);
+    if (raw === "") return [];
     var parts = raw.split(/[\r\n|;,]+/);
     var terms = [];
     var seen = {};
@@ -7817,7 +7821,6 @@ function parseBackPageTrackerTerms(settingValue) {
         seen[normalized] = true;
         terms.push(term);
     }
-    if (terms.length === 0) terms.push("©");
     return terms;
 }
 
@@ -7902,6 +7905,7 @@ function findBackMasterByTracker(doc, trackerSetting) {
     if (candidates.length === 0) return null;
 
     var terms = ensureAutomaticBackPageFallbackTerms(parseBackPageTrackerTerms(trackerSetting), candidates);
+    if (terms.length === 0) return null;
     var filtered = candidates.slice(0);
     var matchedAny = false;
 
@@ -8037,7 +8041,7 @@ function ensureAutomaticBackPageFallbackTerms(terms, candidates) {
         seen[normalized] = true;
         result.push(terms[i]);
     }
-    if (result.length === 0) result.push("©");
+    if (result.length === 0) return result;
 
     var firstNormalized = normalizeBackPageSearchTerm(result[0]);
     if (firstNormalized === normalizeBackPageSearchTerm("©")) {
@@ -8057,6 +8061,7 @@ function findBackPageByTracker(doc, trackerSetting) {
     if (candidates.length === 0) return null;
 
     var terms = ensureAutomaticBackPageFallbackTerms(parseBackPageTrackerTerms(trackerSetting), candidates);
+    if (terms.length === 0) return null;
     var filtered = candidates.slice(0);
     var matchedAny = false;
 
@@ -8130,11 +8135,13 @@ function runBDAMode(doc, config, preparedLegacy) {
     if (!config.onlyTextUpdate) updateLanguageMasterVersionLabels(doc);
     if (langTasks.length === 0) { throw new Error(t("bda_no_templates")); }
 
-    var backPageInfo = findOriginalBackPageInfo(doc, config.backPageTracker || backPageTrackerSetting);
+    var activeBackPageTrackerSetting = (config.backPageTracker !== undefined && config.backPageTracker !== null) ? config.backPageTracker : backPageTrackerSetting;
+    var backPageTrackerEnabled = isBackPageTrackerEnabled(activeBackPageTrackerSetting);
+    var backPageInfo = findOriginalBackPageInfo(doc, activeBackPageTrackerSetting);
     var originalBackPage = backPageInfo.page;
     if (originalBackPage && originalBackPage.isValid) {
         ensureBackMasterForPage(doc, originalBackPage, backPageInfo.master);
-    } else {
+    } else if (backPageTrackerEnabled) {
         alert(t("back_page_not_found_notice"));
     }
 
