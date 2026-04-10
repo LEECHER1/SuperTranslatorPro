@@ -103,6 +103,12 @@ function normalizeSourceFormattingEnabledSetting(value) {
     return String(value || "0") === "1";
 }
 
+function isSourceFormattingEnabledForCurrentRun() {
+    return sourceFormattingRunOverride === null || sourceFormattingRunOverride === undefined
+        ? !!preserveSourceFormattingEnabled
+        : !!sourceFormattingRunOverride;
+}
+
 function normalizeMultilineSetting(value) {
     return String(value === null || value === undefined ? "" : value).replace(/\r\n?/g, "\n");
 }
@@ -1172,6 +1178,7 @@ var smartCopyfitMinScale = normalizeCopyfitMinScaleSetting(app.extractLabel(COPY
 var smartCopyfitTrackingStep = normalizeCopyfitTrackingStepSetting(app.extractLabel(COPYFIT_TRACKING_STEP_LABEL) || "2");
 var smartCopyfitScaleStep = normalizeCopyfitScaleStepSetting(app.extractLabel(COPYFIT_SCALE_STEP_LABEL) || "1");
 var preserveSourceFormattingEnabled = normalizeSourceFormattingEnabledSetting(app.extractLabel(SOURCE_FORMATTING_ENABLED_LABEL) || "0");
+var sourceFormattingRunOverride = null;
 var fontFallbackEnabled = normalizeFontFallbackEnabledSetting(app.extractLabel(FONT_FALLBACK_ENABLED_LABEL) || "1");
 var fontFallbackRulesSetting = decodeFontFallbackRulesSettingFromLabel(app.extractLabel(FONT_FALLBACK_RULES_LABEL) || "");
 var pdfExportPrintPresetSetting = app.extractLabel(PDF_EXPORT_PRINT_PRESET_LABEL) || "";
@@ -4345,12 +4352,16 @@ var mainBackPageSearchEnabled = isBackPageTrackerEnabled(backPageTrackerSetting)
 var checkAutoBDAHyperlinks = autoModeGroup.add("checkbox", undefined, t("auto_hyperlink_checkbox"));
 checkAutoBDAHyperlinks.value = autoBDAHyperlinksSetting;
 checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
+var checkAutoSourceFormatting = autoModeGroup.add("checkbox", undefined, t("auto_source_formatting_checkbox"));
+checkAutoSourceFormatting.value = false;
+checkAutoSourceFormatting.helpTip = t("source_formatting_enabled_help");
 var cbOnlyTextUpdate = autoModeGroup.add("checkbox", undefined, t("only_text_update"));
 cbOnlyTextUpdate.value = false;
 cbOnlyTextUpdate.enabled = false;
 
 function updateBDAHyperlinkControls(enabled) {
     checkAutoBDAHyperlinks.enabled = !!enabled;
+    checkAutoSourceFormatting.enabled = !!enabled;
 }
 
 function updateBDABackPageSearchControls(enabled, resetToDefault) {
@@ -4494,6 +4505,8 @@ function refreshMainWindowUIText() {
     updateBDABackPageSearchControls(radioBDA.value, false);
     checkAutoBDAHyperlinks.text = t("auto_hyperlink_checkbox");
     checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
+    checkAutoSourceFormatting.text = t("auto_source_formatting_checkbox");
+    checkAutoSourceFormatting.helpTip = t("source_formatting_enabled_help");
     cbOnlyTextUpdate.text = t("only_text_update");
     btnTranslate.text = t("translate_start");
     btnLinkReferences.text = t("hyperlink_settings_button");
@@ -4871,6 +4884,8 @@ checkAutoBDAHyperlinks.onClick = function() {
     refreshMainStatusUI();
     refreshMainValidationUI();
 };
+
+checkAutoSourceFormatting.onClick = refreshMainValidationUI;
 
 checkBackPageSearch.onClick = function() {
     mainBackPageSearchEnabled = !!checkBackPageSearch.value;
@@ -7759,6 +7774,7 @@ btnTranslate.onClick = function() {
         lang: getSelectedLanguageCodeSafe(),
         onlyTextUpdate: cbOnlyTextUpdate ? cbOnlyTextUpdate.value : false,
         autoReferenceLinks: checkAutoBDAHyperlinks ? checkAutoBDAHyperlinks.value : false,
+        autoSourceFormatting: checkAutoSourceFormatting ? checkAutoSourceFormatting.value : false,
         autoReferenceSymbols: refSymbolsSetting,
         backPageTracker: backPageTrackerSetting,
         useBackPageTracker: useBackPageTracker,
@@ -7828,21 +7844,25 @@ btnTranslate.onClick = function() {
 // --- 4. HAUPTSTEUERUNG ---
 function runMainProcess(doc, config) {
     var preparedLegacy = null;
-    if (config.mode === "BDA") {
-        preparedLegacy = prepareLegacyMasterSpreads(doc, !config.onlyTextUpdate);
-    }
-    if (config.mode === "BDA" && config.onlyTextUpdate) {
+    var previousSourceFormattingRunOverride = sourceFormattingRunOverride;
+    sourceFormattingRunOverride = (config.mode === "BDA") ? !!config.autoSourceFormatting : null;
+    try {
+        if (config.mode === "BDA") {
+            preparedLegacy = prepareLegacyMasterSpreads(doc, !config.onlyTextUpdate);
+        }
+        if (config.mode === "BDA" && config.onlyTextUpdate) {
+            updateLanguageMasterVersionLabels(doc);
+            syncMasterTextChanges(doc);
+            var updateMsg = syncBDATextChanges(doc, config);
+            runAutomaticHyperlinksForBDA(doc, config);
+            return updateMsg;
+        }
         updateLanguageMasterVersionLabels(doc);
         syncMasterTextChanges(doc);
-        var updateMsg = syncBDATextChanges(doc, config);
-        runAutomaticHyperlinksForBDA(doc, config);
-        return updateMsg;
-    }
-    updateLanguageMasterVersionLabels(doc);
-    syncMasterTextChanges(doc);
-    if (config.mode === "BDA") {
-        return runBDAMode(doc, config, preparedLegacy);
-    } else {
+        if (config.mode === "BDA") {
+            return runBDAMode(doc, config, preparedLegacy);
+        }
+
         updateProgress(5, t("read_textframes"), 5, t("preparation"));
         var targetTextObjArray = [];
         if (config.mode === "SELECTION") {
@@ -7860,6 +7880,8 @@ function runMainProcess(doc, config) {
         }
         executeTranslation(doc, targetTextObjArray, (config.mode === "PAGES"), config.sourcePages, config.lang, 10, 90);
         return t("result_selection_pages", { lang: config.lang });
+    } finally {
+        sourceFormattingRunOverride = previousSourceFormattingRunOverride;
     }
 }
 
@@ -12417,7 +12439,7 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode, para
     if (!translatedXML || translatedXML === "") return;
     // Preserve tabs/line breaks between consecutive placeholders so inline image rows keep their original layout.
     translatedXML = normalizeTranslatedXML(translatedXML);
-    if (preserveSourceFormattingEnabled && applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata)) {
+    if (isSourceFormattingEnabledForCurrentRun() && applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata)) {
         return;
     }
     var isPartial = false; var textFlow = null; var currentIdx = 0;
