@@ -12391,43 +12391,134 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
         }
     }
 
+    // Snapshot all formatting properties AND translated text content BEFORE any
+    // modifications. This prevents stale range references caused by InDesign
+    // re-coalescing adjacent runs with identical formatting after a .contents
+    // assignment — which was the root cause of missing first characters ("utton"
+    // instead of "Button") and doubled reference markers ("[21][21]").
+    var snapshots = [];
+    for (var snapIndex = 0; snapIndex < sourceRanges.length; snapIndex++) {
+        var sr = sourceRanges[snapIndex];
+        var snap = {
+            text:                       decodeStructuredRunText(translatedRuns[snapIndex].innerXML),
+            fontFamily:                 "",
+            fontStyle:                  "",
+            pointSize:                  null,
+            paragraphStyleName:         "",
+            characterStyleName:         "",
+            leading:                    null,
+            fillColorName:              "",
+            leftIndent:                 null,
+            firstLineIndent:            null,
+            justification:              null,
+            bulletsAndNumberingListType: null,
+            fallbackInfo:               null
+        };
+        try { snap.fontFamily  = String(sr.appliedFont.fontFamily || ""); } catch(e) {}
+        try { snap.fontStyle   = String(sr.fontStyle || ""); } catch(e) {}
+        try { snap.pointSize   = sr.pointSize; } catch(e) {}
+        try { snap.paragraphStyleName  = String(sr.appliedParagraphStyle.name || ""); } catch(e) {}
+        try { snap.characterStyleName  = String(sr.appliedCharacterStyle.name || ""); } catch(e) {}
+        try { snap.leading     = (sr.leading === Leading.AUTO) ? "AUTO" : sr.leading; } catch(e) {}
+        try { snap.fillColorName = String(sr.fillColor.name || ""); } catch(e) {}
+        try { snap.leftIndent        = sr.leftIndent; } catch(e) {}
+        try { snap.firstLineIndent   = sr.firstLineIndent; } catch(e) {}
+        try { snap.justification     = sr.justification; } catch(e) {}
+        try { snap.bulletsAndNumberingListType = sr.bulletsAndNumberingListType; } catch(e) {}
+        snap.fallbackInfo = resolveFontFallbackForText(inDesignLangCode, snap.text);
+        snapshots.push(snap);
+    }
+
+    // Determine text flow and start index — mirrors applyXMLtoInDesign logic.
+    var isPartial = false;
+    var textFlow = null;
+    var currentIdx = 0;
     try {
-        for (var rangeIndex = sourceRanges.length - 1; rangeIndex >= 0; rangeIndex--) {
-            var sourceRange = sourceRanges[rangeIndex];
-            var textContent = decodeStructuredRunText(translatedRuns[rangeIndex].innerXML);
-            var fallbackInfo = resolveFontFallbackForText(inDesignLangCode, textContent);
-            var originalFamily = "";
-            var originalStyle = "";
+        if (targetTextObj.constructor.name === "Story") {
+            isPartial = false;
+            textFlow = targetTextObj;
+        } else if (targetTextObj.parent && targetTextObj.parent.constructor.name === "Cell") {
+            textFlow = targetTextObj.parent.texts[0];
+            isPartial = (targetTextObj.characters.length < textFlow.characters.length);
+        } else {
+            isPartial = true;
+            textFlow = targetTextObj.parentStory;
+        }
+    } catch(e) { isPartial = false; textFlow = targetTextObj; }
 
-            try { originalFamily = String(sourceRange.appliedFont.fontFamily || ""); } catch (fontFamilyErr) { originalFamily = ""; }
-            try { originalStyle = String(sourceRange.fontStyle || ""); } catch (fontStyleErr) { originalStyle = ""; }
-            sourceRange.contents = textContent;
+    if (!textFlow || !textFlow.isValid) return false;
 
-            if (textContent !== "" && fallbackInfo) {
-                applyOptionalFontFallback(sourceRange, originalFamily, originalStyle, fallbackInfo, inDesignLangCode, textContent);
-            }
+    try {
+        if (isPartial) {
+            try { currentIdx = targetTextObj.insertionPoints.item(0).index; } catch(e) {}
+            try { targetTextObj.remove(); } catch(e) {}
+        } else {
+            try { textFlow.contents = ""; } catch(e) {}
+            currentIdx = 0;
+        }
+
+        var doc = app.activeDocument;
+        var insertStart = currentIdx;
+
+        for (var i = 0; i < snapshots.length; i++) {
+            var snap = snapshots[i];
+            var textContent = snap.text;
+            if (textContent === "") continue;
+
+            var appliedRange = null;
+            try {
+                textFlow.insertionPoints.item(currentIdx).contents = textContent;
+                var endIdx = currentIdx + textContent.length - 1;
+                if (endIdx >= currentIdx) appliedRange = textFlow.characters.itemByRange(currentIdx, endIdx);
+                currentIdx += textContent.length;
+            } catch(insertErr) { continue; }
+
+            if (!appliedRange) continue;
+
+            try { var pStyle = doc.paragraphStyles.itemByName(snap.paragraphStyleName); if (pStyle && pStyle.isValid) appliedRange.applyParagraphStyle(pStyle, false); } catch(e) {}
+            try { if (snap.bulletsAndNumberingListType !== null) appliedRange.bulletsAndNumberingListType = snap.bulletsAndNumberingListType; } catch(e) {}
+            try { if (snap.fontFamily !== "") appliedRange.appliedFont = snap.fontFamily; } catch(e) {}
+            try { appliedRange.fontStyle = snap.fontStyle; } catch(e) { try { appliedRange.fontStyle = "Regular"; } catch(e2) {} }
+            try { if (snap.pointSize !== null) appliedRange.pointSize = snap.pointSize; } catch(e) {}
+            try { if (snap.leading !== null) appliedRange.leading = (snap.leading === "AUTO") ? Leading.AUTO : snap.leading; } catch(e) {}
+            try { if (snap.fillColorName !== "") { var swatchObj = doc.swatches.itemByName(snap.fillColorName); if (swatchObj.isValid) appliedRange.fillColor = swatchObj; } } catch(e) {}
+            try { if (snap.characterStyleName !== "" && snap.characterStyleName !== "[None]" && snap.characterStyleName !== "[Ohne]") { var cStyleObj = doc.characterStyles.itemByName(snap.characterStyleName); if (cStyleObj.isValid) appliedRange.applyCharacterStyle(cStyleObj, false); } } catch(e) {}
+            try { if (snap.justification !== null) appliedRange.justification = snap.justification; } catch(e) {}
+            try { if (snap.leftIndent !== null) appliedRange.leftIndent = snap.leftIndent; } catch(e) {}
+            try { if (snap.firstLineIndent !== null) appliedRange.firstLineIndent = snap.firstLineIndent; } catch(e) {}
+            applyOptionalFontFallback(appliedRange, snap.fontFamily, snap.fontStyle, snap.fallbackInfo, inDesignLangCode, textContent);
         }
     } catch (applyErr) {
         writeDebugLog("source_formatting:apply_failed target={" + getDebugTextTargetLabel(targetTextObj) + "} error=" + (applyErr.message || applyErr), "WARNUNG");
         return false;
     }
 
+    // Build a reference to the newly inserted text for post-processing.
+    var insertEnd = currentIdx - 1;
+    var postTarget = null;
     try {
-        if (inDesignLangCode !== "") {
-            var doc = app.activeDocument;
-            var langObj = resolveInDesignLanguageObject(doc, inDesignLangCode);
-            if (langObj && langObj.isValid) targetTextObj.appliedLanguage = langObj;
+        if (!isPartial && targetTextObj.isValid) {
+            postTarget = targetTextObj;
+        } else if (insertEnd >= insertStart && textFlow.isValid) {
+            postTarget = textFlow.characters.itemByRange(insertStart, insertEnd);
+        }
+    } catch(e) {}
+
+    try {
+        if (postTarget && postTarget.isValid && inDesignLangCode !== "") {
+            var langObj = resolveInDesignLanguageObject(app.activeDocument, inDesignLangCode);
+            if (langObj && langObj.isValid) postTarget.appliedLanguage = langObj;
         }
     } catch (langErr) {}
 
-    try { normalizePostTranslationSpacing(targetTextObj); } catch (spacingErr) {}
-    try { restoreParagraphNumberingMetadata(targetTextObj, paragraphNumberingMetadata); } catch (numberingErr) {}
+    try { if (postTarget && postTarget.isValid) normalizePostTranslationSpacing(postTarget); } catch (spacingErr) {}
+    try { if (postTarget && postTarget.isValid) restoreParagraphNumberingMetadata(postTarget, paragraphNumberingMetadata); } catch (numberingErr) {}
     try {
-        if (targetTextObj.parentStory && targetTextObj.parentStory.isValid && targetTextObj.parentStory.recompose) targetTextObj.parentStory.recompose();
-        else if (targetTextObj.recompose) targetTextObj.recompose();
+        if (textFlow.parentStory && textFlow.parentStory.isValid && textFlow.parentStory.recompose) textFlow.parentStory.recompose();
+        else if (textFlow.recompose) textFlow.recompose();
     } catch (recomposeErr) {}
 
-    writeDebugLog("source_formatting:applied target={" + getDebugTextTargetLabel(targetTextObj) + "} runs=" + sourceRanges.length);
+    writeDebugLog("source_formatting:applied target={" + getDebugTextTargetLabel(targetTextObj) + "} runs=" + snapshots.length);
     return true;
 }
 
