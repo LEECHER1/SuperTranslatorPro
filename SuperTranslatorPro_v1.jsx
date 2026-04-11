@@ -11595,53 +11595,33 @@ function normalizeTranslatedXML(xml) {
                       .replace(/>\s+</g, '><');
 }
 
-// Prevents <nt> token duplication across runs.
-// Some translators (e.g. DeepL) may copy a protected token like <nt>[21]</nt>
-// into a run that did not have it in the source, producing "[21] [21]" in the
-// output. This function walks both source and translated XMLs run-by-run and:
-//   - strips <nt>content</nt> from any translated run whose source run had none
-//   - removes excess occurrences in runs where the source had fewer tokens
-// Run counts that don't match are left untouched (handled elsewhere).
+// Prevents <nt> token duplication caused by translators (e.g. DeepL) copying
+// a protected token like <nt>[21]</nt> into additional positions.
+// Uses a GLOBAL counter: counts each distinct NT-token value in the source,
+// then strips any excess occurrences from the translated XML in document order.
+// This handles run merges/splits correctly — it does not rely on 1:1 run mapping.
 function enforceNtTokensBySourceRuns(sourceXML, translatedXML) {
     if (!sourceXML || !translatedXML) return translatedXML;
 
-    var sourceRunXMLs = String(sourceXML).match(/<t\b[^>]*>[\s\S]*?<\/t>/gi);
-    if (!sourceRunXMLs || sourceRunXMLs.length === 0) return translatedXML;
-
-    // Build per-source-run NT-content allowance maps
-    var sourceNtPerRun = [];
-    for (var i = 0; i < sourceRunXMLs.length; i++) {
-        var innerMatch = /<t\b[^>]*>([\s\S]*?)<\/t>/i.exec(sourceRunXMLs[i]);
-        var allowedCounts = {};
-        if (innerMatch) {
-            var ntRegex = /<nt>([\s\S]*?)<\/nt>/gi;
-            var ntMatch;
-            while ((ntMatch = ntRegex.exec(innerMatch[1])) !== null) {
-                var key = ntMatch[1];
-                allowedCounts[key] = (allowedCounts[key] || 0) + 1;
-            }
-        }
-        sourceNtPerRun.push(allowedCounts);
+    // Count each NT token value in the source
+    var allowedCounts = {};
+    var sourceNtRegex = /<nt>([\s\S]*?)<\/nt>/gi;
+    var sourceMatch;
+    while ((sourceMatch = sourceNtRegex.exec(String(sourceXML))) !== null) {
+        var key = sourceMatch[1];
+        allowedCounts[key] = (allowedCounts[key] || 0) + 1;
     }
 
-    var translatedRunIndex = 0;
-    return String(translatedXML).replace(/<t\b([^>]*)>([\s\S]*?)<\/t>/gi, function(fullMatch, attrText, innerText) {
-        if (translatedRunIndex >= sourceNtPerRun.length) return fullMatch;
-
-        var allowedCounts = sourceNtPerRun[translatedRunIndex];
-        translatedRunIndex++;
-
-        var usedCounts = {};
-        var cleaned = innerText.replace(/<nt>([\s\S]*?)<\/nt>/gi, function(ntFull, ntContent) {
-            var allowed = allowedCounts[ntContent] || 0;
-            var used = usedCounts[ntContent] || 0;
-            if (used < allowed) {
-                usedCounts[ntContent] = used + 1;
-                return ntFull; // keep: within source allowance
-            }
-            return ""; // strip: not in source run or already used up
-        });
-        return "<t" + attrText + ">" + cleaned + "</t>";
+    // Walk translated XML globally and strip any occurrence exceeding the source count
+    var usedCounts = {};
+    return String(translatedXML).replace(/<nt>([\s\S]*?)<\/nt>/gi, function(fullMatch, ntContent) {
+        var allowed = allowedCounts[ntContent] || 0;
+        var used = usedCounts[ntContent] || 0;
+        if (used < allowed) {
+            usedCounts[ntContent] = used + 1;
+            return fullMatch; // keep: within source total
+        }
+        return ""; // strip: exceeds source total
     });
 }
 
