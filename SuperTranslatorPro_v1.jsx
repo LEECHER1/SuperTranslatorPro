@@ -10698,6 +10698,7 @@ function normalizeStructuredXMLCandidate(xml, sourceXML) {
     }
     raw = preserveRunBoundaryWhitespace(sourceXML, raw);
     raw = enforceNtTokensBySourceRuns(sourceXML, raw);
+    raw = preserveNtTokenPositions(sourceXML, raw);
     return normalizeTranslatedXML(raw);
 }
 
@@ -11676,6 +11677,68 @@ function preserveRunBoundaryWhitespace(sourceXML, translatedXML) {
             (sourceTrailingMatch ? sourceTrailingMatch[0] : "");
 
         return "<t" + attrText + ">" + adjustedInnerText + "</t>";
+    });
+}
+
+// Ensures that <nt> tokens appear at the same relative position (leading or
+// trailing) within each translated run as they do in the corresponding source
+// run. DeepL may move [1] from the end of a phrase ("WiFi-Anzeige [1]") to
+// the beginning ("[1] WiFi indicator"). This function detects that the source
+// run ends with NT and moves all NT tokens back to the end of the translated
+// run (and vice-versa for leading NT tokens).
+//
+// Safety:
+// - If the source run has NT only in the middle, nothing changes.
+// - If the run is only NT without translatable text, nothing changes.
+// - If source/translation has no NT, nothing changes.
+function preserveNtTokenPositions(sourceXML, translatedXML) {
+    if (!sourceXML || !translatedXML) return translatedXML;
+
+    var sourceRuns = String(sourceXML).match(/<t\b[^>]*>[\s\S]*?<\/t>/gi);
+    if (!sourceRuns || sourceRuns.length === 0) return translatedXML;
+
+    var runIdx = 0;
+    return String(translatedXML).replace(/<t\b([^>]*)>([\s\S]*?)<\/t>/gi, function(fullMatch, attrs, inner) {
+        if (runIdx >= sourceRuns.length) return fullMatch;
+
+        var srcInnerM = /<t\b[^>]*>([\s\S]*?)<\/t>/i.exec(sourceRuns[runIdx++]);
+        if (!srcInnerM) return fullMatch;
+        var srcInner = String(srcInnerM[1] || "");
+
+        // Skip if source or translated has no NT tokens
+        if (!/<nt>/i.test(srcInner) || !/<nt>/i.test(inner)) return fullMatch;
+
+        var srcTrimmed = srcInner.replace(/^\s+|\s+$/g, "");
+        var srcEndsWithNt = /(?:<nt>[\s\S]*?<\/nt>)\s*$/.test(srcTrimmed);
+        var srcStartsWithNt = /^(?:<nt>[\s\S]*?<\/nt>)/.test(srcTrimmed);
+
+        // If source is ONLY NT (no surrounding text) or NT is in the middle, leave as-is
+        if (srcEndsWithNt && srcStartsWithNt) return fullMatch;
+        if (!srcEndsWithNt && !srcStartsWithNt) return fullMatch;
+
+        // Translated already in the correct position? Leave it.
+        var innerTrimmed = String(inner).replace(/^\s+|\s+$/g, "");
+        var transEndsWithNt = /(?:<nt>[\s\S]*?<\/nt>)\s*$/.test(innerTrimmed);
+        var transStartsWithNt = /^(?:<nt>[\s\S]*?<\/nt>)/.test(innerTrimmed);
+        if (srcEndsWithNt && transEndsWithNt) return fullMatch;
+        if (srcStartsWithNt && transStartsWithNt) return fullMatch;
+
+        // Separate NT tokens from the remaining text
+        var ntTokens = [];
+        var PLACEHOLDER = "\x00";
+        var coreText = String(inner).replace(/<nt>[\s\S]*?<\/nt>/gi, function(m) {
+            ntTokens.push(m);
+            return PLACEHOLDER;
+        });
+        coreText = coreText.replace(/\s*\x00\s*/g, " ").replace(/^\s+|\s+$/g, "");
+        if (ntTokens.length === 0 || coreText === "") return fullMatch;
+
+        var ntStr = ntTokens.join(" ");
+        var newInner = srcEndsWithNt
+            ? coreText + " " + ntStr
+            : ntStr + " " + coreText;
+
+        return "<t" + attrs + ">" + newInner + "</t>";
     });
 }
 
