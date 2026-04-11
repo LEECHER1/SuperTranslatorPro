@@ -4003,6 +4003,15 @@ function protectChunkNonTranslatables(chunk) {
         return (openTags > closeTags) ? match : '<nt>' + match + '</nt>';
     });
 
+    // Protect SI unit rate expressions like °C/h, °C/min, m/s, km/h so that
+    // DeepL does not expand them to "per hour", "metres per second" etc.
+    chunk = chunk.replace(/\u00B0[A-Za-z]+\/[A-Za-z]+|[A-Za-z]{1,4}\/(?:h|min|s|sec|d|wk|mo|yr|a)\b/g, function(match, offset, string) {
+        var before = string.substring(0, offset);
+        var openTags = (before.match(/<nt>/g) || []).length;
+        var closeTags = (before.match(/<\/nt>/g) || []).length;
+        return (openTags > closeTags) ? match : '<nt>' + match + '</nt>';
+    });
+
     return chunk;
 }
 
@@ -11710,8 +11719,14 @@ var COMMA_DECIMAL_LANGS = {
     "LT": true, "LV": true, "ET": true
 };
 
-// Normalizes decimal separators in the translated text to match the target locale.
-// Uses InDesign GREP to safely replace digit,digit or digit.digit patterns.
+// Normalizes decimal AND thousands separators in the translated text to match the
+// target locale. Two GREP passes per direction:
+//   Period-target (EN, ZH, …):
+//     1. decimal comma  → period :  1,9  →  1.9   (not applied to 1,000 thousands)
+//     2. thousands period → comma :  10.000 → 10,000  (only groups of exactly 3 digits)
+//   Comma-target (DE, FR, IT, …):
+//     1. decimal period → comma  :  1.9  →  1,9   (not applied to chained: 1.9.2)
+//     2. thousands comma → period:  10,000 → 10.000  (only groups of exactly 3 digits)
 function normalizeDecimalSeparators(textScope, targetLangCode) {
     if (!textScope || !textScope.isValid || !targetLangCode) return;
 
@@ -11719,27 +11734,35 @@ function normalizeDecimalSeparators(textScope, targetLangCode) {
     var short2 = upper.substring(0, 2);
     var targetUsesComma = !!(COMMA_DECIMAL_LANGS[upper] || COMMA_DECIMAL_LANGS[short2]);
 
-    try {
-        app.findGrepPreferences  = NothingEnum.nothing;
-        app.changeGrepPreferences = NothingEnum.nothing;
+    var steps = targetUsesComma ? [
+        // Pass 1 — decimal period → comma  (e.g. 1.9 → 1,9)
+        // Negative lookahead: skip when the digit after period is itself followed by
+        // another period or digit (version numbers like 1.9.2, chains like 1.0.0)
+        { find: "(\\d)\\.(\\d)(?![.\\d])", change: "$1,$2" },
+        // Pass 2 — English thousands comma → German period  (e.g. 10,000 → 10.000)
+        // Only matches exactly 3 digits after comma, not followed by another digit
+        { find: "(\\d),(\\d{3})(?!\\d)", change: "$1.$2" }
+    ] : [
+        // Pass 1 — decimal comma → period  (e.g. 1,9 → 1.9)
+        // Negative lookahead: skip when the 3-digit thousands-comma pattern applies
+        { find: "(\\d),(\\d)(?![,\\d]{2})", change: "$1.$2" },
+        // Pass 2 — German thousands period → English comma  (e.g. 10.000 → 10,000)
+        // Only matches exactly 3 digits after period, not followed by another digit
+        { find: "(\\d)\\.(\\d{3})(?!\\d)", change: "$1,$2" }
+    ];
 
-        if (targetUsesComma) {
-            // EN → DE/FR/IT/… : replace digit.digit with digit,digit
-            // Negative lookahead avoids chained dots (version numbers like 1.9.2)
-            app.findGrepPreferences.findWhat  = "(\\d)\\.(\\d)(?![.\\d])";
-            app.changeGrepPreferences.changeTo = "$1,$2";
-        } else {
-            // DE/FR/… → EN : replace digit,digit with digit.digit
-            // Negative lookahead avoids chained commas (1,000,000 thousand separators)
-            app.findGrepPreferences.findWhat  = "(\\d),(\\d)(?![,\\d]{3,})";
-            app.changeGrepPreferences.changeTo = "$1.$2";
+    for (var si = 0; si < steps.length; si++) {
+        try {
+            app.findGrepPreferences  = NothingEnum.nothing;
+            app.changeGrepPreferences = NothingEnum.nothing;
+            app.findGrepPreferences.findWhat   = steps[si].find;
+            app.changeGrepPreferences.changeTo = steps[si].change;
+            textScope.changeGrep();
+        } catch(e) {
+        } finally {
+            try { app.findGrepPreferences  = NothingEnum.nothing; } catch(e2) {}
+            try { app.changeGrepPreferences = NothingEnum.nothing; } catch(e3) {}
         }
-
-        textScope.changeGrep();
-    } catch(e) {
-    } finally {
-        try { app.findGrepPreferences  = NothingEnum.nothing; } catch(e2) {}
-        try { app.changeGrepPreferences = NothingEnum.nothing; } catch(e3) {}
     }
 }
 
@@ -12283,6 +12306,12 @@ function buildTextObjectXML(textObj) {
         chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
         if (!isDNT) {
             chunk = chunk.replace(/\[\d+\]/g, function(match, offset, string) {
+                var before = string.substring(0, offset);
+                var openTags = (before.match(/<nt>/g) || []).length;
+                var closeTags = (before.match(/<\/nt>/g) || []).length;
+                return (openTags > closeTags) ? match : '<nt>' + match + '</nt>';
+            });
+            chunk = chunk.replace(/\u00B0[A-Za-z]+\/[A-Za-z]+|[A-Za-z]{1,4}\/(?:h|min|s|sec|d|wk|mo|yr|a)\b/g, function(match, offset, string) {
                 var before = string.substring(0, offset);
                 var openTags = (before.match(/<nt>/g) || []).length;
                 var closeTags = (before.match(/<\/nt>/g) || []).length;
