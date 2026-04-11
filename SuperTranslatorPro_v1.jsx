@@ -11694,10 +11694,60 @@ function normalizeTechnicalTokenSpacing(textScope) {
     return changed;
 }
 
-function normalizePostTranslationSpacing(textScope, symbols) {
+// Languages that use comma as decimal separator (e.g. 1,9 instead of 1.9).
+// All unlisted languages are assumed to use period.
+var COMMA_DECIMAL_LANGS = {
+    "DE": true, "DE-DE": true, "DE-AT": true, "DE-CH": true,
+    "FR": true, "FR-FR": true, "FR-BE": true, "FR-CH": true, "FR-CA": true,
+    "IT": true, "IT-IT": true,
+    "ES": true, "ES-ES": true,
+    "PT": true, "PT-PT": true, "PT-BR": true,
+    "NL": true, "NL-NL": true, "NL-BE": true,
+    "PL": true, "CS": true, "SK": true, "HU": true,
+    "RO": true, "BG": true, "HR": true, "SL": true,
+    "DA": true, "NB": true, "SV": true, "FI": true,
+    "EL": true, "UK": true, "RU": true, "TR": true,
+    "LT": true, "LV": true, "ET": true
+};
+
+// Normalizes decimal separators in the translated text to match the target locale.
+// Uses InDesign GREP to safely replace digit,digit or digit.digit patterns.
+function normalizeDecimalSeparators(textScope, targetLangCode) {
+    if (!textScope || !textScope.isValid || !targetLangCode) return;
+
+    var upper = String(targetLangCode).toUpperCase();
+    var short2 = upper.substring(0, 2);
+    var targetUsesComma = !!(COMMA_DECIMAL_LANGS[upper] || COMMA_DECIMAL_LANGS[short2]);
+
+    try {
+        app.findGrepPreferences  = NothingEnum.nothing;
+        app.changeGrepPreferences = NothingEnum.nothing;
+
+        if (targetUsesComma) {
+            // EN → DE/FR/IT/… : replace digit.digit with digit,digit
+            // Negative lookahead avoids chained dots (version numbers like 1.9.2)
+            app.findGrepPreferences.findWhat  = "(\\d)\\.(\\d)(?![.\\d])";
+            app.changeGrepPreferences.changeTo = "$1,$2";
+        } else {
+            // DE/FR/… → EN : replace digit,digit with digit.digit
+            // Negative lookahead avoids chained commas (1,000,000 thousand separators)
+            app.findGrepPreferences.findWhat  = "(\\d),(\\d)(?![,\\d]{3,})";
+            app.changeGrepPreferences.changeTo = "$1.$2";
+        }
+
+        textScope.changeGrep();
+    } catch(e) {
+    } finally {
+        try { app.findGrepPreferences  = NothingEnum.nothing; } catch(e2) {}
+        try { app.changeGrepPreferences = NothingEnum.nothing; } catch(e3) {}
+    }
+}
+
+function normalizePostTranslationSpacing(textScope, symbols, targetLangCode) {
     var changed = false;
     changed = normalizeTechnicalTokenSpacing(textScope) || changed;
     changed = normalizeReferenceSpacing(textScope, symbols) || changed;
+    if (targetLangCode) normalizeDecimalSeparators(textScope, targetLangCode);
     return changed;
 }
 
@@ -12560,7 +12610,7 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
         }
     } catch (langErr) {}
 
-    try { if (postTarget && postTarget.isValid) normalizePostTranslationSpacing(postTarget); } catch (spacingErr) {}
+    try { if (postTarget && postTarget.isValid) normalizePostTranslationSpacing(postTarget, undefined, inDesignLangCode); } catch (spacingErr) {}
     try { if (postTarget && postTarget.isValid) restoreParagraphNumberingMetadata(postTarget, paragraphNumberingMetadata); } catch (numberingErr) {}
     try {
         if (textFlow.parentStory && textFlow.parentStory.isValid && textFlow.parentStory.recompose) textFlow.parentStory.recompose();
@@ -12655,11 +12705,11 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode, para
                     var scopeStartIndex = Math.max(0, normalizeStartIndex - 1);
                     var scopeEndIndex = Math.min(textFlow.characters.length - 1, normalizeEndIndex + 1);
                     var insertedRange = textFlow.characters.itemByRange(scopeStartIndex, scopeEndIndex);
-                    normalizePostTranslationSpacing(insertedRange);
+                    normalizePostTranslationSpacing(insertedRange, undefined, inDesignLangCode);
                 }
             } else {
                 translatedScope = textFlow;
-                normalizePostTranslationSpacing(textFlow);
+                normalizePostTranslationSpacing(textFlow, undefined, inDesignLangCode);
             }
         } catch (e5) {}
         try {
