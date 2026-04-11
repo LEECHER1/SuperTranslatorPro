@@ -3993,6 +3993,16 @@ function protectChunkNonTranslatables(chunk) {
     });
 
     chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
+
+    // Protect [number] cross-reference patterns like [21], [5], [123] — common in
+    // technical manuals as figure/button references. These must never be translated.
+    chunk = chunk.replace(/\[\d+\]/g, function(match, offset, string) {
+        var before = string.substring(0, offset);
+        var openTags = (before.match(/<nt>/g) || []).length;
+        var closeTags = (before.match(/<\/nt>/g) || []).length;
+        return (openTags > closeTags) ? match : '<nt>' + match + '</nt>';
+    });
+
     return chunk;
 }
 
@@ -12221,6 +12231,14 @@ function buildTextObjectXML(textObj) {
         }
 
         chunk = chunk.replace(/###(TBL_\d+|IMG_\d+)###/g, '<nt>###$1###</nt>');
+        if (!isDNT) {
+            chunk = chunk.replace(/\[\d+\]/g, function(match, offset, string) {
+                var before = string.substring(0, offset);
+                var openTags = (before.match(/<nt>/g) || []).length;
+                var closeTags = (before.match(/<\/nt>/g) || []).length;
+                return (openTags > closeTags) ? match : '<nt>' + match + '</nt>';
+            });
+        }
         chunk = chunk.replace(/\r/g, '<pbr/>').replace(/\n/g, '<lbr/>').replace(/\t/g, '<tab/>');
         if (chunk !== "") {
             xmlString += '<t f="' + fFamily + '" s="' + fStyle + '" z="' + pSize + '" p="' + pStyleName + '" l="' + ldingStr + '" c="' + fColor + '" k="' + cStyle + '" a="' + pAli + '" li="' + lInd + '" fi="' + fInd + '" b="' + bList + '">' + chunk + '</t>';
