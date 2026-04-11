@@ -10678,6 +10678,7 @@ function normalizeStructuredXMLCandidate(xml, sourceXML) {
         raw = "<root>" + raw + "</root>";
     }
     raw = preserveRunBoundaryWhitespace(sourceXML, raw);
+    raw = enforceNtTokensBySourceRuns(sourceXML, raw);
     return normalizeTranslatedXML(raw);
 }
 
@@ -11592,6 +11593,56 @@ function normalizeTranslatedXML(xml) {
     if (!xml || xml === "") return xml;
     return String(xml).replace(/^\s+|\s+$/g, '')
                       .replace(/>\s+</g, '><');
+}
+
+// Prevents <nt> token duplication across runs.
+// Some translators (e.g. DeepL) may copy a protected token like <nt>[21]</nt>
+// into a run that did not have it in the source, producing "[21] [21]" in the
+// output. This function walks both source and translated XMLs run-by-run and:
+//   - strips <nt>content</nt> from any translated run whose source run had none
+//   - removes excess occurrences in runs where the source had fewer tokens
+// Run counts that don't match are left untouched (handled elsewhere).
+function enforceNtTokensBySourceRuns(sourceXML, translatedXML) {
+    if (!sourceXML || !translatedXML) return translatedXML;
+
+    var sourceRunXMLs = String(sourceXML).match(/<t\b[^>]*>[\s\S]*?<\/t>/gi);
+    if (!sourceRunXMLs || sourceRunXMLs.length === 0) return translatedXML;
+
+    // Build per-source-run NT-content allowance maps
+    var sourceNtPerRun = [];
+    for (var i = 0; i < sourceRunXMLs.length; i++) {
+        var innerMatch = /<t\b[^>]*>([\s\S]*?)<\/t>/i.exec(sourceRunXMLs[i]);
+        var allowedCounts = {};
+        if (innerMatch) {
+            var ntRegex = /<nt>([\s\S]*?)<\/nt>/gi;
+            var ntMatch;
+            while ((ntMatch = ntRegex.exec(innerMatch[1])) !== null) {
+                var key = ntMatch[1];
+                allowedCounts[key] = (allowedCounts[key] || 0) + 1;
+            }
+        }
+        sourceNtPerRun.push(allowedCounts);
+    }
+
+    var translatedRunIndex = 0;
+    return String(translatedXML).replace(/<t\b([^>]*)>([\s\S]*?)<\/t>/gi, function(fullMatch, attrText, innerText) {
+        if (translatedRunIndex >= sourceNtPerRun.length) return fullMatch;
+
+        var allowedCounts = sourceNtPerRun[translatedRunIndex];
+        translatedRunIndex++;
+
+        var usedCounts = {};
+        var cleaned = innerText.replace(/<nt>([\s\S]*?)<\/nt>/gi, function(ntFull, ntContent) {
+            var allowed = allowedCounts[ntContent] || 0;
+            var used = usedCounts[ntContent] || 0;
+            if (used < allowed) {
+                usedCounts[ntContent] = used + 1;
+                return ntFull; // keep: within source allowance
+            }
+            return ""; // strip: not in source run or already used up
+        });
+        return "<t" + attrText + ">" + cleaned + "</t>";
+    });
 }
 
 function preserveRunBoundaryWhitespace(sourceXML, translatedXML) {
