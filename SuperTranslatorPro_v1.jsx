@@ -4353,7 +4353,7 @@ var checkAutoBDAHyperlinks = autoModeGroup.add("checkbox", undefined, t("auto_hy
 checkAutoBDAHyperlinks.value = autoBDAHyperlinksSetting;
 checkAutoBDAHyperlinks.helpTip = t("auto_hyperlink_help");
 var checkAutoSourceFormatting = autoModeGroup.add("checkbox", undefined, t("auto_source_formatting_checkbox"));
-checkAutoSourceFormatting.value = false;
+checkAutoSourceFormatting.value = !!preserveSourceFormattingEnabled;
 checkAutoSourceFormatting.helpTip = t("source_formatting_enabled_help");
 var cbOnlyTextUpdate = autoModeGroup.add("checkbox", undefined, t("only_text_update"));
 cbOnlyTextUpdate.value = false;
@@ -8342,10 +8342,6 @@ function runBDAMode(doc, config, preparedLegacy) {
         var originalPages = getBDAOriginalPages(doc, config);
         if (originalPages && originalPages.length > 0) {
             saveBDASnapshot(doc, buildBDASnapshotPayload(originalPages));
-        }
-        var snapshotPages = getBDAOriginalPages(doc, config);
-        if (snapshotPages && snapshotPages.length > 0) {
-            saveBDASnapshot(doc, buildBDASnapshotPayload(snapshotPages));
         }
     } catch (e) {}
 
