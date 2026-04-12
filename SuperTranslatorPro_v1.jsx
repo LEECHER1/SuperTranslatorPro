@@ -10998,6 +10998,134 @@ function findAdjacentTextTokenIndex(tokens, startIndex, direction) {
     return -1;
 }
 
+function buildStructuredXMLTokenStream(xml) {
+    var stream = [];
+    var runs = getStructuredXMLRunDescriptors(xml);
+    for (var r = 0; r < runs.length; r++) {
+        var tokens = tokenizeStructuredRunInnerXML(runs[r].innerXML);
+        for (var t = 0; t < tokens.length; t++) {
+            stream.push({
+                type: tokens[t].type,
+                value: tokens[t].value,
+                runIndex: r,
+                tokenIndex: t
+            });
+        }
+    }
+    return stream;
+}
+
+function collectMarkerContextPhraseFromTokenStream(stream, markerIndex, direction) {
+    var pieces = [];
+    var step = (direction < 0) ? -1 : 1;
+    for (var i = markerIndex + step; i >= 0 && i < stream.length; i += step) {
+        var token = stream[i];
+        if (!token) continue;
+        if (token.type === "tag" || token.type === "nt") break;
+        if (token.type === "text") {
+            if (direction < 0) pieces.unshift(decodeXMLValue(token.value));
+            else pieces.push(decodeXMLValue(token.value));
+        }
+    }
+    return normalizeMarkerPhraseText(pieces.join(""));
+}
+
+function extractMarkerContextsFromXML(xml) {
+    var contexts = [];
+    var stream = buildStructuredXMLTokenStream(xml);
+    for (var i = 0; i < stream.length; i++) {
+        if (stream[i].type !== "nt") continue;
+        var markerValue = extractMarkerTokenValue(stream[i].value);
+        if (!/^\[\d+\]$/.test(markerValue)) continue;
+
+        var leftPhrase = collectMarkerContextPhraseFromTokenStream(stream, i, -1);
+        var rightPhrase = collectMarkerContextPhraseFromTokenStream(stream, i, 1);
+        var hasLeft = countMarkerPhraseWords(leftPhrase) > 0;
+        var hasRight = countMarkerPhraseWords(rightPhrase) > 0;
+        var position = "middle";
+        var phraseText = "";
+
+        if (hasRight && !hasLeft) {
+            position = "leading";
+            phraseText = rightPhrase;
+        } else if (hasLeft && !hasRight) {
+            position = "trailing";
+            phraseText = leftPhrase;
+        }
+
+        contexts.push({
+            marker: markerValue,
+            position: position,
+            phraseText: phraseText
+        });
+    }
+    return contexts;
+}
+
+function registerMarkerDefinitionVariants(result, definition) {
+    if (!result || !definition) return;
+    addMarkerPhraseDefinition(result, definition);
+
+    var sourceWords = definition.sourcePhrase.split(/\s+/);
+    var translatedWords = definition.translatedPhrase.split(/\s+/);
+    if (sourceWords.length > 1 && translatedWords.length > 1 &&
+        isGenericMarkerLeadWord(sourceWords[0]) && isGenericMarkerLeadWord(translatedWords[0])) {
+        var shortenedSourcePhrase = sourceWords.slice(1).join(" ");
+        var shortenedTranslatedPhrase = translatedWords.slice(1).join(" ");
+        if (shortenedSourcePhrase !== "" && shortenedTranslatedPhrase !== "") {
+            addMarkerPhraseDefinition(result, {
+                marker: definition.marker,
+                position: definition.position,
+                sourcePhrase: shortenedSourcePhrase,
+                translatedPhrase: shortenedTranslatedPhrase,
+                sourceWordCount: countMarkerPhraseWords(shortenedSourcePhrase),
+                translatedWordCount: countMarkerPhraseWords(shortenedTranslatedPhrase),
+                normalizedSourcePhrase: shortenedSourcePhrase.toLowerCase()
+            });
+        }
+    }
+}
+
+function extractMarkerDefinitionsFromXMLPair(sourceXML, translatedXML) {
+    var definitions = [];
+    if (!sourceXML || !translatedXML) return definitions;
+
+    var sourceContexts = extractMarkerContextsFromXML(sourceXML);
+    var translatedContexts = extractMarkerContextsFromXML(translatedXML);
+    if (sourceContexts.length === 0 || sourceContexts.length !== translatedContexts.length) return definitions;
+
+    for (var i = 0; i < sourceContexts.length; i++) {
+        var sourceContext = sourceContexts[i];
+        var translatedContext = translatedContexts[i];
+        if (!sourceContext || !translatedContext) continue;
+        if (sourceContext.marker !== translatedContext.marker) continue;
+        if (sourceContext.position !== translatedContext.position) continue;
+        if (sourceContext.position === "middle") continue;
+
+        var sourcePhrase = normalizeMarkerPhraseText(sourceContext.phraseText);
+        var translatedPhrase = normalizeMarkerPhraseText(translatedContext.phraseText);
+        if (sourcePhrase === "" || translatedPhrase === "") continue;
+        if (/[.:;!?]/.test(sourcePhrase) || /[.:;!?]/.test(translatedPhrase)) continue;
+
+        var sourceWordCount = countMarkerPhraseWords(sourcePhrase);
+        var translatedWordCount = countMarkerPhraseWords(translatedPhrase);
+        if (sourceWordCount === 0 || translatedWordCount === 0) continue;
+        if (sourceWordCount > 5 || translatedWordCount > 6) continue;
+
+        definitions.push({
+            marker: sourceContext.marker,
+            position: sourceContext.position,
+            sourcePhrase: sourcePhrase,
+            translatedPhrase: translatedPhrase,
+            sourceWordCount: sourceWordCount,
+            translatedWordCount: translatedWordCount,
+            normalizedSourcePhrase: sourcePhrase.toLowerCase()
+        });
+    }
+
+    return definitions;
+}
+
 function buildMarkerPhraseDefinitionMap(sourceXMLArray, translatedXMLArray) {
     var result = { byKey: {}, byMarker: {} };
     if (!sourceXMLArray || !translatedXMLArray) return result;
@@ -11011,26 +11139,12 @@ function buildMarkerPhraseDefinitionMap(sourceXMLArray, translatedXMLArray) {
         for (var r = 0; r < sourceRuns.length; r++) {
             var definition = extractSingleMarkerDefinitionFromRun(sourceRuns[r].innerXML, translatedRuns[r].innerXML);
             if (!definition) continue;
-            addMarkerPhraseDefinition(result, definition);
+            registerMarkerDefinitionVariants(result, definition);
+        }
 
-            var sourceWords = definition.sourcePhrase.split(/\s+/);
-            var translatedWords = definition.translatedPhrase.split(/\s+/);
-            if (sourceWords.length > 1 && translatedWords.length > 1 &&
-                isGenericMarkerLeadWord(sourceWords[0]) && isGenericMarkerLeadWord(translatedWords[0])) {
-                var shortenedSourcePhrase = sourceWords.slice(1).join(" ");
-                var shortenedTranslatedPhrase = translatedWords.slice(1).join(" ");
-                if (shortenedSourcePhrase !== "" && shortenedTranslatedPhrase !== "") {
-                    addMarkerPhraseDefinition(result, {
-                        marker: definition.marker,
-                        position: definition.position,
-                        sourcePhrase: shortenedSourcePhrase,
-                        translatedPhrase: shortenedTranslatedPhrase,
-                        sourceWordCount: countMarkerPhraseWords(shortenedSourcePhrase),
-                        translatedWordCount: countMarkerPhraseWords(shortenedTranslatedPhrase),
-                        normalizedSourcePhrase: shortenedSourcePhrase.toLowerCase()
-                    });
-                }
-            }
+        var groupedDefinitions = extractMarkerDefinitionsFromXMLPair(sourceXMLArray[i], translatedXMLArray[i]);
+        for (var d = 0; d < groupedDefinitions.length; d++) {
+            registerMarkerDefinitionVariants(result, groupedDefinitions[d]);
         }
     }
 
