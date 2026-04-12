@@ -9977,20 +9977,21 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         writeDebugLog("parking:summary tables=" + globalParkedTables.length + " images=" + globalParkedImages.length + " targetsNow=" + textTargets.length);
     
     var buildXMLWithGlossary = function(textObj) {
-        var xmlString = "<root>"; var ranges = textObj.textStyleRanges;
+        var xmlString = "<root>"; var ranges = getEffectiveTextFormattingRuns(textObj);
         for (var r = 0; r < ranges.length; r++) {
             var chunk = ranges[r].contents;
-            var fFamily = "Arial"; try { fFamily = String(ranges[r].appliedFont.fontFamily); } catch(e) {}
-            var fStyle = "Regular"; try { fStyle = String(ranges[r].fontStyle); } catch(e) {}
-            var pSize = "12"; try { pSize = String(ranges[r].pointSize); } catch(e) {}
-            var pStyleNameRaw = ""; try { pStyleNameRaw = String(ranges[r].appliedParagraphStyle.name); } catch(e) {}
-            var ldingStr = "AUTO"; try { if (ranges[r].leading !== Leading.AUTO) ldingStr = String(ranges[r].leading); } catch(e) {}
-            var fColor = ""; try { fColor = String(ranges[r].fillColor.name); } catch(e) {}
-            var cStyleRaw = ""; try { cStyleRaw = String(ranges[r].appliedCharacterStyle.name); } catch(e) {}
-            var pAlign = ""; try { pAlign = String(ranges[r].justification); } catch(e) {}
-            var lInd = "0"; try { lInd = String(ranges[r].leftIndent); } catch(e) {}
-            var fInd = "0"; try { fInd = String(ranges[r].firstLineIndent); } catch(e) {}
-            var bList = ""; try { bList = String(ranges[r].bulletsAndNumberingListType); } catch(e) {}
+            var fmt = ranges[r].formatting || {};
+            var fFamily = String(fmt.fontFamily || "Arial");
+            var fStyle = String(fmt.fontStyle || "Regular");
+            var pSize = String(fmt.pointSize || "12");
+            var pStyleNameRaw = String(fmt.paragraphStyleName || "");
+            var ldingStr = String(fmt.leading || "AUTO");
+            var fColor = String(fmt.fillColorName || "");
+            var cStyleRaw = String(fmt.characterStyleName || "");
+            var pAlign = String(fmt.justification || "");
+            var lInd = String(fmt.leftIndent || "0");
+            var fInd = String(fmt.firstLineIndent || "0");
+            var bList = String(fmt.bulletsAndNumberingListType || "");
             
             chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
             chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -10047,9 +10048,18 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 finalTranslations[i] = ""; 
                 emptyCount++;
             } else if (!glossaryMatchInText && tm[selectedLang][xml]) {
-                finalTranslations[i] = normalizeStructuredXMLCandidate(tm[selectedLang][xml], xml);
-                globalStats.savedChars += textOnlyLength;
-                tmHitCount++;
+                var cachedTMTranslation = normalizeStructuredXMLCandidate(tm[selectedLang][xml], xml);
+                if (validateStructuredXMLTranslation(xml, cachedTMTranslation)) {
+                    finalTranslations[i] = cachedTMTranslation;
+                    globalStats.savedChars += textOnlyLength;
+                    tmHitCount++;
+                } else {
+                    writeDebugLog("tm:skip_invalid_cached_xml target={" + getDebugTextTargetLabel(textTargets[i]) + "} lang=" + selectedLang +
+                        " sourceRuns=" + getStructuredXMLRunDescriptors(xml).length +
+                        " cachedRuns=" + getStructuredXMLRunDescriptors(cachedTMTranslation).length, "WARNUNG");
+                    translationQueue.push({ index: i, xml: xml, len: textOnlyLength });
+                    finalTranslations[i] = null;
+                }
             } else {
                 translationQueue.push({ index: i, xml: xml, len: textOnlyLength });
                 finalTranslations[i] = null;
@@ -10215,6 +10225,41 @@ function buildStructuredXMLFromRuns(runDescriptors) {
         body += runDescriptors[i].openTag + runDescriptors[i].innerXML + runDescriptors[i].closeTag;
     }
     return "<root>" + body + "</root>";
+}
+
+function extractStructuredRunTranslatableText(innerXML) {
+    var text = String(innerXML || "");
+    text = text.replace(/<nt>[\s\S]*?<\/nt>/gi, "");
+    text = text.replace(/<(?:pbr|lbr|tab)\s*\/>/gi, " ");
+    text = decodeXMLValue(text);
+    text = normalizeTechnicalTokenSpacingInString(text);
+    return text.replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+}
+
+function hasMeaningfulVisibleText(text) {
+    var cleaned = String(text || "").replace(/\s+/g, "");
+    cleaned = cleaned.replace(/[0-9\[\]\(\)\{\}<>.,;:!?\/\\|"'`~@#$%^&*_+=\-–—]/g, "");
+    return cleaned !== "";
+}
+
+function hasDroppedVisibleTextInStructuredTranslation(sourceXML, translatedXML) {
+    if (!sourceXML || !translatedXML) return false;
+
+    var sourceRuns = getStructuredXMLRunDescriptors(sourceXML);
+    var translatedRuns = getStructuredXMLRunDescriptors(translatedXML);
+    if (sourceRuns.length === 0 || sourceRuns.length !== translatedRuns.length) return false;
+
+    for (var i = 0; i < sourceRuns.length; i++) {
+        if (!/<nt>/i.test(String(sourceRuns[i].innerXML || ""))) continue;
+
+        var sourceVisible = extractStructuredRunTranslatableText(sourceRuns[i].innerXML);
+        if (!hasMeaningfulVisibleText(sourceVisible)) continue;
+
+        var translatedVisible = extractStructuredRunTranslatableText(translatedRuns[i].innerXML);
+        if (!hasMeaningfulVisibleText(translatedVisible)) return true;
+    }
+
+    return false;
 }
 
 function isEscapedEntityOpenAt(text, boundaryIndex) {
@@ -10636,6 +10681,34 @@ function translateOversizedStructuredXMLBlockDeepL(sourceXML, targetLangCode, ov
     }
 }
 
+function repairDeepLStructuredTranslationIfNeeded(sourceXML, candidateXML, targetLangCode, blockIndex, overPct, payloadLimit) {
+    var needsRepair = !validateStructuredXMLTranslation(sourceXML, candidateXML) ||
+        hasDroppedVisibleTextInStructuredTranslation(sourceXML, candidateXML);
+    if (!needsRepair) return candidateXML;
+
+    writeDebugLog("deepl:repair_plain_fallback:start block=" + blockIndex +
+        " source=" + String(sourceXML || "").substring(0, 500) +
+        " candidate=" + String(candidateXML || "").substring(0, 500), "WARNUNG");
+
+    var repairedXML = translateOversizedStructuredXMLBlockDeepLPlainFallback(
+        sourceXML,
+        targetLangCode,
+        overPct,
+        overPct,
+        payloadLimit
+    );
+
+    if (!validateStructuredXMLTranslation(sourceXML, repairedXML) ||
+        hasDroppedVisibleTextInStructuredTranslation(sourceXML, repairedXML)) {
+        writeDebugLog("deepl:repair_plain_fallback:failed block=" + blockIndex +
+            " repaired=" + String(repairedXML || "").substring(0, 500), "WARNUNG");
+        throw new Error("DeepL-Fehler: Der Plain-Text-Repair-Fallback konnte kein gueltiges XML erzeugen.");
+    }
+
+    writeDebugLog("deepl:repair_plain_fallback:success block=" + blockIndex);
+    return repairedXML;
+}
+
 function compareStringArrays(arrA, arrB) {
     if (arrA.length !== arrB.length) return false;
     for (var i = 0; i < arrA.length; i++) {
@@ -10728,6 +10801,7 @@ function validateStructuredXMLTranslation(sourceXML, translatedXML) {
     if (!compareStringArrays(getXMLTagTokens(sourceNorm), getXMLTagTokens(translatedNorm))) return false;
     if (!compareStringArrays(getNoTranslateSegments(sourceNorm), getNoTranslateSegments(translatedNorm))) return false;
     if (!compareStringArrays(getProtectedMarkerTokens(sourceNorm), getProtectedMarkerTokens(translatedNorm))) return false;
+    if (hasDroppedVisibleTextInStructuredTranslation(sourceNorm, translatedNorm)) return false;
     return true;
 }
 
@@ -11429,7 +11503,27 @@ function translateBatchDeepL(textsArray, targetLangCode, overStartPct, overEndPc
                     throw new Error(t("deepl_incomplete"));
                 }
                 for (var k = 0; k < parsedObj.translations.length; k++) {
-                    translated.push(normalizeStructuredXMLCandidate(parsedObj.translations[k].text, textsArray[b + k]));
+                    var blockIndex = b + k + 1;
+                    var sourceXML = textsArray[b + k];
+                    var translatedXML = normalizeStructuredXMLCandidate(parsedObj.translations[k].text, sourceXML);
+                    var xmlValid = validateStructuredXMLTranslation(sourceXML, translatedXML);
+
+                    try {
+                        translatedXML = repairDeepLStructuredTranslationIfNeeded(
+                            sourceXML,
+                            translatedXML,
+                            targetLangCode,
+                            blockIndex,
+                            currentOverPct,
+                            maxPayloadLen
+                        );
+                    } catch (repairErr) {
+                        writeDebugLog("deepl:repair_plain_fallback:error block=" + blockIndex +
+                            " error=" + (repairErr.message || repairErr), "WARNUNG");
+                        if (!xmlValid) throw repairErr;
+                    }
+
+                    translated.push(translatedXML);
                 }
                 b = endBatch;
                 break;
@@ -12315,6 +12409,80 @@ function decodeXMLAttr(value) {
     return decodeXMLValue(value);
 }
 
+function getXMLTagAttributeValue(attrText, name) {
+    var safeName = String(name || "").replace(/[^A-Za-z0-9_-]/g, "");
+    if (safeName === "") return "";
+    var match = new RegExp("\\b" + safeName + '="([^"]*)"', "i").exec(String(attrText || ""));
+    return match ? String(match[1] || "") : "";
+}
+
+function getStructuredRunFormattingFromOpenTag(openTag) {
+    var result = {
+        fontFamily: "",
+        fontStyle: "",
+        pointSize: null,
+        paragraphStyleName: "",
+        characterStyleName: "",
+        leading: null,
+        fillColorName: "",
+        leftIndent: null,
+        firstLineIndent: null,
+        justification: null,
+        bulletsAndNumberingListType: null
+    };
+
+    var match = /<t\b([^>]*)>/i.exec(String(openTag || ""));
+    if (!match) return result;
+
+    var attrs = String(match[1] || "");
+    var pointSizeRaw = decodeXMLAttr(getXMLTagAttributeValue(attrs, "z"));
+    var leadingRaw = decodeXMLAttr(getXMLTagAttributeValue(attrs, "l"));
+    var leftIndentRaw = decodeXMLAttr(getXMLTagAttributeValue(attrs, "li"));
+    var firstLineIndentRaw = decodeXMLAttr(getXMLTagAttributeValue(attrs, "fi"));
+    var justificationRaw = decodeXMLAttr(getXMLTagAttributeValue(attrs, "a"));
+    var listTypeRaw = decodeXMLAttr(getXMLTagAttributeValue(attrs, "b"));
+
+    result.fontFamily = decodeXMLAttr(getXMLTagAttributeValue(attrs, "f"));
+    result.fontStyle = decodeXMLAttr(getXMLTagAttributeValue(attrs, "s"));
+    result.paragraphStyleName = decodeXMLAttr(getXMLTagAttributeValue(attrs, "p"));
+    result.characterStyleName = decodeXMLAttr(getXMLTagAttributeValue(attrs, "k"));
+    result.fillColorName = decodeXMLAttr(getXMLTagAttributeValue(attrs, "c"));
+
+    if (pointSizeRaw !== "") {
+        var pointSize = parseFloat(pointSizeRaw);
+        if (!isNaN(pointSize)) result.pointSize = pointSize;
+    }
+
+    if (leadingRaw !== "") {
+        result.leading = (leadingRaw === "AUTO") ? "AUTO" : parseFloat(leadingRaw);
+        if (result.leading !== "AUTO" && isNaN(result.leading)) result.leading = null;
+    }
+
+    if (leftIndentRaw !== "") {
+        var leftIndent = parseFloat(leftIndentRaw);
+        if (!isNaN(leftIndent)) result.leftIndent = leftIndent;
+    }
+
+    if (firstLineIndentRaw !== "") {
+        var firstLineIndent = parseFloat(firstLineIndentRaw);
+        if (!isNaN(firstLineIndent)) result.firstLineIndent = firstLineIndent;
+    }
+
+    try {
+        if (justificationRaw !== "" && Justification[justificationRaw] !== undefined) {
+            result.justification = Justification[justificationRaw];
+        }
+    } catch (e1) {}
+
+    try {
+        if (listTypeRaw !== "" && ListType[listTypeRaw] !== undefined) {
+            result.bulletsAndNumberingListType = ListType[listTypeRaw];
+        }
+    } catch (e2) {}
+
+    return result;
+}
+
 function getTextStyleRangeArray(textObj) {
     var ranges = [];
     if (!textObj) return ranges;
@@ -12327,22 +12495,113 @@ function getTextStyleRangeArray(textObj) {
     return ranges || [];
 }
 
+function readTextFormattingSnapshot(textRange) {
+    var snapshot = {
+        fontFamily: "",
+        fontStyle: "",
+        pointSize: "",
+        paragraphStyleName: "",
+        leading: "AUTO",
+        fillColorName: "",
+        characterStyleName: "",
+        justification: "",
+        leftIndent: "0",
+        firstLineIndent: "0",
+        bulletsAndNumberingListType: ""
+    };
+
+    if (!textRange || !textRange.isValid) return snapshot;
+
+    try { snapshot.fontFamily = String(textRange.appliedFont.fontFamily || ""); } catch (e1) {}
+    try { snapshot.fontStyle = String(textRange.fontStyle || ""); } catch (e2) {}
+    try { snapshot.pointSize = String(textRange.pointSize); } catch (e3) {}
+    try { snapshot.paragraphStyleName = String(textRange.appliedParagraphStyle.name || ""); } catch (e4) {}
+    try { if (textRange.leading !== Leading.AUTO) snapshot.leading = String(textRange.leading); } catch (e5) {}
+    try { snapshot.fillColorName = String(textRange.fillColor.name || ""); } catch (e6) {}
+    try { snapshot.characterStyleName = String(textRange.appliedCharacterStyle.name || ""); } catch (e7) {}
+    try { snapshot.justification = String(textRange.justification || ""); } catch (e8) {}
+    try { snapshot.leftIndent = String(textRange.leftIndent); } catch (e9) {}
+    try { snapshot.firstLineIndent = String(textRange.firstLineIndent); } catch (e10) {}
+    try { snapshot.bulletsAndNumberingListType = String(textRange.bulletsAndNumberingListType || ""); } catch (e11) {}
+
+    return snapshot;
+}
+
+function buildTextFormattingSignature(snapshot) {
+    if (!snapshot) return "";
+    return [
+        snapshot.fontFamily,
+        snapshot.fontStyle,
+        snapshot.pointSize,
+        snapshot.paragraphStyleName,
+        snapshot.leading,
+        snapshot.fillColorName,
+        snapshot.characterStyleName,
+        snapshot.justification,
+        snapshot.leftIndent,
+        snapshot.firstLineIndent,
+        snapshot.bulletsAndNumberingListType
+    ].join("\u001F");
+}
+
+function getEffectiveTextFormattingRuns(textObj) {
+    var runs = [];
+    if (!textObj) return runs;
+
+    var characters = [];
+    try {
+        if (textObj.characters && textObj.characters.everyItem) characters = textObj.characters.everyItem().getElements();
+        else if (textObj.characters) characters = textObj.characters;
+    } catch (e1) {
+        try { characters = textObj.characters || []; } catch (e2) { characters = []; }
+    }
+
+    if (!characters || characters.length === 0) return runs;
+
+    var currentRun = null;
+    for (var i = 0; i < characters.length; i++) {
+        var ch = characters[i];
+        if (!ch || !ch.isValid) continue;
+
+        var contents = "";
+        try { contents = String(ch.contents || ""); } catch (e3) { contents = ""; }
+        if (contents === "") continue;
+
+        var formatting = readTextFormattingSnapshot(ch);
+        var signature = buildTextFormattingSignature(formatting);
+
+        if (currentRun && currentRun.signature === signature) {
+            currentRun.contents += contents;
+        } else {
+            currentRun = {
+                signature: signature,
+                contents: contents,
+                formatting: formatting
+            };
+            runs.push(currentRun);
+        }
+    }
+
+    return runs;
+}
+
 function buildTextObjectXML(textObj) {
     var xmlString = "<root>";
-    var ranges = textObj.textStyleRanges;
+    var ranges = getEffectiveTextFormattingRuns(textObj);
     for (var r = 0; r < ranges.length; r++) {
         var chunk = ranges[r].contents;
-        var fFamily = "Arial"; try { fFamily = escapeXMLAttr(ranges[r].appliedFont.fontFamily); } catch(e) {}
-        var fStyle = "Regular"; try { fStyle = escapeXMLAttr(ranges[r].fontStyle); } catch(e) {}
-        var pSize = 12; try { pSize = ranges[r].pointSize; } catch(e) {}
-        var pStyleName = ""; try { pStyleName = escapeXMLAttr(ranges[r].appliedParagraphStyle.name); } catch(e) {}
-        var ldingStr = "AUTO"; try { if (ranges[r].leading !== Leading.AUTO) ldingStr = escapeXMLAttr(ranges[r].leading.toString()); } catch(e) {}
-        var fColor = ""; try { fColor = escapeXMLAttr(ranges[r].fillColor.name); } catch(e) {}
-        var cStyle = ""; try { cStyle = escapeXMLAttr(ranges[r].appliedCharacterStyle.name); } catch(e) {}
-        var pAli = ""; try { pAli = escapeXMLAttr(ranges[r].justification.toString()); } catch(e) {}
-        var lInd = "0"; try { lInd = escapeXMLAttr(ranges[r].leftIndent.toString()); } catch(e) {}
-        var fInd = "0"; try { fInd = escapeXMLAttr(ranges[r].firstLineIndent.toString()); } catch(e) {}
-        var bList = ""; try { bList = escapeXMLAttr(ranges[r].bulletsAndNumberingListType.toString()); } catch(e) {}
+        var fmt = ranges[r].formatting || {};
+        var fFamily = escapeXMLAttr(fmt.fontFamily || "Arial");
+        var fStyle = escapeXMLAttr(fmt.fontStyle || "Regular");
+        var pSize = escapeXMLAttr(fmt.pointSize || "12");
+        var pStyleName = escapeXMLAttr(fmt.paragraphStyleName || "");
+        var ldingStr = escapeXMLAttr(fmt.leading || "AUTO");
+        var fColor = escapeXMLAttr(fmt.fillColorName || "");
+        var cStyle = escapeXMLAttr(fmt.characterStyleName || "");
+        var pAli = escapeXMLAttr(fmt.justification || "");
+        var lInd = escapeXMLAttr(fmt.leftIndent || "0");
+        var fInd = escapeXMLAttr(fmt.firstLineIndent || "0");
+        var bList = escapeXMLAttr(fmt.bulletsAndNumberingListType || "");
 
         chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
         chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -12570,9 +12829,13 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
     var sourceRanges = getTextStyleRangeArray(targetTextObj);
     var translatedRuns = getStructuredXMLRunDescriptors(translatedXML);
     if (sourceRanges.length === 0 || translatedRuns.length === 0) return false;
+
+    // Run counts do not need to match exactly. We prefer the formatting embedded
+    // in each translated <t ...> tag and only fall back to the nearest available
+    // source range when an attribute is missing. This keeps bold/character styles
+    // stable even when older TM entries or provider quirks change run boundaries.
     if (sourceRanges.length !== translatedRuns.length) {
-        writeDebugLog("source_formatting:run_count_mismatch target={" + getDebugTextTargetLabel(targetTextObj) + "} sourceRanges=" + sourceRanges.length + " translatedRuns=" + translatedRuns.length, "WARNUNG");
-        return false;
+        writeDebugLog("source_formatting:run_count_mismatch target={" + getDebugTextTargetLabel(targetTextObj) + "} sourceRanges=" + sourceRanges.length + " translatedRuns=" + translatedRuns.length + " (best-effort)", "WARNUNG");
     }
 
     for (var preflightIndex = 0; preflightIndex < sourceRanges.length; preflightIndex++) {
@@ -12588,8 +12851,10 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
     // assignment — which was the root cause of missing first characters ("utton"
     // instead of "Button") and doubled reference markers ("[21][21]").
     var snapshots = [];
-    for (var snapIndex = 0; snapIndex < sourceRanges.length; snapIndex++) {
-        var sr = sourceRanges[snapIndex];
+    for (var snapIndex = 0; snapIndex < translatedRuns.length; snapIndex++) {
+        var srIndex = Math.min(snapIndex, sourceRanges.length - 1);
+        var sr = sourceRanges[srIndex];
+        var runFormatting = getStructuredRunFormattingFromOpenTag(translatedRuns[snapIndex].openTag);
         var snap = {
             text:                       decodeStructuredRunText(translatedRuns[snapIndex].innerXML),
             fontFamily:                 "",
@@ -12605,17 +12870,50 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
             bulletsAndNumberingListType: null,
             fallbackInfo:               null
         };
-        try { snap.fontFamily  = String(sr.appliedFont.fontFamily || ""); } catch(e) {}
-        try { snap.fontStyle   = String(sr.fontStyle || ""); } catch(e) {}
-        try { snap.pointSize   = sr.pointSize; } catch(e) {}
-        try { snap.paragraphStyleName  = String(sr.appliedParagraphStyle.name || ""); } catch(e) {}
-        try { snap.characterStyleName  = String(sr.appliedCharacterStyle.name || ""); } catch(e) {}
-        try { snap.leading     = (sr.leading === Leading.AUTO) ? "AUTO" : sr.leading; } catch(e) {}
-        try { snap.fillColorName = String(sr.fillColor.name || ""); } catch(e) {}
-        try { snap.leftIndent        = sr.leftIndent; } catch(e) {}
-        try { snap.firstLineIndent   = sr.firstLineIndent; } catch(e) {}
-        try { snap.justification     = sr.justification; } catch(e) {}
-        try { snap.bulletsAndNumberingListType = sr.bulletsAndNumberingListType; } catch(e) {}
+        snap.fontFamily = runFormatting.fontFamily;
+        if (snap.fontFamily === "") {
+            try { snap.fontFamily = String(sr.appliedFont.fontFamily || ""); } catch(e) {}
+        }
+        snap.fontStyle = runFormatting.fontStyle;
+        if (snap.fontStyle === "") {
+            try { snap.fontStyle = String(sr.fontStyle || ""); } catch(e) {}
+        }
+        snap.pointSize = runFormatting.pointSize;
+        if (snap.pointSize === null) {
+            try { snap.pointSize = sr.pointSize; } catch(e) {}
+        }
+        snap.paragraphStyleName = runFormatting.paragraphStyleName;
+        if (snap.paragraphStyleName === "") {
+            try { snap.paragraphStyleName = String(sr.appliedParagraphStyle.name || ""); } catch(e) {}
+        }
+        snap.characterStyleName = runFormatting.characterStyleName;
+        if (snap.characterStyleName === "") {
+            try { snap.characterStyleName = String(sr.appliedCharacterStyle.name || ""); } catch(e) {}
+        }
+        snap.leading = runFormatting.leading;
+        if (snap.leading === null) {
+            try { snap.leading = (sr.leading === Leading.AUTO) ? "AUTO" : sr.leading; } catch(e) {}
+        }
+        snap.fillColorName = runFormatting.fillColorName;
+        if (snap.fillColorName === "") {
+            try { snap.fillColorName = String(sr.fillColor.name || ""); } catch(e) {}
+        }
+        snap.leftIndent = runFormatting.leftIndent;
+        if (snap.leftIndent === null) {
+            try { snap.leftIndent = sr.leftIndent; } catch(e) {}
+        }
+        snap.firstLineIndent = runFormatting.firstLineIndent;
+        if (snap.firstLineIndent === null) {
+            try { snap.firstLineIndent = sr.firstLineIndent; } catch(e) {}
+        }
+        snap.justification = runFormatting.justification;
+        if (snap.justification === null) {
+            try { snap.justification = sr.justification; } catch(e) {}
+        }
+        snap.bulletsAndNumberingListType = runFormatting.bulletsAndNumberingListType;
+        if (snap.bulletsAndNumberingListType === null) {
+            try { snap.bulletsAndNumberingListType = sr.bulletsAndNumberingListType; } catch(e) {}
+        }
         snap.fallbackInfo = resolveFontFallbackForText(inDesignLangCode, snap.text);
         snapshots.push(snap);
     }
