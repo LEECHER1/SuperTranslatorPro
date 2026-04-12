@@ -10114,7 +10114,10 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             if (tmUpdated) saveTMDelta(tmDelta); 
         }
 
-        var normalizedMarkerTranslations = normalizeReferenceMarkerTermsFast(finalTranslations);
+        // Build a per-run reference dictionary from the translated marker labels
+        // so later occurrences of the same [n] marker reuse the earlier wording.
+        var normalizedMarkerTranslations = normalizeMarkerLinkedTermsByReferenceMap(sourceXMLByTarget, finalTranslations);
+        normalizedMarkerTranslations = normalizeReferenceMarkerTermsFast(normalizedMarkerTranslations);
         var tmNormalized = false;
         for (var normalizedIndex = 0; normalizedIndex < normalizedMarkerTranslations.length; normalizedIndex++) {
             if (!normalizedMarkerTranslations[normalizedIndex] || normalizedMarkerTranslations[normalizedIndex] === finalTranslations[normalizedIndex]) continue;
