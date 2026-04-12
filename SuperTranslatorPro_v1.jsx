@@ -419,7 +419,9 @@ function applyOptionalFontFallback(appliedRange, originalFamily, originalStyle, 
     }
 
     if (!applied) return;
-    try { appliedRange.fontStyle = originalStyle; } catch (styleErr) { try { appliedRange.fontStyle = "Regular"; } catch (styleErr2) {} }
+    if (originalStyle !== null && originalStyle !== undefined && String(originalStyle) !== "") {
+        try { appliedRange.fontStyle = originalStyle; } catch (styleErr) {}
+    }
     writeDebugLog("font_fallback: lang=" + normalizeFontFallbackRuleKey(langCode) + " key=" + fallbackInfo.key + " family=" + fallbackInfo.family + " text=" + normalizeDebugSnippet(textContent, 80));
 }
 
@@ -4054,33 +4056,33 @@ function getExactGlossaryOverrideForText(parsedGlossary, text, selectedLang) {
 }
 
 function buildStyledPlainTextXML(textObj, replacementText) {
-    var fFamily = "Arial";
-    var fStyle = "Regular";
-    var pSize = "12";
+    var fFamily = "";
+    var fStyle = "";
+    var pSize = "";
     var pStyleNameRaw = "";
-    var ldingStr = "AUTO";
+    var ldingStr = "";
     var fColor = "";
     var cStyleRaw = "";
     var pAlign = "";
-    var lInd = "0";
-    var fInd = "0";
+    var lInd = "";
+    var fInd = "";
     var bList = "";
 
     try {
-        var ranges = textObj.textStyleRanges;
-        if (ranges && ranges.length > 0) {
-            var firstRange = ranges[0];
-            try { fFamily = String(firstRange.appliedFont.fontFamily); } catch (e1) {}
-            try { fStyle = String(firstRange.fontStyle); } catch (e2) {}
-            try { pSize = String(firstRange.pointSize); } catch (e3) {}
-            try { pStyleNameRaw = String(firstRange.appliedParagraphStyle.name); } catch (e4) {}
-            try { if (firstRange.leading !== Leading.AUTO) ldingStr = String(firstRange.leading); } catch (e5) {}
-            try { fColor = String(firstRange.fillColor.name); } catch (e6) {}
-            try { cStyleRaw = String(firstRange.appliedCharacterStyle.name); } catch (e7) {}
-            try { pAlign = String(firstRange.justification); } catch (e8) {}
-            try { lInd = String(firstRange.leftIndent); } catch (e9) {}
-            try { fInd = String(firstRange.firstLineIndent); } catch (e10) {}
-            try { bList = String(firstRange.bulletsAndNumberingListType); } catch (e11) {}
+        var effectiveRuns = getEffectiveTextFormattingRuns(textObj);
+        if (effectiveRuns && effectiveRuns.length > 0) {
+            var firstFormatting = effectiveRuns[0].formatting || {};
+            fFamily = String(firstFormatting.fontFamily || "");
+            fStyle = String(firstFormatting.fontStyle || "");
+            pSize = String(firstFormatting.pointSize || "");
+            pStyleNameRaw = String(firstFormatting.paragraphStyleName || "");
+            ldingStr = String(firstFormatting.leading || "");
+            fColor = String(firstFormatting.fillColorName || "");
+            cStyleRaw = String(firstFormatting.characterStyleName || "");
+            pAlign = String(firstFormatting.justification || "");
+            lInd = String(firstFormatting.leftIndent || "");
+            fInd = String(firstFormatting.firstLineIndent || "");
+            bList = String(firstFormatting.bulletsAndNumberingListType || "");
         }
     } catch (e) {}
 
@@ -9981,16 +9983,16 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         for (var r = 0; r < ranges.length; r++) {
             var chunk = ranges[r].contents;
             var fmt = ranges[r].formatting || {};
-            var fFamily = String(fmt.fontFamily || "Arial");
-            var fStyle = String(fmt.fontStyle || "Regular");
-            var pSize = String(fmt.pointSize || "12");
+            var fFamily = String(fmt.fontFamily || "");
+            var fStyle = String(fmt.fontStyle || "");
+            var pSize = String(fmt.pointSize || "");
             var pStyleNameRaw = String(fmt.paragraphStyleName || "");
-            var ldingStr = String(fmt.leading || "AUTO");
+            var ldingStr = String(fmt.leading || "");
             var fColor = String(fmt.fillColorName || "");
             var cStyleRaw = String(fmt.characterStyleName || "");
             var pAlign = String(fmt.justification || "");
-            var lInd = String(fmt.leftIndent || "0");
-            var fInd = String(fmt.firstLineIndent || "0");
+            var lInd = String(fmt.leftIndent || "");
+            var fInd = String(fmt.firstLineIndent || "");
             var bList = String(fmt.bulletsAndNumberingListType || "");
             
             chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
@@ -10020,10 +10022,13 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
 
         var translationQueue = [];
         var finalTranslations = new Array(textTargets.length);
+        var sourceXMLByTarget = new Array(textTargets.length);
         var paragraphNumberingByTarget = new Array(textTargets.length);
         var tmHitCount = 0;
         var exactGlossaryHitCount = 0;
         var emptyCount = 0;
+        var tmDelta = {};
+        tmDelta[selectedLang] = {};
 
         for (var i = 0; i < textTargets.length; i++) {
             if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; emptyCount++; continue; }
@@ -10032,6 +10037,8 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             var sourceContents = "";
             try { sourceContents = String(textTargets[i].contents); } catch (e0) { sourceContents = ""; }
             var glossaryMatchInText = glossaryAffectsText(sourceContents, glossaryRuntime);
+            var xml = buildXMLWithGlossary(textTargets[i]);
+            sourceXMLByTarget[i] = xml;
             var exactGlossaryOverride = getExactGlossaryOverrideForText(parsedGlossary, sourceContents, selectedLang);
             if (exactGlossaryOverride !== null) {
                 var exactReplacement = (exactGlossaryOverride === "###DNT###") ? sourceContents : exactGlossaryOverride;
@@ -10040,8 +10047,6 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
                 exactGlossaryHitCount++;
                 continue;
             }
-            
-            var xml = buildXMLWithGlossary(textTargets[i]);
             var textOnlyLength = xml.replace(/<[^>]+>/g, '').replace(/###(?:IMG|TBL)_\d+###/g, '').replace(/[\s\d.,:;"'!?\-+*\/=()[\]{}&%$§<>|\\~`]/g, '').length; 
             
             if (xml === "<root></root>" || xml === "" || textOnlyLength === 0) { 
@@ -10081,8 +10086,6 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             }
 
             var tmUpdated = false;
-            var tmDelta = {};
-            tmDelta[selectedLang] = {};
             for(var q=0; q < translationQueue.length; q++) {
                 var trXML = translatedBatch[q];
                 if (trXML) { 
@@ -10096,6 +10099,19 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             }
             if (tmUpdated) saveTMDelta(tmDelta); 
         }
+
+        var normalizedMarkerTranslations = normalizeMarkerLinkedTermsByReferenceMap(sourceXMLByTarget, finalTranslations);
+        var tmNormalized = false;
+        for (var normalizedIndex = 0; normalizedIndex < normalizedMarkerTranslations.length; normalizedIndex++) {
+            if (!normalizedMarkerTranslations[normalizedIndex] || normalizedMarkerTranslations[normalizedIndex] === finalTranslations[normalizedIndex]) continue;
+            finalTranslations[normalizedIndex] = normalizedMarkerTranslations[normalizedIndex];
+            if (sourceXMLByTarget[normalizedIndex]) {
+                tm[selectedLang][sourceXMLByTarget[normalizedIndex]] = finalTranslations[normalizedIndex];
+                tmDelta[selectedLang][sourceXMLByTarget[normalizedIndex]] = finalTranslations[normalizedIndex];
+                tmNormalized = true;
+            }
+        }
+        if (tmNormalized) saveTMDelta(tmDelta);
         
         var formatPct = overStartPct + ((overEndPct - overStartPct) * 0.9);
         updateProgress(90, t("applying_formatting"), formatPct, null);
@@ -10803,6 +10819,275 @@ function validateStructuredXMLTranslation(sourceXML, translatedXML) {
     if (!compareStringArrays(getProtectedMarkerTokens(sourceNorm), getProtectedMarkerTokens(translatedNorm))) return false;
     if (hasDroppedVisibleTextInStructuredTranslation(sourceNorm, translatedNorm)) return false;
     return true;
+}
+
+function normalizeMarkerPhraseText(text) {
+    return String(text || "")
+        .replace(/\r\n?/g, "\n")
+        .replace(/\s+/g, " ")
+        .replace(/^\s+|\s+$/g, "");
+}
+
+function getMarkerPhraseWordMatches(text) {
+    var matches = [];
+    var regex = /[A-Za-zÀ-ÿ0-9]+(?:[\/-][A-Za-zÀ-ÿ0-9]+)*(?:\([A-Za-zÀ-ÿ0-9\/-]+\))?/g;
+    var match = null;
+    var raw = String(text || "");
+    while ((match = regex.exec(raw)) !== null) {
+        matches.push({ text: match[0], index: match.index, end: regex.lastIndex });
+    }
+    return matches;
+}
+
+function countMarkerPhraseWords(text) {
+    return getMarkerPhraseWordMatches(text).length;
+}
+
+function extractMarkerTokenValue(ntToken) {
+    var match = /^<nt>([\s\S]*?)<\/nt>$/i.exec(String(ntToken || ""));
+    return match ? decodeXMLValue(match[1]) : "";
+}
+
+function extractLeadingMarkerWords(text, wordCount) {
+    var matches = getMarkerPhraseWordMatches(text);
+    if (matches.length === 0) return "";
+    var count = Math.min(Math.max(wordCount || 0, 1), matches.length);
+    return text.substring(matches[0].index, matches[count - 1].end);
+}
+
+function extractTrailingMarkerWords(text, wordCount) {
+    var matches = getMarkerPhraseWordMatches(text);
+    if (matches.length === 0) return "";
+    var count = Math.min(Math.max(wordCount || 0, 1), matches.length);
+    return text.substring(matches[matches.length - count].index, matches[matches.length - 1].end);
+}
+
+function replaceLeadingMarkerWords(text, wordCount, replacement) {
+    var matches = getMarkerPhraseWordMatches(text);
+    if (matches.length === 0) return text;
+    var count = Math.min(Math.max(wordCount || 0, 1), matches.length);
+    return text.substring(0, matches[0].index) + replacement + text.substring(matches[count - 1].end);
+}
+
+function replaceTrailingMarkerWords(text, wordCount, replacement) {
+    var matches = getMarkerPhraseWordMatches(text);
+    if (matches.length === 0) return text;
+    var count = Math.min(Math.max(wordCount || 0, 1), matches.length);
+    return text.substring(0, matches[matches.length - count].index) + replacement + text.substring(matches[matches.length - 1].end);
+}
+
+function mergeCanonicalMarkerPhrase(currentPhrase, canonicalPhrase) {
+    var currentNorm = normalizeMarkerPhraseText(currentPhrase);
+    var canonicalNorm = normalizeMarkerPhraseText(canonicalPhrase);
+    if (canonicalNorm === "") return currentNorm;
+    if (currentNorm === "") return canonicalNorm;
+
+    var currentWords = currentNorm.split(" ");
+    var canonicalWords = canonicalNorm.split(" ");
+    if (currentWords.length > 1 && canonicalWords.length > 1 &&
+        currentWords[0].toLowerCase() === canonicalWords[0].toLowerCase()) {
+        return currentWords[0] + " " + canonicalWords.slice(1).join(" ");
+    }
+
+    if (/^[a-zäöüßà-ÿ]/.test(currentNorm) && /^[A-ZÄÖÜÀ-Ÿ]/.test(canonicalNorm)) {
+        return canonicalNorm.charAt(0).toLowerCase() + canonicalNorm.substring(1);
+    }
+
+    return canonicalNorm;
+}
+
+function extractSingleMarkerDefinitionFromRun(sourceInnerXML, translatedInnerXML) {
+    if (!sourceInnerXML || !translatedInnerXML) return null;
+    if (/<(?:pbr|lbr|tab)\s*\/>/i.test(String(sourceInnerXML)) || /<(?:pbr|lbr|tab)\s*\/>/i.test(String(translatedInnerXML))) return null;
+
+    var sourceText = normalizeMarkerPhraseText(decodeStructuredRunText(sourceInnerXML));
+    var translatedText = normalizeMarkerPhraseText(decodeStructuredRunText(translatedInnerXML));
+    var sourceMarkers = sourceText.match(/\[\d+\]/g) || [];
+    var translatedMarkers = translatedText.match(/\[\d+\]/g) || [];
+    if (sourceMarkers.length !== 1 || translatedMarkers.length !== 1) return null;
+    if (sourceMarkers[0] !== translatedMarkers[0]) return null;
+
+    var sourcePosition = "middle";
+    var trimmedSource = sourceText.replace(/^\s+|\s+$/g, "");
+    if (trimmedSource.indexOf(sourceMarkers[0]) === 0) sourcePosition = "leading";
+    else if (trimmedSource.lastIndexOf(sourceMarkers[0]) === trimmedSource.length - sourceMarkers[0].length) sourcePosition = "trailing";
+    if (sourcePosition === "middle") return null;
+
+    var sourcePhrase = normalizeMarkerPhraseText(sourceText.replace(sourceMarkers[0], ""));
+    var translatedPhrase = normalizeMarkerPhraseText(translatedText.replace(translatedMarkers[0], ""));
+    if (sourcePhrase === "" || translatedPhrase === "") return null;
+    if (/[.:;!?]/.test(sourcePhrase) || /[.:;!?]/.test(translatedPhrase)) return null;
+
+    var sourceWordCount = countMarkerPhraseWords(sourcePhrase);
+    var translatedWordCount = countMarkerPhraseWords(translatedPhrase);
+    if (sourceWordCount === 0 || translatedWordCount === 0) return null;
+    if (sourceWordCount > 5 || translatedWordCount > 6) return null;
+
+    return {
+        marker: sourceMarkers[0],
+        position: sourcePosition,
+        sourcePhrase: sourcePhrase,
+        translatedPhrase: translatedPhrase,
+        sourceWordCount: sourceWordCount,
+        translatedWordCount: translatedWordCount,
+        normalizedSourcePhrase: sourcePhrase.toLowerCase()
+    };
+}
+
+function findAdjacentTextTokenIndex(tokens, startIndex, direction) {
+    var step = (direction < 0) ? -1 : 1;
+    for (var i = startIndex + step; i >= 0 && i < tokens.length; i += step) {
+        if (tokens[i].type === "tag") return -1;
+        if (tokens[i].type === "text") return i;
+        if (tokens[i].type === "nt") return -1;
+    }
+    return -1;
+}
+
+function buildMarkerPhraseDefinitionMap(sourceXMLArray, translatedXMLArray) {
+    var result = { byKey: {}, byMarker: {} };
+    if (!sourceXMLArray || !translatedXMLArray) return result;
+
+    for (var i = 0; i < sourceXMLArray.length; i++) {
+        if (!sourceXMLArray[i] || !translatedXMLArray[i]) continue;
+        var sourceRuns = getStructuredXMLRunDescriptors(sourceXMLArray[i]);
+        var translatedRuns = getStructuredXMLRunDescriptors(translatedXMLArray[i]);
+        if (sourceRuns.length === 0 || sourceRuns.length !== translatedRuns.length) continue;
+
+        for (var r = 0; r < sourceRuns.length; r++) {
+            var definition = extractSingleMarkerDefinitionFromRun(sourceRuns[r].innerXML, translatedRuns[r].innerXML);
+            if (!definition) continue;
+
+            var key = definition.marker + "|" + definition.normalizedSourcePhrase;
+            if (!result.byKey[key]) result.byKey[key] = definition;
+            if (!result.byMarker[definition.marker]) result.byMarker[definition.marker] = [];
+
+            var exists = false;
+            for (var existingIndex = 0; existingIndex < result.byMarker[definition.marker].length; existingIndex++) {
+                if (result.byMarker[definition.marker][existingIndex].normalizedSourcePhrase === definition.normalizedSourcePhrase) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) result.byMarker[definition.marker].push(definition);
+        }
+    }
+
+    return result;
+}
+
+function applyMarkerPhraseDefinitionsToRun(sourceInnerXML, translatedInnerXML, definitionMap) {
+    if (!sourceInnerXML || !translatedInnerXML || !definitionMap || !definitionMap.byMarker) return translatedInnerXML;
+
+    var sourceTokens = tokenizeStructuredRunInnerXML(sourceInnerXML);
+    var translatedTokens = tokenizeStructuredRunInnerXML(translatedInnerXML);
+    if (sourceTokens.length === 0 || translatedTokens.length === 0) return translatedInnerXML;
+
+    var sourceMarkers = [];
+    var translatedMarkers = [];
+    var collectMarker = function(tokens, index, bucket) {
+        if (tokens[index].type !== "nt") return;
+        var markerValue = extractMarkerTokenValue(tokens[index].value);
+        if (!/^\[\d+\]$/.test(markerValue)) return;
+        bucket.push({ index: index, marker: markerValue });
+    };
+
+    for (var i = 0; i < sourceTokens.length; i++) collectMarker(sourceTokens, i, sourceMarkers);
+    for (var j = 0; j < translatedTokens.length; j++) collectMarker(translatedTokens, j, translatedMarkers);
+    if (sourceMarkers.length === 0 || sourceMarkers.length !== translatedMarkers.length) return translatedInnerXML;
+
+    for (var compareIndex = 0; compareIndex < sourceMarkers.length; compareIndex++) {
+        if (sourceMarkers[compareIndex].marker !== translatedMarkers[compareIndex].marker) return translatedInnerXML;
+    }
+
+    var changed = false;
+
+    for (var markerIndex = 0; markerIndex < sourceMarkers.length; markerIndex++) {
+        var markerValue = sourceMarkers[markerIndex].marker;
+        var candidates = definitionMap.byMarker[markerValue] || [];
+        if (candidates.length === 0) continue;
+
+        for (var candidateIndex = 0; candidateIndex < candidates.length; candidateIndex++) {
+            var definition = candidates[candidateIndex];
+            var updated = false;
+
+            if (definition.position === "trailing") {
+                var sourceLeftIndex = findAdjacentTextTokenIndex(sourceTokens, sourceMarkers[markerIndex].index, -1);
+                var translatedLeftIndex = findAdjacentTextTokenIndex(translatedTokens, translatedMarkers[markerIndex].index, -1);
+                if (sourceLeftIndex >= 0 && translatedLeftIndex >= 0) {
+                    var sourceLeftText = decodeXMLValue(sourceTokens[sourceLeftIndex].value);
+                    var sourcePhrase = normalizeMarkerPhraseText(extractTrailingMarkerWords(sourceLeftText, definition.sourceWordCount));
+                    if (sourcePhrase.toLowerCase() === definition.normalizedSourcePhrase) {
+                        var translatedLeftText = decodeXMLValue(translatedTokens[translatedLeftIndex].value);
+                        var currentTargetPhrase = extractTrailingMarkerWords(translatedLeftText, definition.translatedWordCount);
+                        var mergedPhrase = mergeCanonicalMarkerPhrase(currentTargetPhrase, definition.translatedPhrase);
+                        var replacedLeftText = replaceTrailingMarkerWords(translatedLeftText, definition.translatedWordCount, mergedPhrase);
+                        if (replacedLeftText !== translatedLeftText) {
+                            translatedTokens[translatedLeftIndex].value = escapeXMLTextValue(replacedLeftText);
+                            changed = true;
+                            updated = true;
+                        }
+                    }
+                }
+            } else if (definition.position === "leading") {
+                var sourceRightIndex = findAdjacentTextTokenIndex(sourceTokens, sourceMarkers[markerIndex].index, 1);
+                var translatedRightIndex = findAdjacentTextTokenIndex(translatedTokens, translatedMarkers[markerIndex].index, 1);
+                if (sourceRightIndex >= 0 && translatedRightIndex >= 0) {
+                    var sourceRightText = decodeXMLValue(sourceTokens[sourceRightIndex].value);
+                    var sourceLeadingPhrase = normalizeMarkerPhraseText(extractLeadingMarkerWords(sourceRightText, definition.sourceWordCount));
+                    if (sourceLeadingPhrase.toLowerCase() === definition.normalizedSourcePhrase) {
+                        var translatedRightText = decodeXMLValue(translatedTokens[translatedRightIndex].value);
+                        var currentLeadingTargetPhrase = extractLeadingMarkerWords(translatedRightText, definition.translatedWordCount);
+                        var mergedLeadingPhrase = mergeCanonicalMarkerPhrase(currentLeadingTargetPhrase, definition.translatedPhrase);
+                        var replacedRightText = replaceLeadingMarkerWords(translatedRightText, definition.translatedWordCount, mergedLeadingPhrase);
+                        if (replacedRightText !== translatedRightText) {
+                            translatedTokens[translatedRightIndex].value = escapeXMLTextValue(replacedRightText);
+                            changed = true;
+                            updated = true;
+                        }
+                    }
+                }
+            }
+
+            if (updated) break;
+        }
+    }
+
+    if (!changed) return translatedInnerXML;
+    var rebuilt = "";
+    for (var rebuildIndex = 0; rebuildIndex < translatedTokens.length; rebuildIndex++) rebuilt += translatedTokens[rebuildIndex].value;
+    return rebuilt;
+}
+
+function normalizeMarkerLinkedTermsByReferenceMap(sourceXMLArray, translatedXMLArray) {
+    if (!sourceXMLArray || !translatedXMLArray) return translatedXMLArray;
+
+    var definitionMap = buildMarkerPhraseDefinitionMap(sourceXMLArray, translatedXMLArray);
+    var normalized = translatedXMLArray.slice(0);
+
+    for (var i = 0; i < normalized.length; i++) {
+        if (!sourceXMLArray[i] || !normalized[i]) continue;
+
+        var sourceRuns = getStructuredXMLRunDescriptors(sourceXMLArray[i]);
+        var translatedRuns = getStructuredXMLRunDescriptors(normalized[i]);
+        if (sourceRuns.length === 0 || sourceRuns.length !== translatedRuns.length) continue;
+
+        var changed = false;
+        var rebuiltRuns = [];
+        for (var r = 0; r < translatedRuns.length; r++) {
+            var rebuiltInnerXML = applyMarkerPhraseDefinitionsToRun(sourceRuns[r].innerXML, translatedRuns[r].innerXML, definitionMap);
+            if (rebuiltInnerXML !== translatedRuns[r].innerXML) changed = true;
+            rebuiltRuns.push({
+                openTag: translatedRuns[r].openTag,
+                innerXML: rebuiltInnerXML,
+                closeTag: translatedRuns[r].closeTag
+            });
+        }
+
+        if (changed) normalized[i] = normalizeStructuredXMLCandidate(buildStructuredXMLFromRuns(rebuiltRuns), sourceXMLArray[i]);
+    }
+
+    return normalized;
 }
 
 function extractOpenAIFailureMessage(resultJSON, parsedObj) {
@@ -12591,16 +12876,16 @@ function buildTextObjectXML(textObj) {
     for (var r = 0; r < ranges.length; r++) {
         var chunk = ranges[r].contents;
         var fmt = ranges[r].formatting || {};
-        var fFamily = escapeXMLAttr(fmt.fontFamily || "Arial");
-        var fStyle = escapeXMLAttr(fmt.fontStyle || "Regular");
-        var pSize = escapeXMLAttr(fmt.pointSize || "12");
+        var fFamily = escapeXMLAttr(fmt.fontFamily || "");
+        var fStyle = escapeXMLAttr(fmt.fontStyle || "");
+        var pSize = escapeXMLAttr(fmt.pointSize || "");
         var pStyleName = escapeXMLAttr(fmt.paragraphStyleName || "");
-        var ldingStr = escapeXMLAttr(fmt.leading || "AUTO");
+        var ldingStr = escapeXMLAttr(fmt.leading || "");
         var fColor = escapeXMLAttr(fmt.fillColorName || "");
         var cStyle = escapeXMLAttr(fmt.characterStyleName || "");
         var pAli = escapeXMLAttr(fmt.justification || "");
-        var lInd = escapeXMLAttr(fmt.leftIndent || "0");
-        var fInd = escapeXMLAttr(fmt.firstLineIndent || "0");
+        var lInd = escapeXMLAttr(fmt.leftIndent || "");
+        var fInd = escapeXMLAttr(fmt.firstLineIndent || "");
         var bList = escapeXMLAttr(fmt.bulletsAndNumberingListType || "");
 
         chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
@@ -12827,8 +13112,9 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
     if (!targetTextObj || !targetTextObj.isValid) return false;
 
     var sourceRanges = getTextStyleRangeArray(targetTextObj);
+    var sourceEffectiveRuns = getEffectiveTextFormattingRuns(targetTextObj);
     var translatedRuns = getStructuredXMLRunDescriptors(translatedXML);
-    if (sourceRanges.length === 0 || translatedRuns.length === 0) return false;
+    if ((sourceRanges.length === 0 && sourceEffectiveRuns.length === 0) || translatedRuns.length === 0) return false;
 
     // Run counts do not need to match exactly. We prefer the formatting embedded
     // in each translated <t ...> tag and only fall back to the nearest available
@@ -12852,8 +13138,12 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
     // instead of "Button") and doubled reference markers ("[21][21]").
     var snapshots = [];
     for (var snapIndex = 0; snapIndex < translatedRuns.length; snapIndex++) {
-        var srIndex = Math.min(snapIndex, sourceRanges.length - 1);
-        var sr = sourceRanges[srIndex];
+        var srIndex = Math.min(snapIndex, Math.max(sourceRanges.length - 1, 0));
+        var sr = sourceRanges.length > 0 ? sourceRanges[srIndex] : null;
+        var sourceEffectiveIndex = Math.min(snapIndex, Math.max(sourceEffectiveRuns.length - 1, 0));
+        var sourceEffectiveFormatting = sourceEffectiveRuns.length > 0 && sourceEffectiveRuns[sourceEffectiveIndex]
+            ? (sourceEffectiveRuns[sourceEffectiveIndex].formatting || {})
+            : null;
         var runFormatting = getStructuredRunFormattingFromOpenTag(translatedRuns[snapIndex].openTag);
         var snap = {
             text:                       decodeStructuredRunText(translatedRuns[snapIndex].innerXML),
@@ -12872,46 +13162,105 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
         };
         snap.fontFamily = runFormatting.fontFamily;
         if (snap.fontFamily === "") {
+            if (sourceEffectiveFormatting) snap.fontFamily = String(sourceEffectiveFormatting.fontFamily || "");
+        }
+        if (snap.fontFamily === "" && sr) {
             try { snap.fontFamily = String(sr.appliedFont.fontFamily || ""); } catch(e) {}
         }
         snap.fontStyle = runFormatting.fontStyle;
         if (snap.fontStyle === "") {
+            if (sourceEffectiveFormatting) snap.fontStyle = String(sourceEffectiveFormatting.fontStyle || "");
+        }
+        if (snap.fontStyle === "" && sr) {
             try { snap.fontStyle = String(sr.fontStyle || ""); } catch(e) {}
         }
         snap.pointSize = runFormatting.pointSize;
         if (snap.pointSize === null) {
+            if (sourceEffectiveFormatting && sourceEffectiveFormatting.pointSize !== "") {
+                var effectivePointSize = parseFloat(sourceEffectiveFormatting.pointSize);
+                if (!isNaN(effectivePointSize)) snap.pointSize = effectivePointSize;
+            }
+        }
+        if (snap.pointSize === null && sr) {
             try { snap.pointSize = sr.pointSize; } catch(e) {}
         }
         snap.paragraphStyleName = runFormatting.paragraphStyleName;
         if (snap.paragraphStyleName === "") {
+            if (sourceEffectiveFormatting) snap.paragraphStyleName = String(sourceEffectiveFormatting.paragraphStyleName || "");
+        }
+        if (snap.paragraphStyleName === "" && sr) {
             try { snap.paragraphStyleName = String(sr.appliedParagraphStyle.name || ""); } catch(e) {}
         }
         snap.characterStyleName = runFormatting.characterStyleName;
         if (snap.characterStyleName === "") {
+            if (sourceEffectiveFormatting) snap.characterStyleName = String(sourceEffectiveFormatting.characterStyleName || "");
+        }
+        if (snap.characterStyleName === "" && sr) {
             try { snap.characterStyleName = String(sr.appliedCharacterStyle.name || ""); } catch(e) {}
         }
         snap.leading = runFormatting.leading;
         if (snap.leading === null) {
+            if (sourceEffectiveFormatting && sourceEffectiveFormatting.leading !== "") {
+                snap.leading = (String(sourceEffectiveFormatting.leading) === "AUTO") ? "AUTO" : parseFloat(sourceEffectiveFormatting.leading);
+                if (snap.leading !== "AUTO" && isNaN(snap.leading)) snap.leading = null;
+            }
+        }
+        if (snap.leading === null && sr) {
             try { snap.leading = (sr.leading === Leading.AUTO) ? "AUTO" : sr.leading; } catch(e) {}
         }
         snap.fillColorName = runFormatting.fillColorName;
         if (snap.fillColorName === "") {
+            if (sourceEffectiveFormatting) snap.fillColorName = String(sourceEffectiveFormatting.fillColorName || "");
+        }
+        if (snap.fillColorName === "" && sr) {
             try { snap.fillColorName = String(sr.fillColor.name || ""); } catch(e) {}
         }
         snap.leftIndent = runFormatting.leftIndent;
         if (snap.leftIndent === null) {
+            if (sourceEffectiveFormatting && sourceEffectiveFormatting.leftIndent !== "") {
+                var effectiveLeftIndent = parseFloat(sourceEffectiveFormatting.leftIndent);
+                if (!isNaN(effectiveLeftIndent)) snap.leftIndent = effectiveLeftIndent;
+            }
+        }
+        if (snap.leftIndent === null && sr) {
             try { snap.leftIndent = sr.leftIndent; } catch(e) {}
         }
         snap.firstLineIndent = runFormatting.firstLineIndent;
         if (snap.firstLineIndent === null) {
+            if (sourceEffectiveFormatting && sourceEffectiveFormatting.firstLineIndent !== "") {
+                var effectiveFirstLineIndent = parseFloat(sourceEffectiveFormatting.firstLineIndent);
+                if (!isNaN(effectiveFirstLineIndent)) snap.firstLineIndent = effectiveFirstLineIndent;
+            }
+        }
+        if (snap.firstLineIndent === null && sr) {
             try { snap.firstLineIndent = sr.firstLineIndent; } catch(e) {}
         }
         snap.justification = runFormatting.justification;
         if (snap.justification === null) {
+            if (sourceEffectiveFormatting) {
+                try {
+                    var effectiveJustification = String(sourceEffectiveFormatting.justification || "");
+                    if (effectiveJustification !== "" && Justification[effectiveJustification] !== undefined) {
+                        snap.justification = Justification[effectiveJustification];
+                    }
+                } catch(eJust1) {}
+            }
+        }
+        if (snap.justification === null && sr) {
             try { snap.justification = sr.justification; } catch(e) {}
         }
         snap.bulletsAndNumberingListType = runFormatting.bulletsAndNumberingListType;
         if (snap.bulletsAndNumberingListType === null) {
+            if (sourceEffectiveFormatting) {
+                try {
+                    var effectiveListType = String(sourceEffectiveFormatting.bulletsAndNumberingListType || "");
+                    if (effectiveListType !== "" && ListType[effectiveListType] !== undefined) {
+                        snap.bulletsAndNumberingListType = ListType[effectiveListType];
+                    }
+                } catch(eList1) {}
+            }
+        }
+        if (snap.bulletsAndNumberingListType === null && sr) {
             try { snap.bulletsAndNumberingListType = sr.bulletsAndNumberingListType; } catch(e) {}
         }
         snap.fallbackInfo = resolveFontFallbackForText(inDesignLangCode, snap.text);
@@ -12967,7 +13316,7 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
             try { var pStyle = doc.paragraphStyles.itemByName(snap.paragraphStyleName); if (pStyle && pStyle.isValid) appliedRange.applyParagraphStyle(pStyle, false); } catch(e) {}
             try { if (snap.bulletsAndNumberingListType !== null) appliedRange.bulletsAndNumberingListType = snap.bulletsAndNumberingListType; } catch(e) {}
             try { if (snap.fontFamily !== "") appliedRange.appliedFont = snap.fontFamily; } catch(e) {}
-            try { appliedRange.fontStyle = snap.fontStyle; } catch(e) { try { appliedRange.fontStyle = "Regular"; } catch(e2) {} }
+            try { if (snap.fontStyle !== "") appliedRange.fontStyle = snap.fontStyle; } catch(e) {}
             try { if (snap.pointSize !== null) appliedRange.pointSize = snap.pointSize; } catch(e) {}
             try { if (snap.leading !== null) appliedRange.leading = (snap.leading === "AUTO") ? Leading.AUTO : snap.leading; } catch(e) {}
             try { if (snap.fillColorName !== "") { var swatchObj = doc.swatches.itemByName(snap.fillColorName); if (swatchObj.isValid) appliedRange.fillColor = swatchObj; } } catch(e) {}
@@ -13038,7 +13387,8 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode, para
     while ((match = regex.exec(translatedXML)) !== null) {
         var attrs = match[1]; var textContent = match[2];
         var getAttr = function(str, name) { var m = new RegExp(name + '="([^"]*)"').exec(str); return m ? m[1] : ""; };
-        var fFam = decodeXMLAttr(getAttr(attrs, "f")); var fSty = decodeXMLAttr(getAttr(attrs, "s")); var fSiz = parseFloat(decodeXMLAttr(getAttr(attrs, "z")));
+        var fFam = decodeXMLAttr(getAttr(attrs, "f")); var fSty = decodeXMLAttr(getAttr(attrs, "s"));
+        var fSizRaw = decodeXMLAttr(getAttr(attrs, "z")); var fSiz = (fSizRaw !== "") ? parseFloat(fSizRaw) : NaN;
         var pSty = decodeXMLAttr(getAttr(attrs, "p")); var lead = decodeXMLAttr(getAttr(attrs, "l")); var fCol = decodeXMLAttr(getAttr(attrs, "c"));
         var cSty = decodeXMLAttr(getAttr(attrs, "k")); var pAli = decodeXMLAttr(getAttr(attrs, "a")); var lInd = decodeXMLAttr(getAttr(attrs, "li"));
         var fInd = decodeXMLAttr(getAttr(attrs, "fi")); var bLis = decodeXMLAttr(getAttr(attrs, "b"));
@@ -13064,9 +13414,9 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode, para
             if (appliedRange !== null) {
                 try { var myPStyle = doc.paragraphStyles.itemByName(pSty); if (myPStyle && myPStyle.isValid) appliedRange.applyParagraphStyle(myPStyle, false); } catch(e) {}
                 try { if (bLis !== "") appliedRange.bulletsAndNumberingListType = ListType[bLis]; } catch(e) {}
-                try { appliedRange.appliedFont = fFam; } catch(e) {}
-                try { appliedRange.fontStyle = fSty; } catch(e) { try { appliedRange.fontStyle = "Regular"; } catch(e2) {} }
-                try { appliedRange.pointSize = fSiz; } catch(e) {}
+                try { if (fFam !== "") appliedRange.appliedFont = fFam; } catch(e) {}
+                try { if (fSty !== "") appliedRange.fontStyle = fSty; } catch(e) {}
+                try { if (!isNaN(fSiz)) appliedRange.pointSize = fSiz; } catch(e) {}
                 try { appliedRange.leading = (lead === "AUTO") ? Leading.AUTO : parseFloat(lead); } catch(e) {}
                 try { if (fCol !== "") { var myColor = doc.swatches.itemByName(fCol); if (myColor.isValid) appliedRange.fillColor = myColor; } } catch(e) {}
                 try { if (cSty !== "" && cSty !== "[None]" && cSty !== "[Ohne]") { var myCStyle = doc.characterStyles.itemByName(cSty); if (myCStyle.isValid) appliedRange.applyCharacterStyle(myCStyle, false); } } catch(e) {}
