@@ -404,7 +404,17 @@ function resolveFontFallbackForText(langCode, textContent) {
 
 function applyOptionalFontFallback(appliedRange, originalFamily, originalStyle, fallbackInfo, langCode, textContent) {
     if (!fallbackInfo || !fallbackInfo.family) return;
-    if (normalizeFontLookupKey(fallbackInfo.family) === normalizeFontLookupKey(originalFamily)) return;
+
+    var effectiveFamily = String(originalFamily || "");
+    if (effectiveFamily === "") {
+        try { effectiveFamily = String(appliedRange.appliedFont.fontFamily || ""); } catch (familyReadErr) {}
+    }
+    if (normalizeFontLookupKey(fallbackInfo.family) === normalizeFontLookupKey(effectiveFamily)) return;
+
+    var effectiveStyle = String(originalStyle || "");
+    if (effectiveStyle === "") {
+        try { effectiveStyle = String(appliedRange.fontStyle || ""); } catch (styleReadErr1) {}
+    }
 
     var applied = false;
     try {
@@ -419,8 +429,8 @@ function applyOptionalFontFallback(appliedRange, originalFamily, originalStyle, 
     }
 
     if (!applied) return;
-    if (originalStyle !== null && originalStyle !== undefined && String(originalStyle) !== "") {
-        try { appliedRange.fontStyle = originalStyle; } catch (styleErr) {}
+    if (effectiveStyle !== "") {
+        try { appliedRange.fontStyle = effectiveStyle; } catch (styleErr) {}
     }
     writeDebugLog("font_fallback: lang=" + normalizeFontFallbackRuleKey(langCode) + " key=" + fallbackInfo.key + " family=" + fallbackInfo.family + " text=" + normalizeDebugSnippet(textContent, 80));
 }
@@ -10896,6 +10906,43 @@ function mergeCanonicalMarkerPhrase(currentPhrase, canonicalPhrase) {
     return canonicalNorm;
 }
 
+function replaceWholeMarkerPhrasePreservingWhitespace(text, replacement) {
+    var raw = String(text || "");
+    var leadingMatch = raw.match(/^\s+/);
+    var trailingMatch = raw.match(/\s+$/);
+    return (leadingMatch ? leadingMatch[0] : "") +
+        String(replacement || "") +
+        (trailingMatch ? trailingMatch[0] : "");
+}
+
+function isGenericMarkerLeadWord(word) {
+    var normalized = String(word || "").replace(/^[^\wÀ-ÿ]+|[^\wÀ-ÿ]+$/g, "").toLowerCase();
+    if (normalized === "") return false;
+    var genericWords = {
+        taste: true,
+        tasten: true,
+        button: true,
+        buttons: true,
+        anzeige: true,
+        display: true,
+        displays: true
+    };
+    return !!genericWords[normalized];
+}
+
+function addMarkerPhraseDefinition(result, definition) {
+    if (!result || !definition || !definition.marker || !definition.sourcePhrase || !definition.translatedPhrase) return;
+
+    var key = definition.marker + "|" + String(definition.sourcePhrase).toLowerCase();
+    if (!result.byKey[key]) result.byKey[key] = definition;
+    if (!result.byMarker[definition.marker]) result.byMarker[definition.marker] = [];
+
+    for (var existingIndex = 0; existingIndex < result.byMarker[definition.marker].length; existingIndex++) {
+        if (result.byMarker[definition.marker][existingIndex].normalizedSourcePhrase === definition.normalizedSourcePhrase) return;
+    }
+    result.byMarker[definition.marker].push(definition);
+}
+
 function extractSingleMarkerDefinitionFromRun(sourceInnerXML, translatedInnerXML) {
     if (!sourceInnerXML || !translatedInnerXML) return null;
     if (/<(?:pbr|lbr|tab)\s*\/>/i.test(String(sourceInnerXML)) || /<(?:pbr|lbr|tab)\s*\/>/i.test(String(translatedInnerXML))) return null;
@@ -10957,19 +11004,26 @@ function buildMarkerPhraseDefinitionMap(sourceXMLArray, translatedXMLArray) {
         for (var r = 0; r < sourceRuns.length; r++) {
             var definition = extractSingleMarkerDefinitionFromRun(sourceRuns[r].innerXML, translatedRuns[r].innerXML);
             if (!definition) continue;
+            addMarkerPhraseDefinition(result, definition);
 
-            var key = definition.marker + "|" + definition.normalizedSourcePhrase;
-            if (!result.byKey[key]) result.byKey[key] = definition;
-            if (!result.byMarker[definition.marker]) result.byMarker[definition.marker] = [];
-
-            var exists = false;
-            for (var existingIndex = 0; existingIndex < result.byMarker[definition.marker].length; existingIndex++) {
-                if (result.byMarker[definition.marker][existingIndex].normalizedSourcePhrase === definition.normalizedSourcePhrase) {
-                    exists = true;
-                    break;
+            var sourceWords = definition.sourcePhrase.split(/\s+/);
+            var translatedWords = definition.translatedPhrase.split(/\s+/);
+            if (sourceWords.length > 1 && translatedWords.length > 1 &&
+                isGenericMarkerLeadWord(sourceWords[0]) && isGenericMarkerLeadWord(translatedWords[0])) {
+                var shortenedSourcePhrase = sourceWords.slice(1).join(" ");
+                var shortenedTranslatedPhrase = translatedWords.slice(1).join(" ");
+                if (shortenedSourcePhrase !== "" && shortenedTranslatedPhrase !== "") {
+                    addMarkerPhraseDefinition(result, {
+                        marker: definition.marker,
+                        position: definition.position,
+                        sourcePhrase: shortenedSourcePhrase,
+                        translatedPhrase: shortenedTranslatedPhrase,
+                        sourceWordCount: countMarkerPhraseWords(shortenedSourcePhrase),
+                        translatedWordCount: countMarkerPhraseWords(shortenedTranslatedPhrase),
+                        normalizedSourcePhrase: shortenedSourcePhrase.toLowerCase()
+                    });
                 }
             }
-            if (!exists) result.byMarker[definition.marker].push(definition);
         }
     }
 
@@ -11016,12 +11070,18 @@ function applyMarkerPhraseDefinitionsToRun(sourceInnerXML, translatedInnerXML, d
                 var translatedLeftIndex = findAdjacentTextTokenIndex(translatedTokens, translatedMarkers[markerIndex].index, -1);
                 if (sourceLeftIndex >= 0 && translatedLeftIndex >= 0) {
                     var sourceLeftText = decodeXMLValue(sourceTokens[sourceLeftIndex].value);
+                    var sourceLeftNorm = normalizeMarkerPhraseText(sourceLeftText);
                     var sourcePhrase = normalizeMarkerPhraseText(extractTrailingMarkerWords(sourceLeftText, definition.sourceWordCount));
                     if (sourcePhrase.toLowerCase() === definition.normalizedSourcePhrase) {
                         var translatedLeftText = decodeXMLValue(translatedTokens[translatedLeftIndex].value);
-                        var currentTargetPhrase = extractTrailingMarkerWords(translatedLeftText, definition.translatedWordCount);
-                        var mergedPhrase = mergeCanonicalMarkerPhrase(currentTargetPhrase, definition.translatedPhrase);
-                        var replacedLeftText = replaceTrailingMarkerWords(translatedLeftText, definition.translatedWordCount, mergedPhrase);
+                        var replacedLeftText = translatedLeftText;
+                        if (sourceLeftNorm.toLowerCase() === definition.normalizedSourcePhrase) {
+                            replacedLeftText = replaceWholeMarkerPhrasePreservingWhitespace(translatedLeftText, mergeCanonicalMarkerPhrase(translatedLeftText, definition.translatedPhrase));
+                        } else {
+                            var currentTargetPhrase = extractTrailingMarkerWords(translatedLeftText, definition.translatedWordCount);
+                            var mergedPhrase = mergeCanonicalMarkerPhrase(currentTargetPhrase, definition.translatedPhrase);
+                            replacedLeftText = replaceTrailingMarkerWords(translatedLeftText, definition.translatedWordCount, mergedPhrase);
+                        }
                         if (replacedLeftText !== translatedLeftText) {
                             translatedTokens[translatedLeftIndex].value = escapeXMLTextValue(replacedLeftText);
                             changed = true;
@@ -11034,12 +11094,18 @@ function applyMarkerPhraseDefinitionsToRun(sourceInnerXML, translatedInnerXML, d
                 var translatedRightIndex = findAdjacentTextTokenIndex(translatedTokens, translatedMarkers[markerIndex].index, 1);
                 if (sourceRightIndex >= 0 && translatedRightIndex >= 0) {
                     var sourceRightText = decodeXMLValue(sourceTokens[sourceRightIndex].value);
+                    var sourceRightNorm = normalizeMarkerPhraseText(sourceRightText);
                     var sourceLeadingPhrase = normalizeMarkerPhraseText(extractLeadingMarkerWords(sourceRightText, definition.sourceWordCount));
                     if (sourceLeadingPhrase.toLowerCase() === definition.normalizedSourcePhrase) {
                         var translatedRightText = decodeXMLValue(translatedTokens[translatedRightIndex].value);
-                        var currentLeadingTargetPhrase = extractLeadingMarkerWords(translatedRightText, definition.translatedWordCount);
-                        var mergedLeadingPhrase = mergeCanonicalMarkerPhrase(currentLeadingTargetPhrase, definition.translatedPhrase);
-                        var replacedRightText = replaceLeadingMarkerWords(translatedRightText, definition.translatedWordCount, mergedLeadingPhrase);
+                        var replacedRightText = translatedRightText;
+                        if (sourceRightNorm.toLowerCase() === definition.normalizedSourcePhrase) {
+                            replacedRightText = replaceWholeMarkerPhrasePreservingWhitespace(translatedRightText, mergeCanonicalMarkerPhrase(translatedRightText, definition.translatedPhrase));
+                        } else {
+                            var currentLeadingTargetPhrase = extractLeadingMarkerWords(translatedRightText, definition.translatedWordCount);
+                            var mergedLeadingPhrase = mergeCanonicalMarkerPhrase(currentLeadingTargetPhrase, definition.translatedPhrase);
+                            replacedRightText = replaceLeadingMarkerWords(translatedRightText, definition.translatedWordCount, mergedLeadingPhrase);
+                        }
                         if (replacedRightText !== translatedRightText) {
                             translatedTokens[translatedRightIndex].value = escapeXMLTextValue(replacedRightText);
                             changed = true;
