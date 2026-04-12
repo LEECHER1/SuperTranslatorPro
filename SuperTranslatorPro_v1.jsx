@@ -11176,6 +11176,20 @@ function buildFastReferenceMarkerTermMap(translatedXMLArray) {
     var markerMap = {};
     if (!translatedXMLArray) return markerMap;
 
+    var markerCandidates = {};
+    var registerCandidate = function(marker, label, priority) {
+        if (!marker || !label) return;
+        var normalizedLabel = normalizeMarkerPhraseText(label);
+        if (normalizedLabel === "") return;
+        if (!markerCandidates[marker]) markerCandidates[marker] = [];
+        markerCandidates[marker].push({
+            label: normalizedLabel,
+            priority: priority || 0,
+            wordCount: countMarkerPhraseWords(normalizedLabel),
+            length: normalizedLabel.length
+        });
+    };
+
     for (var i = 0; i < translatedXMLArray.length; i++) {
         if (!translatedXMLArray[i]) continue;
         var runs = getStructuredXMLRunDescriptors(translatedXMLArray[i]);
@@ -11184,24 +11198,32 @@ function buildFastReferenceMarkerTermMap(translatedXMLArray) {
             for (var t = 0; t < tokens.length; t++) {
                 if (tokens[t].type !== "nt") continue;
                 var marker = extractMarkerTokenValue(tokens[t].value);
-                if (!/^\[\d+\]$/.test(marker) || markerMap[marker]) continue;
+                if (!/^\[\d+\]$/.test(marker)) continue;
 
                 var rightIndex = findAdjacentTextTokenIndex(tokens, t, 1);
                 if (rightIndex >= 0) {
                     var rightLabel = extractShortReferenceLabelFromText(decodeXMLValue(tokens[rightIndex].value), true);
-                    if (rightLabel !== "") {
-                        markerMap[marker] = rightLabel;
-                        continue;
-                    }
+                    if (rightLabel !== "") registerCandidate(marker, rightLabel, 3);
                 }
 
                 var leftIndex = findAdjacentTextTokenIndex(tokens, t, -1);
                 if (leftIndex >= 0) {
                     var leftLabel = extractShortReferenceLabelFromText(decodeXMLValue(tokens[leftIndex].value), false);
-                    if (leftLabel !== "") markerMap[marker] = leftLabel;
+                    if (leftLabel !== "") registerCandidate(marker, leftLabel, 1);
                 }
             }
         }
+    }
+
+    for (var markerKey in markerCandidates) {
+        if (!markerCandidates.hasOwnProperty(markerKey) || markerCandidates[markerKey].length === 0) continue;
+        markerCandidates[markerKey].sort(function(a, b) {
+            if (a.priority !== b.priority) return b.priority - a.priority;
+            if (a.wordCount !== b.wordCount) return a.wordCount - b.wordCount;
+            if (a.length !== b.length) return a.length - b.length;
+            return a.label < b.label ? -1 : (a.label > b.label ? 1 : 0);
+        });
+        markerMap[markerKey] = markerCandidates[markerKey][0].label;
     }
 
     return markerMap;
@@ -13306,6 +13328,30 @@ function paragraphFormattingRangeHasVisibleText(textRange) {
     return contents.replace(/\s+/g, "") !== "";
 }
 
+function isLikelyHeadingParagraph(paragraph) {
+    if (!paragraph || !paragraph.isValid) return false;
+
+    var text = "";
+    try { text = String(paragraph.contents || ""); } catch (e1) { text = ""; }
+    text = text.replace(/\r/g, "").replace(/\n/g, " ");
+    text = normalizeMarkerPhraseText(text);
+    if (text === "") return false;
+
+    var numberingEntry = readParagraphNumberingState(paragraph);
+    if (paragraphHasNumberingState(numberingEntry)) return false;
+
+    var wordCount = countMarkerPhraseWords(text);
+    if (wordCount === 0 || wordCount > 8) return false;
+    if (text.length > 80) return false;
+
+    var sentencePunctuationCount = 0;
+    var punctuationMatches = text.match(/[.!?]/g);
+    if (punctuationMatches) sentencePunctuationCount = punctuationMatches.length;
+    if (sentencePunctuationCount > 1) return false;
+
+    return true;
+}
+
 function collectParagraphStyleMetadata(textObj) {
     var metadata = [];
     var paragraphs = getParagraphArrayFromTextObject(textObj);
@@ -13313,7 +13359,8 @@ function collectParagraphStyleMetadata(textObj) {
         var paragraph = paragraphs[i];
         var entry = {
             paragraphStyleName: "",
-            uniformFormatting: null
+            uniformFormatting: null,
+            shouldRestore: false
         };
         if (!paragraph || !paragraph.isValid) {
             metadata.push(entry);
@@ -13321,14 +13368,17 @@ function collectParagraphStyleMetadata(textObj) {
         }
 
         try { entry.paragraphStyleName = String(paragraph.appliedParagraphStyle.name || ""); } catch (e1) {}
+        entry.shouldRestore = isLikelyHeadingParagraph(paragraph);
 
-        var ranges = getTextStyleRangeArray(paragraph);
-        var visibleRanges = [];
-        for (var r = 0; r < ranges.length; r++) {
-            if (paragraphFormattingRangeHasVisibleText(ranges[r])) visibleRanges.push(ranges[r]);
-        }
-        if (visibleRanges.length === 1) {
-            entry.uniformFormatting = readTextFormattingSnapshot(visibleRanges[0]);
+        if (entry.shouldRestore) {
+            var ranges = getTextStyleRangeArray(paragraph);
+            var visibleRanges = [];
+            for (var r = 0; r < ranges.length; r++) {
+                if (paragraphFormattingRangeHasVisibleText(ranges[r])) visibleRanges.push(ranges[r]);
+            }
+            if (visibleRanges.length === 1) {
+                entry.uniformFormatting = readTextFormattingSnapshot(visibleRanges[0]);
+            }
         }
         metadata.push(entry);
     }
@@ -13401,6 +13451,7 @@ function restoreParagraphStyleMetadata(textObj, paragraphMetadata, inDesignLangC
         var paragraph = paragraphs[i];
         var entry = paragraphMetadata[i];
         if (!paragraph || !paragraph.isValid || !entry) continue;
+        if (!entry.shouldRestore) continue;
 
         try {
             if (entry.paragraphStyleName !== "") {
