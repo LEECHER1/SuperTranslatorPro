@@ -11062,6 +11062,40 @@ function extractMarkerContextsFromXML(xml) {
     return contexts;
 }
 
+function findAdjacentMeaningfulTextTokenIndexInStream(stream, startIndex, direction) {
+    var step = (direction < 0) ? -1 : 1;
+    for (var i = startIndex + step; i >= 0 && i < stream.length; i += step) {
+        var token = stream[i];
+        if (!token) continue;
+        if (token.type === "tag" || token.type === "nt") return -1;
+        if (token.type !== "text") continue;
+        if (countMarkerPhraseWords(decodeXMLValue(token.value)) > 0) return i;
+    }
+    return -1;
+}
+
+function rebuildStructuredXMLFromTokenStream(sourceXML, stream) {
+    var runs = getStructuredXMLRunDescriptors(sourceXML);
+    if (runs.length === 0) return sourceXML;
+
+    var rebuiltRuns = [];
+    for (var r = 0; r < runs.length; r++) {
+        rebuiltRuns.push({
+            openTag: runs[r].openTag,
+            innerXML: "",
+            closeTag: runs[r].closeTag
+        });
+    }
+
+    for (var i = 0; i < stream.length; i++) {
+        var runIndex = stream[i].runIndex;
+        if (runIndex < 0 || runIndex >= rebuiltRuns.length) continue;
+        rebuiltRuns[runIndex].innerXML += String(stream[i].value || "");
+    }
+
+    return buildStructuredXMLFromRuns(rebuiltRuns);
+}
+
 function registerMarkerDefinitionVariants(result, definition) {
     if (!result || !definition) return;
     addMarkerPhraseDefinition(result, definition);
@@ -11309,26 +11343,17 @@ function buildFastReferenceMarkerTermMap(translatedXMLArray) {
 
     for (var i = 0; i < translatedXMLArray.length; i++) {
         if (!translatedXMLArray[i]) continue;
-        var runs = getStructuredXMLRunDescriptors(translatedXMLArray[i]);
-        for (var r = 0; r < runs.length; r++) {
-            var tokens = tokenizeStructuredRunInnerXML(runs[r].innerXML);
-            for (var t = 0; t < tokens.length; t++) {
-                if (tokens[t].type !== "nt") continue;
-                var marker = extractMarkerTokenValue(tokens[t].value);
-                if (!/^\[\d+\]$/.test(marker)) continue;
+        var stream = buildStructuredXMLTokenStream(translatedXMLArray[i]);
+        for (var t = 0; t < stream.length; t++) {
+            if (stream[t].type !== "nt") continue;
+            var marker = extractMarkerTokenValue(stream[t].value);
+            if (!/^\[\d+\]$/.test(marker)) continue;
 
-                var rightIndex = findAdjacentTextTokenIndex(tokens, t, 1);
-                if (rightIndex >= 0) {
-                    var rightLabel = extractShortReferenceLabelFromText(decodeXMLValue(tokens[rightIndex].value), true);
-                    if (rightLabel !== "") registerCandidate(marker, rightLabel, 3);
-                }
+            var rightLabel = extractShortReferenceLabelFromText(collectMarkerContextPhraseFromTokenStream(stream, t, 1), true);
+            if (rightLabel !== "") registerCandidate(marker, rightLabel, 3);
 
-                var leftIndex = findAdjacentTextTokenIndex(tokens, t, -1);
-                if (leftIndex >= 0) {
-                    var leftLabel = extractShortReferenceLabelFromText(decodeXMLValue(tokens[leftIndex].value), false);
-                    if (leftLabel !== "") registerCandidate(marker, leftLabel, 1);
-                }
-            }
+            var leftLabel = extractShortReferenceLabelFromText(collectMarkerContextPhraseFromTokenStream(stream, t, -1), false);
+            if (leftLabel !== "") registerCandidate(marker, leftLabel, 1);
         }
     }
 
@@ -11368,56 +11393,69 @@ function normalizeReferenceMarkerTermsFast(translatedXMLArray) {
 
     for (var i = 0; i < normalized.length; i++) {
         if (!normalized[i]) continue;
-        var runs = getStructuredXMLRunDescriptors(normalized[i]);
+        var stream = buildStructuredXMLTokenStream(normalized[i]);
         var changed = false;
-        var rebuiltRuns = [];
 
-        for (var r = 0; r < runs.length; r++) {
-            var tokens = tokenizeStructuredRunInnerXML(runs[r].innerXML);
-            var runChanged = false;
+        for (var t = 0; t < stream.length; t++) {
+            if (stream[t].type !== "nt") continue;
+            var marker = extractMarkerTokenValue(stream[t].value);
+            var canonicalLabel = markerMap[marker];
+            if (!canonicalLabel) continue;
 
-            for (var t = 0; t < tokens.length; t++) {
-                if (tokens[t].type !== "nt") continue;
-                var marker = extractMarkerTokenValue(tokens[t].value);
-                var canonicalLabel = markerMap[marker];
-                if (!canonicalLabel) continue;
-
-                var leftIndex = findAdjacentTextTokenIndex(tokens, t, -1);
+            var leftContextText = collectMarkerContextPhraseFromTokenStream(stream, t, -1);
+            var currentLeftLabel = extractShortReferenceLabelFromText(leftContextText, false);
+            if (currentLeftLabel !== "") {
+                var leftIndex = findAdjacentMeaningfulTextTokenIndexInStream(stream, t, -1);
                 if (leftIndex >= 0) {
-                    var leftText = decodeXMLValue(tokens[leftIndex].value);
-                    var replacedLeftText = replaceTrailingButtonLabel(leftText, canonicalLabel);
+                    var leftText = decodeXMLValue(stream[leftIndex].value);
+                    var replacedLeftText = leftText;
+                    if (/(?:^|\b)(?:button|taste)\b/i.test(leftText)) {
+                        replacedLeftText = replaceTrailingButtonLabel(leftText, canonicalLabel);
+                    } else {
+                        var leftWordCount = countMarkerPhraseWords(currentLeftLabel);
+                        var currentTrailingLeftPhrase = extractTrailingMarkerWords(leftText, leftWordCount);
+                        var mergedLeftPhrase = mergeCanonicalMarkerPhrase(currentTrailingLeftPhrase, canonicalLabel);
+                        if (normalizeMarkerPhraseText(leftText).toLowerCase() === normalizeMarkerPhraseText(currentLeftLabel).toLowerCase()) {
+                            replacedLeftText = replaceWholeMarkerPhrasePreservingWhitespace(leftText, mergedLeftPhrase);
+                        } else {
+                            replacedLeftText = replaceTrailingMarkerWords(leftText, leftWordCount, mergedLeftPhrase);
+                        }
+                    }
                     if (replacedLeftText !== leftText) {
-                        tokens[leftIndex].value = escapeXMLTextValue(replacedLeftText);
-                        runChanged = true;
+                        stream[leftIndex].value = escapeXMLTextValue(replacedLeftText);
+                        changed = true;
                     }
                 }
+            }
 
-                var rightIndex = findAdjacentTextTokenIndex(tokens, t, 1);
+            var rightContextText = collectMarkerContextPhraseFromTokenStream(stream, t, 1);
+            var currentRightLabel = extractShortReferenceLabelFromText(rightContextText, true);
+            if (currentRightLabel !== "") {
+                var rightIndex = findAdjacentMeaningfulTextTokenIndexInStream(stream, t, 1);
                 if (rightIndex >= 0) {
-                    var rightText = decodeXMLValue(tokens[rightIndex].value);
-                    var replacedRightText = replaceLeadingButtonLabel(rightText, canonicalLabel);
+                    var rightText = decodeXMLValue(stream[rightIndex].value);
+                    var replacedRightText = rightText;
+                    if (/(?:^|\b)(?:button|taste)\b/i.test(rightText)) {
+                        replacedRightText = replaceLeadingButtonLabel(rightText, canonicalLabel);
+                    } else {
+                        var rightWordCount = countMarkerPhraseWords(currentRightLabel);
+                        var currentLeadingRightPhrase = extractLeadingMarkerWords(rightText, rightWordCount);
+                        var mergedRightPhrase = mergeCanonicalMarkerPhrase(currentLeadingRightPhrase, canonicalLabel);
+                        if (normalizeMarkerPhraseText(rightText).toLowerCase() === normalizeMarkerPhraseText(currentRightLabel).toLowerCase()) {
+                            replacedRightText = replaceWholeMarkerPhrasePreservingWhitespace(rightText, mergedRightPhrase);
+                        } else {
+                            replacedRightText = replaceLeadingMarkerWords(rightText, rightWordCount, mergedRightPhrase);
+                        }
+                    }
                     if (replacedRightText !== rightText) {
-                        tokens[rightIndex].value = escapeXMLTextValue(replacedRightText);
-                        runChanged = true;
+                        stream[rightIndex].value = escapeXMLTextValue(replacedRightText);
+                        changed = true;
                     }
                 }
             }
-
-            var rebuiltInner = runs[r].innerXML;
-            if (runChanged) {
-                rebuiltInner = "";
-                for (var k = 0; k < tokens.length; k++) rebuiltInner += tokens[k].value;
-                changed = true;
-            }
-
-            rebuiltRuns.push({
-                openTag: runs[r].openTag,
-                innerXML: rebuiltInner,
-                closeTag: runs[r].closeTag
-            });
         }
 
-        if (changed) normalized[i] = normalizeStructuredXMLCandidate(buildStructuredXMLFromRuns(rebuiltRuns), normalized[i]);
+        if (changed) normalized[i] = normalizeStructuredXMLCandidate(rebuildStructuredXMLFromTokenStream(normalized[i], stream), normalized[i]);
     }
 
     return normalized;
