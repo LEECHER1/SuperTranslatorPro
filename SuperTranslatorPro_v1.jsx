@@ -9989,21 +9989,23 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         writeDebugLog("parking:summary tables=" + globalParkedTables.length + " images=" + globalParkedImages.length + " targetsNow=" + textTargets.length);
     
     var buildXMLWithGlossary = function(textObj) {
-        var xmlString = "<root>"; var ranges = getEffectiveTextFormattingRuns(textObj);
+        var xmlString = "<root>"; var ranges = getTextStyleRangeArray(textObj);
         for (var r = 0; r < ranges.length; r++) {
             var chunk = ranges[r].contents;
-            var fmt = ranges[r].formatting || {};
-            var fFamily = String(fmt.fontFamily || "");
-            var fStyle = String(fmt.fontStyle || "");
-            var pSize = String(fmt.pointSize || "");
-            var pStyleNameRaw = String(fmt.paragraphStyleName || "");
-            var ldingStr = String(fmt.leading || "");
-            var fColor = String(fmt.fillColorName || "");
-            var cStyleRaw = String(fmt.characterStyleName || "");
-            var pAlign = String(fmt.justification || "");
-            var lInd = String(fmt.leftIndent || "");
-            var fInd = String(fmt.firstLineIndent || "");
-            var bList = String(fmt.bulletsAndNumberingListType || "");
+            var fFamily = ""; var fStyle = ""; var pSize = ""; var pStyleNameRaw = "";
+            var ldingStr = ""; var fColor = ""; var cStyleRaw = ""; var pAlign = "";
+            var lInd = ""; var fInd = ""; var bList = "";
+            try { fFamily = String(ranges[r].appliedFont.fontFamily || ""); } catch (e0) {}
+            try { fStyle = String(ranges[r].fontStyle || ""); } catch (e1) {}
+            try { pSize = String(ranges[r].pointSize || ""); } catch (e2) {}
+            try { pStyleNameRaw = String(ranges[r].appliedParagraphStyle.name || ""); } catch (e3) {}
+            try { if (ranges[r].leading !== Leading.AUTO) ldingStr = String(ranges[r].leading || ""); } catch (e4) {}
+            try { fColor = String(ranges[r].fillColor.name || ""); } catch (e5) {}
+            try { cStyleRaw = String(ranges[r].appliedCharacterStyle.name || ""); } catch (e6) {}
+            try { pAlign = String(ranges[r].justification || ""); } catch (e7) {}
+            try { lInd = String(ranges[r].leftIndent || ""); } catch (e8) {}
+            try { fInd = String(ranges[r].firstLineIndent || ""); } catch (e9) {}
+            try { bList = String(ranges[r].bulletsAndNumberingListType || ""); } catch (e10) {}
             
             chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
             chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -10034,6 +10036,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         var finalTranslations = new Array(textTargets.length);
         var sourceXMLByTarget = new Array(textTargets.length);
         var paragraphNumberingByTarget = new Array(textTargets.length);
+        var paragraphStyleByTarget = new Array(textTargets.length);
         var tmHitCount = 0;
         var exactGlossaryHitCount = 0;
         var emptyCount = 0;
@@ -10043,6 +10046,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         for (var i = 0; i < textTargets.length; i++) {
             if (!textTargets[i].isValid || textTargets[i].characters.length === 0) { finalTranslations[i] = ""; emptyCount++; continue; }
             paragraphNumberingByTarget[i] = collectParagraphNumberingMetadata(textTargets[i]);
+            paragraphStyleByTarget[i] = collectParagraphStyleMetadata(textTargets[i]);
 
             var sourceContents = "";
             try { sourceContents = String(textTargets[i].contents); } catch (e0) { sourceContents = ""; }
@@ -10110,7 +10114,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
             if (tmUpdated) saveTMDelta(tmDelta); 
         }
 
-        var normalizedMarkerTranslations = normalizeMarkerLinkedTermsByReferenceMap(sourceXMLByTarget, finalTranslations);
+        var normalizedMarkerTranslations = normalizeReferenceMarkerTermsFast(finalTranslations);
         var tmNormalized = false;
         for (var normalizedIndex = 0; normalizedIndex < normalizedMarkerTranslations.length; normalizedIndex++) {
             if (!normalizedMarkerTranslations[normalizedIndex] || normalizedMarkerTranslations[normalizedIndex] === finalTranslations[normalizedIndex]) continue;
@@ -10127,7 +10131,7 @@ function executeTranslation(doc, textTargetsRaw, pagesMode, pagesString, selecte
         updateProgress(90, t("applying_formatting"), formatPct, null);
         for (var i = 0; i < textTargets.length; i++) {
             if (cancelFlag) throw new Error("CANCELLED");
-            if (finalTranslations[i]) applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangCode, paragraphNumberingByTarget[i]);
+            if (finalTranslations[i]) applyXMLtoInDesign(textTargets[i], finalTranslations[i], inDesignLangCode, paragraphNumberingByTarget[i], paragraphStyleByTarget[i]);
         }
 
         updateProgress(95, t("restoring_tables_images"), overEndPct, null);
@@ -11151,6 +11155,130 @@ function normalizeMarkerLinkedTermsByReferenceMap(sourceXMLArray, translatedXMLA
         }
 
         if (changed) normalized[i] = normalizeStructuredXMLCandidate(buildStructuredXMLFromRuns(rebuiltRuns), sourceXMLArray[i]);
+    }
+
+    return normalized;
+}
+
+function extractShortReferenceLabelFromText(text, preferStart) {
+    var raw = normalizeMarkerPhraseText(text);
+    if (raw === "") return "";
+
+    var genericPrefixPattern = preferStart
+        ? /^\s*(?:button|taste)\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\/-]*(?:\s+[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\/-]*){0,3})\s*$/i
+        : /(?:^|.*\b)(?:button|taste)\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\/-]*(?:\s+[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\/-]*){0,3})\s*$/i;
+    var match = genericPrefixPattern.exec(raw);
+    if (!match || !match[1]) return "";
+    return normalizeMarkerPhraseText(match[1]);
+}
+
+function buildFastReferenceMarkerTermMap(translatedXMLArray) {
+    var markerMap = {};
+    if (!translatedXMLArray) return markerMap;
+
+    for (var i = 0; i < translatedXMLArray.length; i++) {
+        if (!translatedXMLArray[i]) continue;
+        var runs = getStructuredXMLRunDescriptors(translatedXMLArray[i]);
+        for (var r = 0; r < runs.length; r++) {
+            var tokens = tokenizeStructuredRunInnerXML(runs[r].innerXML);
+            for (var t = 0; t < tokens.length; t++) {
+                if (tokens[t].type !== "nt") continue;
+                var marker = extractMarkerTokenValue(tokens[t].value);
+                if (!/^\[\d+\]$/.test(marker) || markerMap[marker]) continue;
+
+                var rightIndex = findAdjacentTextTokenIndex(tokens, t, 1);
+                if (rightIndex >= 0) {
+                    var rightLabel = extractShortReferenceLabelFromText(decodeXMLValue(tokens[rightIndex].value), true);
+                    if (rightLabel !== "") {
+                        markerMap[marker] = rightLabel;
+                        continue;
+                    }
+                }
+
+                var leftIndex = findAdjacentTextTokenIndex(tokens, t, -1);
+                if (leftIndex >= 0) {
+                    var leftLabel = extractShortReferenceLabelFromText(decodeXMLValue(tokens[leftIndex].value), false);
+                    if (leftLabel !== "") markerMap[marker] = leftLabel;
+                }
+            }
+        }
+    }
+
+    return markerMap;
+}
+
+function replaceTrailingButtonLabel(text, canonicalLabel) {
+    var raw = String(text || "");
+    return raw.replace(/(\b(?:button|taste)\s+)([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\/-]*(?:\s+[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\/-]*){0,3})\s*$/i, function(fullMatch, prefix) {
+        return prefix + canonicalLabel;
+    });
+}
+
+function replaceLeadingButtonLabel(text, canonicalLabel) {
+    var raw = String(text || "");
+    return raw.replace(/^\s*((?:button|taste)\s+)([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\/-]*(?:\s+[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\/-]*){0,3})/i, function(fullMatch, prefix) {
+        return prefix + canonicalLabel;
+    });
+}
+
+function normalizeReferenceMarkerTermsFast(translatedXMLArray) {
+    if (!translatedXMLArray) return translatedXMLArray;
+
+    var markerMap = buildFastReferenceMarkerTermMap(translatedXMLArray);
+    var normalized = translatedXMLArray.slice(0);
+
+    for (var i = 0; i < normalized.length; i++) {
+        if (!normalized[i]) continue;
+        var runs = getStructuredXMLRunDescriptors(normalized[i]);
+        var changed = false;
+        var rebuiltRuns = [];
+
+        for (var r = 0; r < runs.length; r++) {
+            var tokens = tokenizeStructuredRunInnerXML(runs[r].innerXML);
+            var runChanged = false;
+
+            for (var t = 0; t < tokens.length; t++) {
+                if (tokens[t].type !== "nt") continue;
+                var marker = extractMarkerTokenValue(tokens[t].value);
+                var canonicalLabel = markerMap[marker];
+                if (!canonicalLabel) continue;
+
+                var leftIndex = findAdjacentTextTokenIndex(tokens, t, -1);
+                if (leftIndex >= 0) {
+                    var leftText = decodeXMLValue(tokens[leftIndex].value);
+                    var replacedLeftText = replaceTrailingButtonLabel(leftText, canonicalLabel);
+                    if (replacedLeftText !== leftText) {
+                        tokens[leftIndex].value = escapeXMLTextValue(replacedLeftText);
+                        runChanged = true;
+                    }
+                }
+
+                var rightIndex = findAdjacentTextTokenIndex(tokens, t, 1);
+                if (rightIndex >= 0) {
+                    var rightText = decodeXMLValue(tokens[rightIndex].value);
+                    var replacedRightText = replaceLeadingButtonLabel(rightText, canonicalLabel);
+                    if (replacedRightText !== rightText) {
+                        tokens[rightIndex].value = escapeXMLTextValue(replacedRightText);
+                        runChanged = true;
+                    }
+                }
+            }
+
+            var rebuiltInner = runs[r].innerXML;
+            if (runChanged) {
+                rebuiltInner = "";
+                for (var k = 0; k < tokens.length; k++) rebuiltInner += tokens[k].value;
+                changed = true;
+            }
+
+            rebuiltRuns.push({
+                openTag: runs[r].openTag,
+                innerXML: rebuiltInner,
+                closeTag: runs[r].closeTag
+            });
+        }
+
+        if (changed) normalized[i] = normalizeStructuredXMLCandidate(buildStructuredXMLFromRuns(rebuiltRuns), normalized[i]);
     }
 
     return normalized;
@@ -12938,21 +13066,23 @@ function getEffectiveTextFormattingRuns(textObj) {
 
 function buildTextObjectXML(textObj) {
     var xmlString = "<root>";
-    var ranges = getEffectiveTextFormattingRuns(textObj);
+    var ranges = getTextStyleRangeArray(textObj);
     for (var r = 0; r < ranges.length; r++) {
         var chunk = ranges[r].contents;
-        var fmt = ranges[r].formatting || {};
-        var fFamily = escapeXMLAttr(fmt.fontFamily || "");
-        var fStyle = escapeXMLAttr(fmt.fontStyle || "");
-        var pSize = escapeXMLAttr(fmt.pointSize || "");
-        var pStyleName = escapeXMLAttr(fmt.paragraphStyleName || "");
-        var ldingStr = escapeXMLAttr(fmt.leading || "");
-        var fColor = escapeXMLAttr(fmt.fillColorName || "");
-        var cStyle = escapeXMLAttr(fmt.characterStyleName || "");
-        var pAli = escapeXMLAttr(fmt.justification || "");
-        var lInd = escapeXMLAttr(fmt.leftIndent || "");
-        var fInd = escapeXMLAttr(fmt.firstLineIndent || "");
-        var bList = escapeXMLAttr(fmt.bulletsAndNumberingListType || "");
+        var fFamily = ""; var fStyle = ""; var pSize = ""; var pStyleName = "";
+        var ldingStr = ""; var fColor = ""; var cStyle = ""; var pAli = "";
+        var lInd = ""; var fInd = ""; var bList = "";
+        try { fFamily = escapeXMLAttr(ranges[r].appliedFont.fontFamily || ""); } catch (e0) {}
+        try { fStyle = escapeXMLAttr(ranges[r].fontStyle || ""); } catch (e1) {}
+        try { pSize = escapeXMLAttr(ranges[r].pointSize || ""); } catch (e2) {}
+        try { pStyleName = escapeXMLAttr(ranges[r].appliedParagraphStyle.name || ""); } catch (e3) {}
+        try { if (ranges[r].leading !== Leading.AUTO) ldingStr = escapeXMLAttr(ranges[r].leading || ""); } catch (e4) {}
+        try { fColor = escapeXMLAttr(ranges[r].fillColor.name || ""); } catch (e5) {}
+        try { cStyle = escapeXMLAttr(ranges[r].appliedCharacterStyle.name || ""); } catch (e6) {}
+        try { pAli = escapeXMLAttr(ranges[r].justification || ""); } catch (e7) {}
+        try { lInd = escapeXMLAttr(ranges[r].leftIndent || ""); } catch (e8) {}
+        try { fInd = escapeXMLAttr(ranges[r].firstLineIndent || ""); } catch (e9) {}
+        try { bList = escapeXMLAttr(ranges[r].bulletsAndNumberingListType || ""); } catch (e10) {}
 
         chunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
         chunk = chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -13168,19 +13298,140 @@ function restoreParagraphNumberingMetadata(textObj, paragraphMetadata) {
     } catch (e7) {}
 }
 
+function paragraphFormattingRangeHasVisibleText(textRange) {
+    if (!textRange || !textRange.isValid) return false;
+    var contents = "";
+    try { contents = String(textRange.contents || ""); } catch (e) { contents = ""; }
+    contents = contents.replace(/\r/g, "").replace(/\n/g, "").replace(/\t/g, " ");
+    return contents.replace(/\s+/g, "") !== "";
+}
+
+function collectParagraphStyleMetadata(textObj) {
+    var metadata = [];
+    var paragraphs = getParagraphArrayFromTextObject(textObj);
+    for (var i = 0; i < paragraphs.length; i++) {
+        var paragraph = paragraphs[i];
+        var entry = {
+            paragraphStyleName: "",
+            uniformFormatting: null
+        };
+        if (!paragraph || !paragraph.isValid) {
+            metadata.push(entry);
+            continue;
+        }
+
+        try { entry.paragraphStyleName = String(paragraph.appliedParagraphStyle.name || ""); } catch (e1) {}
+
+        var ranges = getTextStyleRangeArray(paragraph);
+        var visibleRanges = [];
+        for (var r = 0; r < ranges.length; r++) {
+            if (paragraphFormattingRangeHasVisibleText(ranges[r])) visibleRanges.push(ranges[r]);
+        }
+        if (visibleRanges.length === 1) {
+            entry.uniformFormatting = readTextFormattingSnapshot(visibleRanges[0]);
+        }
+        metadata.push(entry);
+    }
+    return metadata;
+}
+
+function applyFormattingSnapshotToTextRange(targetRange, formatting, inDesignLangCode, sampleText) {
+    if (!targetRange || !targetRange.isValid || !formatting) return;
+    var doc = app.activeDocument;
+    try { if (formatting.fontFamily !== "") targetRange.appliedFont = formatting.fontFamily; } catch (e1) {}
+    try { if (formatting.fontStyle !== "") targetRange.fontStyle = formatting.fontStyle; } catch (e2) {}
+    try {
+        if (formatting.pointSize !== "") {
+            var pointSize = parseFloat(formatting.pointSize);
+            if (!isNaN(pointSize)) targetRange.pointSize = pointSize;
+        }
+    } catch (e3) {}
+    try {
+        if (formatting.leading !== "") {
+            targetRange.leading = (String(formatting.leading) === "AUTO") ? Leading.AUTO : parseFloat(formatting.leading);
+        }
+    } catch (e4) {}
+    try {
+        if (formatting.fillColorName !== "") {
+            var styleSwatch = doc.swatches.itemByName(formatting.fillColorName);
+            if (styleSwatch && styleSwatch.isValid) targetRange.fillColor = styleSwatch;
+        }
+    } catch (e5) {}
+    try {
+        if (formatting.characterStyleName !== "" && formatting.characterStyleName !== "[None]" && formatting.characterStyleName !== "[Ohne]") {
+            var styleCharacterStyle = doc.characterStyles.itemByName(formatting.characterStyleName);
+            if (styleCharacterStyle && styleCharacterStyle.isValid) targetRange.applyCharacterStyle(styleCharacterStyle, false);
+        }
+    } catch (e6) {}
+    try {
+        if (formatting.justification !== "" && Justification[formatting.justification] !== undefined) {
+            targetRange.justification = Justification[formatting.justification];
+        }
+    } catch (e7) {}
+    try {
+        if (formatting.leftIndent !== "") {
+            var leftIndent = parseFloat(formatting.leftIndent);
+            if (!isNaN(leftIndent)) targetRange.leftIndent = leftIndent;
+        }
+    } catch (e8) {}
+    try {
+        if (formatting.firstLineIndent !== "") {
+            var firstIndent = parseFloat(formatting.firstLineIndent);
+            if (!isNaN(firstIndent)) targetRange.firstLineIndent = firstIndent;
+        }
+    } catch (e9) {}
+    try {
+        if (formatting.bulletsAndNumberingListType !== "" && ListType[formatting.bulletsAndNumberingListType] !== undefined) {
+            targetRange.bulletsAndNumberingListType = ListType[formatting.bulletsAndNumberingListType];
+        }
+    } catch (e10) {}
+
+    var fallbackInfo = resolveFontFallbackForText(inDesignLangCode, sampleText || "");
+    applyOptionalFontFallback(targetRange, formatting.fontFamily, formatting.fontStyle, fallbackInfo, inDesignLangCode, sampleText || "");
+}
+
+function restoreParagraphStyleMetadata(textObj, paragraphMetadata, inDesignLangCode) {
+    if (!textObj || !textObj.isValid || !paragraphMetadata || paragraphMetadata.length === 0) return;
+    var paragraphs = getParagraphArrayFromTextObject(textObj);
+    if (!paragraphs || paragraphs.length === 0) return;
+
+    var applyCount = Math.min(paragraphs.length, paragraphMetadata.length);
+    var doc = app.activeDocument;
+    for (var i = 0; i < applyCount; i++) {
+        var paragraph = paragraphs[i];
+        var entry = paragraphMetadata[i];
+        if (!paragraph || !paragraph.isValid || !entry) continue;
+
+        try {
+            if (entry.paragraphStyleName !== "") {
+                var styleParagraphStyle = doc.paragraphStyles.itemByName(entry.paragraphStyleName);
+                if (styleParagraphStyle && styleParagraphStyle.isValid) paragraph.applyParagraphStyle(styleParagraphStyle, false);
+            }
+        } catch (e1) {}
+
+        if (entry.uniformFormatting) {
+            applyFormattingSnapshotToTextRange(paragraph, entry.uniformFormatting, inDesignLangCode, getParagraphDebugSnippet(paragraph));
+        }
+    }
+
+    try {
+        if (textObj.parentStory && textObj.parentStory.isValid && textObj.parentStory.recompose) textObj.parentStory.recompose();
+        else if (textObj.recompose) textObj.recompose();
+    } catch (e2) {}
+}
+
 function decodeStructuredRunText(innerXML) {
     var textContent = decodeXMLValue(innerXML);
     textContent = textContent.replace(/<pbr\/>/gi, '\r').replace(/<lbr\/>/gi, '\n').replace(/<tab\/>/gi, '\t').replace(/<\/?nt[^>]*>/gi, '');
     return normalizeTechnicalTokenSpacingInString(textContent);
 }
 
-function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata) {
+function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata, paragraphStyleMetadata) {
     if (!targetTextObj || !targetTextObj.isValid) return false;
 
     var sourceRanges = getTextStyleRangeArray(targetTextObj);
-    var sourceEffectiveRuns = getEffectiveTextFormattingRuns(targetTextObj);
     var translatedRuns = getStructuredXMLRunDescriptors(translatedXML);
-    if ((sourceRanges.length === 0 && sourceEffectiveRuns.length === 0) || translatedRuns.length === 0) return false;
+    if (sourceRanges.length === 0 || translatedRuns.length === 0) return false;
 
     // Run counts do not need to match exactly. We prefer the formatting embedded
     // in each translated <t ...> tag and only fall back to the nearest available
@@ -13204,12 +13455,8 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
     // instead of "Button") and doubled reference markers ("[21][21]").
     var snapshots = [];
     for (var snapIndex = 0; snapIndex < translatedRuns.length; snapIndex++) {
-        var srIndex = Math.min(snapIndex, Math.max(sourceRanges.length - 1, 0));
-        var sr = sourceRanges.length > 0 ? sourceRanges[srIndex] : null;
-        var sourceEffectiveIndex = Math.min(snapIndex, Math.max(sourceEffectiveRuns.length - 1, 0));
-        var sourceEffectiveFormatting = sourceEffectiveRuns.length > 0 && sourceEffectiveRuns[sourceEffectiveIndex]
-            ? (sourceEffectiveRuns[sourceEffectiveIndex].formatting || {})
-            : null;
+        var srIndex = Math.min(snapIndex, sourceRanges.length - 1);
+        var sr = sourceRanges[srIndex];
         var runFormatting = getStructuredRunFormattingFromOpenTag(translatedRuns[snapIndex].openTag);
         var snap = {
             text:                       decodeStructuredRunText(translatedRuns[snapIndex].innerXML),
@@ -13228,105 +13475,46 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
         };
         snap.fontFamily = runFormatting.fontFamily;
         if (snap.fontFamily === "") {
-            if (sourceEffectiveFormatting) snap.fontFamily = String(sourceEffectiveFormatting.fontFamily || "");
-        }
-        if (snap.fontFamily === "" && sr) {
             try { snap.fontFamily = String(sr.appliedFont.fontFamily || ""); } catch(e) {}
         }
         snap.fontStyle = runFormatting.fontStyle;
         if (snap.fontStyle === "") {
-            if (sourceEffectiveFormatting) snap.fontStyle = String(sourceEffectiveFormatting.fontStyle || "");
-        }
-        if (snap.fontStyle === "" && sr) {
             try { snap.fontStyle = String(sr.fontStyle || ""); } catch(e) {}
         }
         snap.pointSize = runFormatting.pointSize;
         if (snap.pointSize === null) {
-            if (sourceEffectiveFormatting && sourceEffectiveFormatting.pointSize !== "") {
-                var effectivePointSize = parseFloat(sourceEffectiveFormatting.pointSize);
-                if (!isNaN(effectivePointSize)) snap.pointSize = effectivePointSize;
-            }
-        }
-        if (snap.pointSize === null && sr) {
             try { snap.pointSize = sr.pointSize; } catch(e) {}
         }
         snap.paragraphStyleName = runFormatting.paragraphStyleName;
         if (snap.paragraphStyleName === "") {
-            if (sourceEffectiveFormatting) snap.paragraphStyleName = String(sourceEffectiveFormatting.paragraphStyleName || "");
-        }
-        if (snap.paragraphStyleName === "" && sr) {
             try { snap.paragraphStyleName = String(sr.appliedParagraphStyle.name || ""); } catch(e) {}
         }
         snap.characterStyleName = runFormatting.characterStyleName;
         if (snap.characterStyleName === "") {
-            if (sourceEffectiveFormatting) snap.characterStyleName = String(sourceEffectiveFormatting.characterStyleName || "");
-        }
-        if (snap.characterStyleName === "" && sr) {
             try { snap.characterStyleName = String(sr.appliedCharacterStyle.name || ""); } catch(e) {}
         }
         snap.leading = runFormatting.leading;
         if (snap.leading === null) {
-            if (sourceEffectiveFormatting && sourceEffectiveFormatting.leading !== "") {
-                snap.leading = (String(sourceEffectiveFormatting.leading) === "AUTO") ? "AUTO" : parseFloat(sourceEffectiveFormatting.leading);
-                if (snap.leading !== "AUTO" && isNaN(snap.leading)) snap.leading = null;
-            }
-        }
-        if (snap.leading === null && sr) {
             try { snap.leading = (sr.leading === Leading.AUTO) ? "AUTO" : sr.leading; } catch(e) {}
         }
         snap.fillColorName = runFormatting.fillColorName;
         if (snap.fillColorName === "") {
-            if (sourceEffectiveFormatting) snap.fillColorName = String(sourceEffectiveFormatting.fillColorName || "");
-        }
-        if (snap.fillColorName === "" && sr) {
             try { snap.fillColorName = String(sr.fillColor.name || ""); } catch(e) {}
         }
         snap.leftIndent = runFormatting.leftIndent;
         if (snap.leftIndent === null) {
-            if (sourceEffectiveFormatting && sourceEffectiveFormatting.leftIndent !== "") {
-                var effectiveLeftIndent = parseFloat(sourceEffectiveFormatting.leftIndent);
-                if (!isNaN(effectiveLeftIndent)) snap.leftIndent = effectiveLeftIndent;
-            }
-        }
-        if (snap.leftIndent === null && sr) {
             try { snap.leftIndent = sr.leftIndent; } catch(e) {}
         }
         snap.firstLineIndent = runFormatting.firstLineIndent;
         if (snap.firstLineIndent === null) {
-            if (sourceEffectiveFormatting && sourceEffectiveFormatting.firstLineIndent !== "") {
-                var effectiveFirstLineIndent = parseFloat(sourceEffectiveFormatting.firstLineIndent);
-                if (!isNaN(effectiveFirstLineIndent)) snap.firstLineIndent = effectiveFirstLineIndent;
-            }
-        }
-        if (snap.firstLineIndent === null && sr) {
             try { snap.firstLineIndent = sr.firstLineIndent; } catch(e) {}
         }
         snap.justification = runFormatting.justification;
         if (snap.justification === null) {
-            if (sourceEffectiveFormatting) {
-                try {
-                    var effectiveJustification = String(sourceEffectiveFormatting.justification || "");
-                    if (effectiveJustification !== "" && Justification[effectiveJustification] !== undefined) {
-                        snap.justification = Justification[effectiveJustification];
-                    }
-                } catch(eJust1) {}
-            }
-        }
-        if (snap.justification === null && sr) {
             try { snap.justification = sr.justification; } catch(e) {}
         }
         snap.bulletsAndNumberingListType = runFormatting.bulletsAndNumberingListType;
         if (snap.bulletsAndNumberingListType === null) {
-            if (sourceEffectiveFormatting) {
-                try {
-                    var effectiveListType = String(sourceEffectiveFormatting.bulletsAndNumberingListType || "");
-                    if (effectiveListType !== "" && ListType[effectiveListType] !== undefined) {
-                        snap.bulletsAndNumberingListType = ListType[effectiveListType];
-                    }
-                } catch(eList1) {}
-            }
-        }
-        if (snap.bulletsAndNumberingListType === null && sr) {
             try { snap.bulletsAndNumberingListType = sr.bulletsAndNumberingListType; } catch(e) {}
         }
         snap.fallbackInfo = resolveFontFallbackForText(inDesignLangCode, snap.text);
@@ -13415,6 +13603,7 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
         }
     } catch (langErr) {}
 
+    try { if (postTarget && postTarget.isValid) restoreParagraphStyleMetadata(postTarget, paragraphStyleMetadata, inDesignLangCode); } catch (styleErr) {}
     try { if (postTarget && postTarget.isValid) normalizePostTranslationSpacing(postTarget, undefined, inDesignLangCode); } catch (spacingErr) {}
     try { if (postTarget && postTarget.isValid) restoreParagraphNumberingMetadata(postTarget, paragraphNumberingMetadata); } catch (numberingErr) {}
     try {
@@ -13426,11 +13615,11 @@ function applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, i
     return true;
 }
 
-function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata) {
+function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata, paragraphStyleMetadata) {
     if (!translatedXML || translatedXML === "") return;
     // Preserve tabs/line breaks between consecutive placeholders so inline image rows keep their original layout.
     translatedXML = normalizeTranslatedXML(translatedXML);
-    if (isSourceFormattingEnabledForCurrentRun() && applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata)) {
+    if (isSourceFormattingEnabledForCurrentRun() && applyTranslatedXMLUsingSourceFormatting(targetTextObj, translatedXML, inDesignLangCode, paragraphNumberingMetadata, paragraphStyleMetadata)) {
         return;
     }
     var isPartial = false; var textFlow = null; var currentIdx = 0;
@@ -13519,8 +13708,11 @@ function applyXMLtoInDesign(targetTextObj, translatedXML, inDesignLangCode, para
             }
         } catch (e5) {}
         try {
-            if (translatedScope !== null) restoreParagraphNumberingMetadata(translatedScope, paragraphNumberingMetadata);
+            if (translatedScope !== null) restoreParagraphStyleMetadata(translatedScope, paragraphStyleMetadata, inDesignLangCode);
         } catch (e6) {}
+        try {
+            if (translatedScope !== null) restoreParagraphNumberingMetadata(translatedScope, paragraphNumberingMetadata);
+        } catch (e7) {}
     }
 }
 
